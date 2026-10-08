@@ -18,6 +18,11 @@
 7. **測試集鎖定**：`research/` 中標記為 test split 的資料不得用於調整規則、門檻或提示。
 8. **migration 只往前**：已合併的 migration 檔不可修改，要改就新增一支。
 
+## 溝通語言
+
+- 所有對話、文件、PR 描述、commit 訊息說明、工作台與工具介面一律**以中文（繁體）為主，英文為輔**。
+- 介面標籤寫成「中文 · English」；程式識別字、警告代碼（如 `TOO_BLURRY`）、指令維持英文。
+
 ## 程式碼組織原則
 
 - 依業務領域命名（`barcode`、`invoice`、`label_parsing`），不依「模組一到五」編號命名。對照表見 `docs/module-map.md`。
@@ -27,11 +32,16 @@
 ## 常用指令
 
 ```bash
+make setup     # 建立 ai/.venv 並安裝 Python 開發套件（make 會自動使用此環境，不必 activate）
 make up        # 啟動所有服務
 make test      # 全部測試
 make lint      # 全部 lint
 make gen       # 依規格重新產生程式碼（OpenAPI、proto、sqlc）
+make workbench # 開發工作台：以合成影像或開發照片測試各模組、調整參數
 ```
+
+Windows 安裝 make：`winget install ezwinports.make`（裝完重開終端機）。
+不想用指令時，雙擊根目錄的 `啟動工作台.bat` 即可開啟工作台。
 
 ## 工作流程
 

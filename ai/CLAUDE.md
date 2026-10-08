@@ -17,7 +17,9 @@ src/dietai/
   analytics/      缺口偵測、規則版與最佳化版建議
   adapters/       外部世界：LLM（LiteLLM）、OCR、資料庫（唯讀）、物件儲存、快取
   server/         gRPC 外殼：只做 proto ↔ domain 轉換，不放邏輯
+  synthetic/      合成影像與已知退化（測試、工作台、研究共用；不放處理邏輯）
 tests/
+workbench/        開發工作台（Streamlit），見 workbench/README.md；系統執行時不依賴
 ```
 
 ## 規則
@@ -28,6 +30,8 @@ tests/
 - LLM 回應一律以 Pydantic 模型驗證；LLM 輸出的數字不得直接當作營養數值使用。
 - 前處理函式簽名為 `fn(image, cfg: XxxConfig = XxxConfig())`，門檻與參數一律放在 `preprocess/config.py` 的 frozen dataclass，不寫死在函式內；消融實驗以設定檔產生不同的 config 切換，不改程式。結果回傳 frozen dataclass，含 `steps`（`StepRecord`）與 `warnings`（`PreprocessWarning` 代碼）。
 - 影像一律為 `uint8` 的 `numpy.ndarray`，彩色為 BGR（OpenCV 慣例），灰階為 2 維；入口函式檢查格式並不得修改輸入。
+- 工作台（`workbench/`）只 import `dietai`，不得複製處理邏輯；需要的中間結果（如 `laplacian_map`）加到 `dietai` 的公開函式。介面文字中文為主、英文為輔。
+- 設定欄位以 `config.param()` 宣告中英文名稱、說明、範圍與 `calibrate`，工作台據此自動產生表單。
 - 舊的 `@register` pipeline（`preprocess/pipeline.py`）保留至 Phase 2 決定去留，新步驟不再註冊到它。
 - 單元測試不得呼叫真實 LLM 或網路；使用假實作（fake）。
 - 隨機性（抽樣、bootstrap）一律接受 `seed` 參數。
@@ -37,6 +41,8 @@ tests/
 ```bash
 pip install -e ".[dev]"          # 最小開發環境
 pip install -e ".[dev,vision]"   # 加上 OpenCV 等影像套件（preprocess 測試必需）
+pip install -e ".[dev,vision,workbench]" && streamlit run workbench/streamlit_app.py
+                                 # 開發工作台：調參數、模擬退化、參數掃描、資料夾批次、跑測試
 pytest                           # 含 slow 效能測試；CI 用 pytest -m "not slow"
 ruff check . && ruff format --check . && mypy
 ```

@@ -9,6 +9,8 @@ import time
 from dataclasses import asdict, dataclass
 
 import cv2
+import numpy as np
+import numpy.typing as npt
 
 from dietai.preprocess.config import QualityConfig
 from dietai.preprocess.ops import resize_short_side, to_gray, validate_image
@@ -40,23 +42,42 @@ class QualityReport:
     steps: tuple[StepRecord, ...]
 
 
+def laplacian_map(img: Image, cfg: QualityConfig = QualityConfig()) -> npt.NDArray[np.float64]:
+    """``blur_score`` 的中間結果：縮放到短邊 ``cfg.blur_short_side`` 後的灰階拉普拉斯響應。
+
+    供視覺化檢查哪些區域貢獻邊緣；回傳 ``float64``，形狀為縮放後的 ``(H, W)``。
+    """
+    gray = resize_short_side(to_gray(img), cfg.blur_short_side)
+    return np.asarray(cv2.Laplacian(gray, cv2.CV_64F), dtype=np.float64)
+
+
 def blur_score(img: Image, cfg: QualityConfig = QualityConfig()) -> float:
     """模糊分數：灰階拉普拉斯變異數，越低越模糊。
 
     計算前先把影像等比縮放到短邊 ``cfg.blur_short_side``，
     避免解析度不同造成分數不可比。輸入為 BGR 或灰階 ``uint8`` 影像。
     """
-    gray = resize_short_side(to_gray(img), cfg.blur_short_side)
-    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    return float(laplacian_map(img, cfg).var())
+
+
+def exposure_masks(
+    img: Image, cfg: QualityConfig = QualityConfig()
+) -> tuple[npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+    """``exposure_stats`` 的中間結果：（過暗遮罩, 過亮遮罩），形狀同輸入的 ``(H, W)``。
+
+    過暗為灰階低於 ``cfg.dark_level``，過亮為高於 ``cfg.bright_level``。
+    """
+    gray = to_gray(img)
+    return gray < cfg.dark_level, gray > cfg.bright_level
 
 
 def exposure_stats(img: Image, cfg: QualityConfig = QualityConfig()) -> ExposureStats:
     """亮度平均，以及灰階低於 ``cfg.dark_level``、高於 ``cfg.bright_level`` 的像素比例。"""
-    gray = to_gray(img)
+    dark, bright = exposure_masks(img, cfg)
     return ExposureStats(
-        mean=float(gray.mean()),
-        dark_ratio=float((gray < cfg.dark_level).mean()),
-        bright_ratio=float((gray > cfg.bright_level).mean()),
+        mean=float(to_gray(img).mean()),
+        dark_ratio=float(dark.mean()),
+        bright_ratio=float(bright.mean()),
     )
 
 
