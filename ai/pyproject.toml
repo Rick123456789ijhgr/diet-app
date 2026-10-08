@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dietai"
+version = "0.1.0"
+description = "飲食紀錄系統 Python 外掛服務：影像前處理、OCR、LLM 校正、資料分析"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.26",
+  "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+# 影像處理與 OCR；CI 的單元測試不依賴這些，以加快速度
+vision = ["opencv-python-headless>=4.9", "pyzbar", "zxing-cpp"]
+ocr = ["paddleocr"]
+llm = ["litellm"]
+analytics = ["pandas>=2.2", "scipy", "pulp"]
+server = ["grpcio", "grpcio-health-checking", "psycopg[binary]>=3.1", "pgvector", "minio"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dietai"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]

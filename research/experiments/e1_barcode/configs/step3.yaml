@@ -1,0 +1,4 @@
+# adaptive_bin、deskew 尚待實作於 ai/src/dietai/preprocess/steps_cv.py
+steps: [gray, adaptive_bin, deskew]
+params:
+  adaptive_bin: {block_size: 31, c: 5}

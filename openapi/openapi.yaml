@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info:
+  title: 飲食紀錄系統 API
+  version: 0.1.0
+  description: Flutter ↔ Go 的 REST API 規格。先改本檔，再以 make gen 產生程式碼。
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://localhost:8080
+security: []
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: 健康檢查
+      tags: [system]
+      responses:
+        "200":
+          description: 服務正常
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+tags:
+  - name: system
+    description: 系統狀態

@@ -1,0 +1,26 @@
+# 環境與密鑰
+.env
+*.pem
+# Go
+api/bin/
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+# Flutter
+app/.dart_tool/
+app/build/
+# 研究資料（由 DVC 管理，不進 git）
+research/data/
+mlruns/
+.ipynb_checkpoints/
+# LLM 回應快取
+.cache/
+# 編輯器
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package dietai.v1;
+
+option go_package = "github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1";
+
+// 版本資訊服務：技術驗證原型用，確認 Go ↔ Python gRPC 串接成功。
+// 正式的健康檢查請使用 gRPC Health Checking Protocol。
+service InfoService {
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+}
+
+message GetInfoRequest {}
+
+message GetInfoResponse {
+  string service_version = 1;
+  // 目前設定的 VLM 模型名稱，供實驗紀錄
+  string vlm_model = 2;
+}

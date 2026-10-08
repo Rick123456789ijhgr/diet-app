@@ -1,0 +1,14 @@
+# 每個資料夾至少指定兩位熟悉的組員（避免單點依賴）
+# 請將 @member-a 等替換為實際 GitHub 帳號
+
+/app/        @member-a @member-b
+/api/        @member-b @member-c
+/ai/         @member-c @member-d
+/research/   @member-c @member-d
+
+# 規格與 migration 變更影響多個服務，需跨服務審查
+/proto/      @member-b @member-c
+/openapi/    @member-a @member-b
+/db/         @member-b @member-c
+
+/docs/adr/   @member-a @member-b @member-c @member-d
