@@ -19,8 +19,15 @@ jobs:
       app: ${{ steps.filter.outputs.app }}
       proto: ${{ steps.filter.outputs.proto }}
       openapi: ${{ steps.filter.outputs.openapi }}
+      app_exists: ${{ steps.app.outputs.exists }}
     steps:
       - uses: actions/checkout@v4
+      # Flutter 專案建立前（尚無 app/pubspec.yaml）跳過 app job。
+      # hashFiles() 不能用在 job 層級的 if，因此在這裡檢查後以 output 傳出。
+      - id: app
+        run: |
+          if [ -f app/pubspec.yaml ]; then echo "exists=true" >> "$GITHUB_OUTPUT"
+          else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -83,7 +90,7 @@ jobs:
 
   app:
     needs: changes
-    if: needs.changes.outputs.app == 'true' && hashFiles('app/pubspec.yaml') != ''
+    if: needs.changes.outputs.app == 'true' && needs.changes.outputs.app_exists == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
