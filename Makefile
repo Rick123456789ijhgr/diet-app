@@ -21,7 +21,7 @@ lint-api:
 	cd api && go vet ./... && test -z "$$(gofmt -l .)"
 
 lint-ai:
-	cd ai && ruff check . && ruff format --check .
+	cd ai && ruff check . && ruff format --check . && mypy
 
 gen:
 	cd proto && buf generate

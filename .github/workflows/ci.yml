@@ -72,11 +72,14 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: ai/pyproject.toml
-      - run: pip install -e ".[dev]"
+      # preprocess 測試需要 OpenCV，因此安裝 vision
+      - run: pip install -e ".[dev,vision]"
       - run: ruff check .
       - run: ruff format --check .
+      - run: mypy
       # CI 不呼叫真實 LLM：測試一律使用假實作或快取
-      - run: pytest
+      # 效能基準受 runner 負載影響，CI 略過；本機以 make test-ai 執行
+      - run: pytest -m "not slow"
 
   app:
     needs: changes

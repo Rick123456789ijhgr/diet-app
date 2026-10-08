@@ -4,7 +4,7 @@
 
 | 研究模組 | Flutter（app/lib/features） | Go（api/internal） | Python（ai/src/dietai） |
 | --- | --- | --- | --- |
-| 模組一 影像前處理 | `scan`（簡易品質檢查、壓縮） | — | `preprocess` |
+| 模組一 影像前處理 | `scan`（簡易品質檢查、壓縮） | — | `preprocess.quality`（品質檢查）、`preprocess.ops`（基本操作）、`preprocess.config`（門檻）、`preprocess.types`（共用型別） |
 | 模組二 條碼、發票、營養標示 | `scan` | `barcode`、`invoice` | `label_parsing`、`preprocess` |
 | 模組三 產品資料庫 | — | `product` | `adapters/db`（唯讀） |
 | 模組四 LLM 辨識與校正 | `diary`（確認修正） | `diary`、`job` | `recognition`、`adapters/llm` |
