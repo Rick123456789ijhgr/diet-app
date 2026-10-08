@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# 只給需要的最小權限：讀程式碼；dorny/paths-filter 在 pull_request 事件要讀 PR 的變更檔案清單
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
