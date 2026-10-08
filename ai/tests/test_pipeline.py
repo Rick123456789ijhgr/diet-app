@@ -37,8 +37,20 @@ def test_duplicate_registration_raises():
         register("test_invert")(lambda image: image)
 
 
-def test_gray_converts_rgb():
+def test_gray_converts_uniform_color():
     img = np.full((2, 2, 3), 100, dtype=np.uint8)
     out = run_pipeline(img, ["gray"]).image
     assert out.shape == (2, 2)
     assert (out == 100).all()
+
+
+def test_gray_uses_bgr_order():
+    blue = np.zeros((1, 1, 3), dtype=np.uint8)
+    blue[..., 0] = 255
+    assert run_pipeline(blue, ["gray"]).image[0, 0] == 29  # 0.114 × 255
+
+
+def test_records_include_params():
+    img = np.zeros((2, 2), dtype=np.uint8)
+    result = run_pipeline(img, ["test_subtract"], {"test_subtract": {"amount": 1}})
+    assert result.records[0].params == {"amount": 1}

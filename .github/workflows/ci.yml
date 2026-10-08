@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# 只給需要的最小權限：讀程式碼；dorny/paths-filter 在 pull_request 事件要讀 PR 的變更檔案清單
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -19,9 +24,16 @@ jobs:
       app: ${{ steps.filter.outputs.app }}
       proto: ${{ steps.filter.outputs.proto }}
       openapi: ${{ steps.filter.outputs.openapi }}
+      app_exists: ${{ steps.app.outputs.exists }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v5
+      # Flutter 專案建立前（尚無 app/pubspec.yaml）跳過 app job。
+      # hashFiles() 不能用在 job 層級的 if，因此在這裡檢查後以 output 傳出。
+      - id: app
+        run: |
+          if [ -f app/pubspec.yaml ]; then echo "exists=true" >> "$GITHUB_OUTPUT"
+          else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -49,8 +61,8 @@ jobs:
       run:
         working-directory: api
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: api/go.mod
       - name: gofmt
@@ -66,27 +78,30 @@ jobs:
       run:
         working-directory: ai
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: ai/pyproject.toml
-      - run: pip install -e ".[dev]"
+      # preprocess 測試需要 OpenCV（vision），工作台測試需要 Streamlit（workbench）
+      - run: pip install -e ".[dev,vision,workbench]"
       - run: ruff check .
       - run: ruff format --check .
+      - run: mypy
       # CI 不呼叫真實 LLM：測試一律使用假實作或快取
-      - run: pytest
+      # 效能基準受 runner 負載影響，CI 略過；本機以 make test-ai 執行
+      - run: pytest -m "not slow"
 
   app:
     needs: changes
-    if: needs.changes.outputs.app == 'true' && hashFiles('app/pubspec.yaml') != ''
+    if: needs.changes.outputs.app == 'true' && needs.changes.outputs.app_exists == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -101,7 +116,7 @@ jobs:
     if: needs.changes.outputs.proto == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       # lint、format 檢查；PR 時另外檢查是否破壞相容性
@@ -117,8 +132,8 @@ jobs:
     if: needs.changes.outputs.openapi == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       - run: npx --yes @redocly/cli@latest lint openapi/openapi.yaml

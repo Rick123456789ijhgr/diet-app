@@ -12,9 +12,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy as np
+from dietai.preprocess.types import Image, StepRecord
 
-StepFn = Callable[..., np.ndarray]
+StepFn = Callable[..., Image]
 
 _REGISTRY: dict[str, StepFn] = {}
 
@@ -35,20 +35,14 @@ def available_steps() -> list[str]:
     return sorted(_REGISTRY)
 
 
-@dataclass(frozen=True)
-class StepRecord:
-    name: str
-    elapsed_ms: float
-
-
 @dataclass
 class PipelineResult:
-    image: np.ndarray
+    image: Image
     records: list[StepRecord] = field(default_factory=list)
 
 
 def run_pipeline(
-    image: np.ndarray,
+    image: Image,
     steps: Sequence[str],
     params: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> PipelineResult:
@@ -62,5 +56,6 @@ def run_pipeline(
     for name in steps:
         start = time.perf_counter()
         result.image = _REGISTRY[name](result.image, **params.get(name, {}))
-        result.records.append(StepRecord(name, (time.perf_counter() - start) * 1000))
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        result.records.append(StepRecord(name, elapsed_ms, dict(params.get(name, {}))))
     return result

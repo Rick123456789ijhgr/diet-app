@@ -13,24 +13,45 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# 影像處理與 OCR；CI 的單元測試不依賴這些，以加快速度
-vision = ["opencv-python-headless>=4.9", "pyzbar", "zxing-cpp"]
+# 影像處理；preprocess 的單元測試需要，CI 會安裝。版本鎖定，升級須另開 PR 並重跑 E1。
+vision = ["opencv-python-headless==4.12.0.88", "pyzbar", "zxing-cpp"]
+# 開發工作台（ai/workbench），只在本機使用；系統執行時不需要
+workbench = ["streamlit==1.65.0", "pandas==3.0.6", "altair==6.3.0"]
 ocr = ["paddleocr"]
 llm = ["litellm"]
 analytics = ["pandas>=2.2", "scipy", "pulp"]
 server = ["grpcio", "grpcio-health-checking", "psycopg[binary]>=3.1", "pgvector", "minio"]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest==9.1.1", "ruff==0.16.10", "mypy==2.4.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dietai"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["workbench"]
 addopts = "-q"
+markers = ["slow: 效能基準等較慢的測試（CI 以 -m 'not slow' 略過）"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["src", "workbench"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# 設定 dataclass 皆為 frozen，可安全作為參數預設值：fn(image, cfg: XxxConfig = XxxConfig())
+extend-immutable-calls = ["dietai.preprocess.config.QualityConfig"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/dietai/preprocess", "src/dietai/synthetic", "workbench"]
+mypy_path = ["src", "workbench"]
+explicit_package_bases = true
+strict = true
+
+[[tool.mypy.overrides]]
+# pandas 無內建型別；只在工作台介面使用，不另裝 pandas-stubs
+module = ["pandas", "pandas.*"]
+ignore_missing_imports = true
