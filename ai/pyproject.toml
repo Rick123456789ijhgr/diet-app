@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # 影像處理；preprocess 的單元測試需要，CI 會安裝。版本鎖定，升級須另開 PR 並重跑 E1。
-vision = ["opencv-python-headless==4.12.0.88", "pyzbar", "zxing-cpp"]
+vision = ["opencv-python-headless==4.12.0.88", "pyzbar==0.1.9", "zxing-cpp==3.1.1"]
 # 開發工作台（ai/workbench），只在本機使用；系統執行時不需要
 workbench = ["streamlit==1.65.0", "pandas==3.0.6", "altair==6.3.0"]
 ocr = ["paddleocr"]
@@ -42,7 +42,12 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 
 [tool.ruff.lint.flake8-bugbear]
 # 設定 dataclass 皆為 frozen，可安全作為參數預設值：fn(image, cfg: XxxConfig = XxxConfig())
-extend-immutable-calls = ["dietai.preprocess.config.QualityConfig"]
+extend-immutable-calls = [
+  "dietai.preprocess.config.QualityConfig",
+  "dietai.preprocess.config.ZxingConfig",
+  "dietai.preprocess.config.LadderConfig",
+  "dietai.preprocess.config.InvoiceQrConfig",
+]
 
 [tool.mypy]
 python_version = "3.11"
@@ -54,4 +59,9 @@ strict = true
 [[tool.mypy.overrides]]
 # pandas 無內建型別；只在工作台介面使用，不另裝 pandas-stubs
 module = ["pandas", "pandas.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# pyzbar 無型別資訊；只在 PyzbarDecoder（實驗對照）使用
+module = ["pyzbar", "pyzbar.*"]
 ignore_missing_imports = true

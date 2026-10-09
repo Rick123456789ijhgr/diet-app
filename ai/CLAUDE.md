@@ -11,7 +11,7 @@
 ```
 src/dietai/
   domain/         Pydantic 資料模型，不依賴任何外部套件以外的東西
-  preprocess/     影像前處理步驟與 pipeline
+  preprocess/     影像前處理：品質檢查、條碼逐步升級、發票 QR 定位（之後：營養標示、食物照片）
   label_parsing/  營養標示欄位解析與邏輯驗證規則
   recognition/    RAG、自我一致性、數值替換、統計校正
   analytics/      缺口偵測、規則版與最佳化版建議
@@ -32,7 +32,8 @@ workbench/        開發工作台（Streamlit），見 workbench/README.md；系
 - 影像一律為 `uint8` 的 `numpy.ndarray`，彩色為 BGR（OpenCV 慣例），灰階為 2 維；入口函式檢查格式並不得修改輸入。
 - 工作台（`workbench/`）只 import `dietai`，不得複製處理邏輯；需要的中間結果（如 `laplacian_map`）加到 `dietai` 的公開函式。介面文字中文為主、英文為輔。
 - 設定欄位以 `config.param()` 宣告中英文名稱、說明、範圍與 `calibrate`，工作台據此自動產生表單。
-- 舊的 `@register` pipeline（`preprocess/pipeline.py`）保留至 Phase 2 決定去留，新步驟不再註冊到它。
+- 條碼／QR 解碼只透過 `preprocess.decoders.Decoder` 介面；`ZxingDecoder` 為預設實作，`PyzbarDecoder` 僅供實驗對照（ZBar 會轉碼 QR 內容，不可用於電子發票）。
+- 條碼逐步升級的每一階都由原圖獨立產生，順序與啟用由 `LadderConfig.rungs` 控制；新增一階時加到 `types.Rung` 與 `barcode.ladder_variants`。
 - 單元測試不得呼叫真實 LLM 或網路；使用假實作（fake）。
 - 隨機性（抽樣、bootstrap）一律接受 `seed` 參數。
 

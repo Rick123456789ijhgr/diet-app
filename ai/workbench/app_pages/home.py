@@ -19,6 +19,13 @@ TOOLS = [
         "單張影像：模擬退化、看分數與警告、檢視拉普拉斯響應與曝光遮罩。",
     ),
     (
+        "app_pages/barcode.py",
+        ":material/barcode_reader:",
+        "條碼",
+        "Barcode",
+        "逐步升級解碼商品條碼與電子發票雙 QR，逐階檢視影像與耗時。",
+    ),
+    (
         "app_pages/sweep.py",
         ":material/ssid_chart:",
         "參數掃描",
@@ -56,7 +63,7 @@ with left:
     with st.container(border=True):
         for phase, name, status, color in [
             ("Phase 1", "共通品質檢查 · Quality check", "完成", "green"),
-            ("Phase 2", "條碼與電子發票 QR · Barcode & invoice QR", "未開始", "gray"),
+            ("Phase 2", "條碼與電子發票 QR · Barcode & invoice QR", "完成", "green"),
             ("Phase 3", "營養標示 · Nutrition label", "未開始", "gray"),
             ("Phase 4", "食物照片 · Food photo", "未開始", "gray"),
             ("Phase 5", "E1 實驗骨架 · E1 experiment", "未開始", "gray"),

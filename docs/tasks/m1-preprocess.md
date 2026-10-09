@@ -211,6 +211,20 @@ def locate_invoice_qrs(img, decoder, cfg) -> InvoiceQrResult
 | 「鎖定版本」 | `pyproject.toml` 以 `==` 鎖定用到的套件；`pyzbar`、`zxing-cpp` 於 Phase 2 使用時再鎖定。 |
 | `research/experiments/e1_barcode/configs/step*.yaml` 為舊 pipeline 格式 | Phase 5 改為 `LadderConfig` 格式（新增設定檔，舊檔標示廢止）。 |
 
+### Phase 2 開工時
+
+| 衝突或未定義處 | 決議 |
+| --- | --- |
+| `pipeline.py` 去留 | 刪除 `pipeline.py`、`steps.py` 與其測試；逐步升級（`LadderConfig.rungs`）取代其消融用途。`research/.../step*.yaml` 已標示廢止，Phase 5 改寫。 |
+| 階梯各階是否疊加 | 各階**獨立**由原圖（或其灰階）產生，不疊加前一階，以便 E1 判斷是哪一步救回。「銳化／去雜訊」拆成 `sharpen`、`denoise` 兩階。 |
+| zxing-cpp 內建的 90° 旋轉、縮小、反色嘗試 | 由 `ZxingConfig` 控制，預設與 zxing-cpp 相同（全開）；E1 可關閉以量測階梯本身的貢獻。 |
+| 旋轉校正的做法 | 以梯度結構張量估計主方向（`ops.estimate_skew`），角度小於 `deskew_min_deg` 時略過。 |
+| 四角座標的座標系 | 一律回推到原圖座標（旋轉、縮放階以仿射矩陣反推）。 |
+| 發票只找到一個 QR 時放哪邊 | 放在 `left` 並附 `INVOICE_QR_PARTIAL`（單一碼無法判斷左右）。找到超過兩個時取面積最大的兩個。 |
+| `InvoiceQrResult` 的 `image` 欄位 | 不提供：兩碼可能來自不同的階，沒有單一處理後影像（與 `QualityReport` 相同）。 |
+| pyzbar | 提供 `PyzbarDecoder` 作為 E1 對照；ZBar 會轉碼 QR 內容，不可用於電子發票正式流程。CI 安裝 `libzbar0`。 |
+| `LadderConfig` 的序列欄位（`rungs`、`scales`） | 不以 `param()` 宣告；工作台參數面板只處理純量欄位，序列由頁面元件提供，以 `extra_keys` 登記，匯入 JSON 與「還原」時寫回元件。 |
+
 ## 10. 需要人決定、不要交給 AI 決定的事
 
 - 各門檻的實際數值（由 100–200 張標記照片校準）。
