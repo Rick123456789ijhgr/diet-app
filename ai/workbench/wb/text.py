@@ -19,6 +19,9 @@ WARNING_TEXT: dict[PreprocessWarning, tuple[str, str]] = {
     PreprocessWarning.BARCODE_NOT_FOUND: ("找不到條碼", "Barcode not found"),
     PreprocessWarning.INVOICE_QR_PARTIAL: ("只找到一個發票 QR", "Only one invoice QR"),
     PreprocessWarning.INVOICE_QR_NOT_FOUND: ("找不到發票 QR", "Invoice QR not found"),
+    PreprocessWarning.LABEL_NOT_LOCATED: ("找不到標示表格框", "Label not located"),
+    PreprocessWarning.GLARE_RETAKE: ("反光過大，請重拍", "Too much glare, retake"),
+    PreprocessWarning.DISH_NOT_FOUND: ("切不出任何一道菜", "No dish found"),
 }
 
 # 條碼逐步升級各階的顯示文字與圖示
@@ -43,6 +46,16 @@ GROUP_TEXT: dict[str, tuple[str, str, str]] = {
     "deskew": ("旋轉校正", "Deskew", ":material/rotate_right:"),
     "verify": ("驗證", "Verify", ":material/verified:"),
     "zxing": ("解碼器", "Decoder", ":material/qr_code_scanner:"),
+    "label_steps": ("步驟開關", "Steps", ":material/toggle_on:"),
+    "locate": ("表格定位", "Locate", ":material/crop_free:"),
+    "rectify": ("透視校正", "Rectify", ":material/transform:"),
+    "glare": ("光斑", "Glare", ":material/flare:"),
+    "contrast": ("對比增強", "Contrast", ":material/tonality:"),
+    "food_steps": ("步驟開關", "Steps", ":material/toggle_on:"),
+    "segment": ("前景分割", "Segment", ":material/select_all:"),
+    "dish_filter": ("框過濾", "Box filter", ":material/filter_alt:"),
+    "plate": ("盤緣橢圓", "Plate ellipse", ":material/radio_button_unchecked:"),
+    "vlm": ("VLM 輸入", "VLM input", ":material/compress:"),
     "": ("其他", "Other", ":material/tune:"),
 }
 

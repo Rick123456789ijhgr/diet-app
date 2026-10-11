@@ -6,12 +6,25 @@ import json
 from dataclasses import asdict, fields
 from typing import Any, TypeVar
 
-from dietai.preprocess.config import LadderConfig, QualityConfig, ZxingConfig, param_info
+from dietai.preprocess.config import (
+    FoodConfig,
+    LabelConfig,
+    LadderConfig,
+    QualityConfig,
+    ZxingConfig,
+    param_info,
+)
 
 C = TypeVar("C")
 
 # 工作台會顯示的設定類別；之後各 Phase 新增的 XxxConfig 加到這裡。
-CONFIG_CLASSES: tuple[type[Any], ...] = (QualityConfig, LadderConfig, ZxingConfig)
+CONFIG_CLASSES: tuple[type[Any], ...] = (
+    QualityConfig,
+    LadderConfig,
+    ZxingConfig,
+    LabelConfig,
+    FoodConfig,
+)
 
 
 def config_to_dict(cfg: Any) -> dict[str, Any]:

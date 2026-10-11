@@ -3,8 +3,10 @@ import pytest
 
 from dietai.preprocess.ops import (
     adaptive_threshold,
+    clahe,
     estimate_skew,
     median_blur,
+    order_quad,
     resize_short_side,
     rotate,
     rotation_matrix,
@@ -167,3 +169,33 @@ def test_estimate_skew_matches_rotation(degrees):
 
 def test_estimate_skew_flat_image_is_zero():
     assert estimate_skew(np.full((10, 10), 200, dtype=np.uint8)) == 0.0
+
+
+@pytest.mark.parametrize("perm", [[0, 1, 2, 3], [2, 0, 3, 1], [3, 2, 1, 0], [1, 3, 0, 2]])
+def test_order_quad_any_input_order(perm):
+    quad = np.array([[10, 20], [110, 15], [120, 90], [5, 100]], dtype=np.float32)
+    np.testing.assert_array_equal(order_quad(quad[perm]), quad)
+
+
+def test_order_quad_diamond_has_no_duplicates():
+    diamond = np.array([[50, 0], [100, 50], [50, 100], [0, 50]], dtype=np.float32)
+    out = order_quad(diamond[::-1])
+    assert len({tuple(p) for p in out}) == 4  # 45° 時 x+y 有並列，仍不得重複選點
+    assert order_quad(out).tolist() == out.tolist()
+
+
+def test_order_quad_rejects_wrong_shape():
+    with pytest.raises(ValueError):
+        order_quad(np.zeros((3, 2)))
+
+
+def test_clahe_raises_local_contrast_and_requires_gray():
+    rng = np.random.default_rng(0)
+    low = rng.integers(100, 140, (200, 200), dtype=np.uint8)
+    out = clahe(low, 2.0, 8)
+    assert out.shape == low.shape and out.dtype == np.uint8
+    assert out.std() > low.std()
+    with pytest.raises(ValueError):
+        clahe(np.zeros((4, 4, 3), dtype=np.uint8), 2.0, 8)
+    with pytest.raises(ValueError):
+        clahe(low, 0.0, 8)

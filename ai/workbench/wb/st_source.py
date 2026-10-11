@@ -7,8 +7,14 @@ from typing import Literal
 
 import streamlit as st
 
-from dietai.preprocess.types import Image
-from dietai.synthetic import ean13_scene, invoice_qr_scene, label_scene
+from dietai.preprocess.types import Ellipse, Image, Quad
+from dietai.synthetic import (
+    ean13_scene,
+    food_scene,
+    invoice_qr_scene,
+    label_perspective_scene,
+    label_scene,
+)
 from wb import degradations
 from wb.images import SplitLockedError, decode_image, load_image
 
@@ -36,8 +42,8 @@ _SLIDERS: dict[str, list[tuple[str, str, str, float, float, float, float, str]]]
 }
 _SHORT = {f: zh for group in _SLIDERS.values() for f, zh, *_ in group}
 
-# 合成影像的種類：營養標示、EAN-13 條碼、電子發票雙 QR
-Scene = Literal["label", "ean13", "invoice"]
+# 合成影像的種類：品質檢查用標示、EAN-13 條碼、電子發票雙 QR、透視變形的營養標示表格、餐桌上的盤子
+Scene = Literal["label", "ean13", "invoice", "nutrition", "food"]
 
 
 @dataclass(frozen=True)
@@ -45,6 +51,8 @@ class Source:
     image: Image
     description: str
     degradation: degradations.Degradation = degradations.Degradation()
+    truth_quad: Quad | None = None  # 合成營養標示的真實四角；套用退化後不再成立，設為 None
+    truth_plates: tuple[Ellipse, ...] | None = None  # 合成食物照片的真實盤緣；同上
 
 
 @st.cache_data(max_entries=16, show_spinner=False)
@@ -60,6 +68,16 @@ def _ean13(code: str, module_px: int) -> Image:
 @st.cache_data(max_entries=16, show_spinner=False)
 def _invoice(left: bytes, right: bytes, module_px: int) -> Image:
     return invoice_qr_scene(left, right, module_px)
+
+
+@st.cache_data(max_entries=16, show_spinner=False)
+def _nutrition(strength: float, seed: int) -> tuple[Image, Quad]:
+    return label_perspective_scene(strength, seed)
+
+
+@st.cache_data(max_entries=16, show_spinner=False)
+def _food(n_dishes: int, seed: int, tilt: float) -> tuple[Image, list[Ellipse]]:
+    return food_scene(n_dishes, seed, tilt=tilt)
 
 
 @st.cache_data(max_entries=8, show_spinner=False)
@@ -91,6 +109,47 @@ def _synthetic_invoice(key: str) -> Source | None:
         st.error(f"無法產生 QR：{exc}", icon=":material/error:")
         return None
     return Source(img, f"合成電子發票（{encoding}）")
+
+
+def _synthetic_nutrition(key: str) -> Source:
+    with st.container(horizontal=True):
+        strength = st.slider(
+            "透視強度 · Perspective",
+            0.0,
+            0.3,
+            0.15,
+            0.01,
+            key=f"{key}.strength",
+            help="四角隨機位移的最大比例（相對於標示邊長）；0 為正視。超過 0.25 時可能找不到。",
+        )
+        seed = st.number_input("種子 · Seed", 0, 10_000, 0, key=f"{key}.seed")
+    img, quad = _nutrition(float(strength), int(seed))
+    return Source(img, f"合成營養標示（透視 {strength:.2f}、種子 {int(seed)}）", truth_quad=quad)
+
+
+def _synthetic_food(key: str) -> Source | None:
+    with st.container(horizontal=True):
+        n = st.number_input("盤數 · Dishes", 0, 6, 3, key=f"{key}.n")
+        seed = st.number_input("種子 · Seed", 0, 10_000, 0, key=f"{key}.seed")
+    tilt = st.slider(
+        "俯拍傾斜 · Tilt",
+        0.0,
+        0.6,
+        0.3,
+        0.05,
+        key=f"{key}.tilt",
+        help="盤子短長軸比隨機介於 1 − 傾斜 與 1；0 為正上方俯拍（正圓）。",
+    )
+    try:
+        img, plates = _food(int(n), int(seed), float(tilt))
+    except ValueError as exc:  # 畫面放不下
+        st.error(f"無法產生場景：{exc}", icon=":material/error:")
+        return None
+    return Source(
+        img,
+        f"合成餐桌（{int(n)} 盤、傾斜 {tilt:.2f}、種子 {int(seed)}）",
+        truth_plates=tuple(plates),
+    )
 
 
 def _pick_base(key: str, scene: Scene) -> Source | None:
@@ -138,6 +197,10 @@ def _pick_base(key: str, scene: Scene) -> Source | None:
         return _synthetic_ean13(key)
     if scene == "invoice":
         return _synthetic_invoice(key)
+    if scene == "nutrition":
+        return _synthetic_nutrition(key)
+    if scene == "food":
+        return _synthetic_food(key)
     with st.container(horizontal=True):
         height = st.number_input("高 · H", 16, 4320, 1080, step=8, key=f"{key}.h")
         width = st.number_input("寬 · W", 16, 7680, 1920, step=8, key=f"{key}.w")

@@ -12,7 +12,15 @@ from dietai.synthetic.degrade import (
     rotate,
     scale_brightness,
 )
-from dietai.synthetic.scenes import ean13_codes, ean13_scene, invoice_qr_scene, label_scene
+from dietai.synthetic.scenes import (
+    ean13_codes,
+    ean13_scene,
+    food_scene,
+    invoice_qr_scene,
+    label_perspective_scene,
+    label_scene,
+    nutrition_label,
+)
 
 __all__ = [
     "add_glare",
@@ -20,10 +28,13 @@ __all__ = [
     "downscale",
     "ean13_codes",
     "ean13_scene",
+    "food_scene",
     "gaussian_blur",
     "gaussian_noise",
     "invoice_qr_scene",
+    "label_perspective_scene",
     "label_scene",
+    "nutrition_label",
     "rotate",
     "scale_brightness",
 ]

@@ -38,6 +38,18 @@ PAGES = {
             url_path="barcode",
         ),
         st.Page(
+            "app_pages/label.py",
+            title="營養標示 · Label",
+            icon=":material/receipt_long:",
+            url_path="label",
+        ),
+        st.Page(
+            "app_pages/food.py",
+            title="食物照片 · Food",
+            icon=":material/restaurant:",
+            url_path="food",
+        ),
+        st.Page(
             "app_pages/sweep.py",
             title="參數掃描 · Sweep",
             icon=":material/ssid_chart:",

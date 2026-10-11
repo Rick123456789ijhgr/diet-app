@@ -11,7 +11,7 @@
 ```
 src/dietai/
   domain/         Pydantic 資料模型，不依賴任何外部套件以外的東西
-  preprocess/     影像前處理：品質檢查、條碼逐步升級、發票 QR 定位（之後：營養標示、食物照片）
+  preprocess/     影像前處理：品質檢查、條碼逐步升級、發票 QR 定位、營養標示、食物照片（切菜、盤緣、VLM 輸入）
   label_parsing/  營養標示欄位解析與邏輯驗證規則
   recognition/    RAG、自我一致性、數值替換、統計校正
   analytics/      缺口偵測、規則版與最佳化版建議

@@ -26,6 +26,20 @@ TOOLS = [
         "逐步升級解碼商品條碼與電子發票雙 QR，逐階檢視影像與耗時。",
     ),
     (
+        "app_pages/label.py",
+        ":material/receipt_long:",
+        "營養標示",
+        "Nutrition label",
+        "定位表格、透視校正、光斑修補與對比增強，與真實四角比較誤差。",
+    ),
+    (
+        "app_pages/food.py",
+        ":material/restaurant:",
+        "食物照片",
+        "Food photo",
+        "切出各道菜、偵測盤緣橢圓，試算送給 VLM 的尺寸與檔案大小。",
+    ),
+    (
         "app_pages/sweep.py",
         ":material/ssid_chart:",
         "參數掃描",
@@ -49,13 +63,16 @@ TOOLS = [
 ]
 
 section("快速開始", "Quick start", ":material/rocket_launch:")
-for col, (path, icon, zh, en, desc) in zip(st.columns(len(TOOLS)), TOOLS, strict=True):
-    with col, st.container(border=True, height=210):
-        st.markdown(f"#### {icon} {zh}")
-        st.caption(f"**{en}**　{desc}")
-        st.space("stretch")
-        if st.button("開啟 · Open", key=f"home.open.{path}", icon=":material/arrow_forward:"):
-            st.switch_page(path)
+PER_ROW = 3
+for row in range(0, len(TOOLS), PER_ROW):
+    cols = st.columns(PER_ROW)
+    for col, (path, icon, zh, en, desc) in zip(cols, TOOLS[row : row + PER_ROW], strict=False):
+        with col, st.container(border=True, height=170):
+            st.markdown(f"#### {icon} {zh}")
+            st.caption(f"**{en}**　{desc}")
+            st.space("stretch")
+            if st.button("開啟 · Open", key=f"home.open.{path}", icon=":material/arrow_forward:"):
+                st.switch_page(path)
 
 left, right = st.columns([3, 2], gap="large")
 with left:
@@ -64,8 +81,8 @@ with left:
         for phase, name, status, color in [
             ("Phase 1", "共通品質檢查 · Quality check", "完成", "green"),
             ("Phase 2", "條碼與電子發票 QR · Barcode & invoice QR", "完成", "green"),
-            ("Phase 3", "營養標示 · Nutrition label", "未開始", "gray"),
-            ("Phase 4", "食物照片 · Food photo", "未開始", "gray"),
+            ("Phase 3", "營養標示 · Nutrition label", "完成", "green"),
+            ("Phase 4", "食物照片 · Food photo", "完成", "green"),
             ("Phase 5", "E1 實驗骨架 · E1 experiment", "未開始", "gray"),
         ]:
             with st.container(horizontal=True, vertical_alignment="center"):
