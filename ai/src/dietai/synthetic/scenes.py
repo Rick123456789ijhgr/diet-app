@@ -6,7 +6,8 @@ import cv2
 import numpy as np
 
 from dietai.preprocess.barcode import ean13_check_digit
-from dietai.preprocess.types import Image
+from dietai.preprocess.ops import order_quad
+from dietai.preprocess.types import Image, Quad
 
 _BASE_H, _BASE_W = 1080, 1920
 
@@ -116,3 +117,98 @@ def invoice_qr_scene(
     _paste(img, qr_left, margin, header)
     _paste(img, qr_right, margin + qr_left.shape[1] + gap_px, header)
     return img
+
+
+_LABEL_PAPER = (212, 218, 222)  # 白色包裝，亮度低於預設的光斑亮度下限
+_LABEL_ROWS = [
+    ("Serving size", "30 g"),
+    ("Servings", "6"),
+    ("Calories", "152 kcal"),
+    ("Protein", "2.1 g"),
+    ("Fat", "8.4 g"),
+    ("  Saturated fat", "3.2 g"),
+    ("  Trans fat", "0 g"),
+    ("Carbohydrate", "17.0 g"),
+    ("  Sugar", "1.5 g"),
+    ("Sodium", "125 mg"),
+]
+
+
+def nutrition_label(height: int = 900, width: int = 640) -> Image:
+    """營養標示表格（BGR）：黑色外框貼齊影像邊緣、標題、粗分隔線與 10 列「欄位 數值」。
+
+    以 640×900 為基準繪製後縮放，外框的外緣就是影像邊界，因此四角為影像四角。
+    """
+    bw, bh = 640, 900
+    img = np.full((bh, bw, 3), _LABEL_PAPER, dtype=np.uint8)
+    ink, font = (25, 25, 25), cv2.FONT_HERSHEY_SIMPLEX
+    cv2.rectangle(img, (0, 0), (bw - 1, bh - 1), ink, 16)  # 線寬一半在畫布外，可見 8 px
+    cv2.putText(img, "Nutrition Facts", (40, 80), font, 1.6, ink, 3)
+    cv2.line(img, (8, 110), (bw - 8, 110), ink, 8)
+    row_h = (bh - 140) // len(_LABEL_ROWS)
+    for i, (name, value) in enumerate(_LABEL_ROWS):
+        y = 130 + i * row_h
+        cv2.putText(img, name, (40, y + row_h - 25), font, 1.0, ink, 2)
+        (tw, _), _ = cv2.getTextSize(value, font, 1.0, 2)
+        cv2.putText(img, value, (bw - 40 - tw, y + row_h - 25), font, 1.0, ink, 2)
+        if i < len(_LABEL_ROWS) - 1:
+            cv2.line(img, (8, y + row_h), (bw - 8, y + row_h), ink, 2)
+    if (height, width) != (bh, bw):
+        interp = cv2.INTER_AREA if height * width < bh * bw else cv2.INTER_LINEAR
+        return np.asarray(cv2.resize(img, (width, height), interpolation=interp), dtype=np.uint8)
+    return img
+
+
+def label_perspective_scene(
+    strength: float = 0.15,
+    seed: int = 0,
+    height: int = 1080,
+    width: int = 1440,
+) -> tuple[Image, Quad]:
+    """把 ``nutrition_label`` 以隨機透視變形貼到桌面背景上，回傳（影像, 真實四角）。
+
+    標示約佔畫面高或寬的 60%，置中後四角各自隨機位移最多 ``strength`` 倍的標示邊長
+    （0–0.3，0 為正視），並限制在畫面內。標示外接框之外有幾個小色塊作為干擾。
+    四角為原圖座標，左上起順時針。
+    """
+    if not 0 <= strength <= 0.3:
+        raise ValueError(f"strength 必須介於 0 與 0.3，收到 {strength}")
+    rng = np.random.default_rng(seed)
+    img = np.full((height, width, 3), (120, 140, 155), dtype=np.uint8)  # 木紋色桌面
+
+    label = nutrition_label()
+    lh, lw = label.shape[:2]
+    scale = min(0.6 * height / lh, 0.6 * width / lw)
+    qw, qh = lw * scale, lh * scale
+    x0, y0 = (width - qw) / 2, (height - qh) / 2
+    base = np.array([[x0, y0], [x0 + qw, y0], [x0 + qw, y0 + qh], [x0, y0 + qh]])
+    jitter = rng.uniform(-strength, strength, (4, 2)) * np.array([qw, qh])
+    pad = 0.02 * min(height, width)  # 四角留在畫面內
+    corners = np.clip(base + jitter, [pad, pad], [width - pad, height - pad])
+    quad = order_quad(corners)
+
+    # 干擾色塊只放在標示外接框之外，避免與外框相連而改變真實四角
+    bx0, by0 = quad.min(axis=0) - pad
+    bx1, by1 = quad.max(axis=0) + pad
+    placed = 0
+    for _ in range(200):
+        if placed == 6:
+            break
+        size = int(rng.integers(20, max(21, min(height, width) // 10)))
+        x, y = (
+            int(rng.integers(0, max(1, width - size))),
+            int(rng.integers(0, max(1, height - size))),
+        )
+        if x + size > bx0 and x < bx1 and y + size > by0 and y < by1:
+            continue
+        color = tuple(int(c) for c in rng.integers(40, 220, 3))
+        cv2.rectangle(img, (x, y), (x + size, y + size), color, -1)
+        placed += 1
+
+    src = np.array([[0, 0], [lw, 0], [lw, lh], [0, lh]], dtype=np.float32)
+    m = cv2.getPerspectiveTransform(src, quad)
+    warped = cv2.warpPerspective(label, m, (width, height), flags=cv2.INTER_LINEAR)
+    cover = cv2.warpPerspective(np.full((lh, lw), 255, np.uint8), m, (width, height))
+    alpha = (cover.astype(np.float32) / 255)[..., None]
+    out = img.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
+    return out.astype(np.uint8), quad

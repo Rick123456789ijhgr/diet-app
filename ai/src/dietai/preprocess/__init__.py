@@ -4,7 +4,7 @@
 所有門檻與參數由 ``dietai.preprocess.config`` 的 dataclass 傳入。
 
 條碼與發票 QR 相關功能（``barcode``、``decoders``、``invoice_qr``）解碼時需要
-zxing-cpp（``vision`` extra）。
+zxing-cpp（``vision`` extra）。營養標示（``label``）只需 OpenCV。
 """
 
 from dietai.preprocess.barcode import (
@@ -19,6 +19,7 @@ from dietai.preprocess.barcode import (
 from dietai.preprocess.config import (
     DEFAULT_RUNGS,
     InvoiceQrConfig,
+    LabelConfig,
     LadderConfig,
     QualityConfig,
     ZxingConfig,
@@ -31,6 +32,17 @@ from dietai.preprocess.decoders import (
     ZxingDecoder,
 )
 from dietai.preprocess.invoice_qr import InvoiceQrResult, locate_invoice_qrs
+from dietai.preprocess.label import (
+    GlareResult,
+    LabelResult,
+    detect_glare,
+    enhance_contrast,
+    label_edges,
+    locate_label_quad,
+    preprocess_label,
+    rectify,
+    remove_glare,
+)
 from dietai.preprocess.quality import (
     ExposureStats,
     QualityReport,
@@ -39,7 +51,7 @@ from dietai.preprocess.quality import (
     exposure_stats,
     resolution_check,
 )
-from dietai.preprocess.types import PreprocessWarning, Rung, StepRecord
+from dietai.preprocess.types import PreprocessWarning, Quad, Rung, StepRecord
 
 __all__ = [
     "DEFAULT_RUNGS",
@@ -47,12 +59,16 @@ __all__ = [
     "DecodeHit",
     "Decoder",
     "ExposureStats",
+    "GlareResult",
     "InvoiceQrConfig",
     "InvoiceQrResult",
+    "LabelConfig",
+    "LabelResult",
     "LadderConfig",
     "LadderResult",
     "PreprocessWarning",
     "PyzbarDecoder",
+    "Quad",
     "QualityConfig",
     "QualityReport",
     "Rung",
@@ -64,10 +80,17 @@ __all__ = [
     "blur_score",
     "check_quality",
     "decode_with_ladder",
+    "detect_glare",
     "ean13_check_digit",
     "ean13_checksum_ok",
+    "enhance_contrast",
     "exposure_stats",
+    "label_edges",
     "ladder_variants",
     "locate_invoice_qrs",
+    "locate_label_quad",
+    "preprocess_label",
+    "rectify",
+    "remove_glare",
     "resolution_check",
 ]

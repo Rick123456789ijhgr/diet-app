@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from dietai.preprocess.types import Image
+from dietai.preprocess.types import Image, Quad
 
 
 def validate_image(img: object) -> None:
@@ -152,3 +152,34 @@ def estimate_skew(img: Image) -> float:
     # 影像 y 軸向下，主梯度角取負號才是一般的逆時針角度
     theta = -0.5 * np.degrees(np.arctan2(2 * sxy, sxx - syy))
     return float(theta + 180 if theta <= -90 else theta)
+
+
+def order_quad(points: npt.ArrayLike) -> Quad:
+    """把四個點排成左上、右上、右下、左下（影像座標，y 軸向下）。
+
+    先依相對於重心的角度排成順時針，再把 ``x + y`` 最小者轉到第一個；
+    與只看 ``x + y``／``y − x`` 的做法不同，四邊形旋轉接近 45° 時仍不會重複選到同一點。
+    輸入須可轉成形狀 ``(4, 2)``，否則丟 ``ValueError``。
+    """
+    pts = np.asarray(points, dtype=np.float32).reshape(-1, 2)
+    if pts.shape != (4, 2):
+        raise ValueError(f"四邊形必須有 4 個 (x, y) 點，收到形狀 {pts.shape}")
+    center = pts.mean(axis=0)
+    angles = np.arctan2(pts[:, 1] - center[1], pts[:, 0] - center[0])
+    clockwise = pts[np.argsort(angles)]
+    start = int(np.argmin(clockwise.sum(axis=1)))
+    return np.roll(clockwise, -start, axis=0)
+
+
+def clahe(img: Image, clip: float, tile: int) -> Image:
+    """對灰階影像做 CLAHE（限制對比的自適應直方圖均衡化），``tile × tile`` 格。
+
+    只接受 2 維影像；彩色影像請先轉灰階或取出亮度通道。
+    """
+    validate_image(img)
+    if img.ndim != 2:
+        raise ValueError(f"clahe 只接受灰階影像，收到形狀 {img.shape}")
+    if clip <= 0 or tile <= 0:
+        raise ValueError(f"須滿足 clip > 0、tile > 0，收到 clip={clip}、tile={tile}")
+    op = cv2.createCLAHE(clipLimit=clip, tileGridSize=(tile, tile))
+    return np.asarray(op.apply(img), dtype=np.uint8)

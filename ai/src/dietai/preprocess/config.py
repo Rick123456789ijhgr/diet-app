@@ -304,3 +304,253 @@ class InvoiceQrConfig:
     def __post_init__(self) -> None:
         if isinstance(self.ladder, Mapping):  # 由 JSON 讀入的巢狀物件
             object.__setattr__(self, "ladder", LadderConfig(**self.ladder))
+
+
+@dataclass(frozen=True)
+class LabelConfig:
+    """營養標示前處理（``dietai.preprocess.label``）的參數。
+
+    流程為「定位＋校正 → 光斑 → 對比」，三段各由 ``enable_*`` 開關（E1 類消融實驗用）。
+    定位與校正共用一個開關：只定位不校正沒有用途，找到的四角仍會放在結果中。
+    定位在縮小到短邊 ``detect_short_side`` 的影像上進行，像素單位的參數皆以該尺寸為準。
+    """
+
+    enable_rectify: bool = param(
+        True,
+        "定位與透視校正",
+        "Locate & rectify",
+        "找出表格四邊形並做透視校正；找不到時以原圖繼續並警告 LABEL_NOT_LOCATED。",
+        group="label_steps",
+    )
+    enable_glare: bool = param(
+        True,
+        "光斑偵測與修補",
+        "Glare removal",
+        "偵測反光；面積小時修補，過大時警告 GLARE_RETAKE 並保留原樣。",
+        group="label_steps",
+    )
+    enable_contrast: bool = param(
+        True,
+        "對比增強",
+        "Contrast (CLAHE)",
+        "以 CLAHE 做局部對比增強。",
+        group="label_steps",
+    )
+    detect_short_side: int = param(
+        720,
+        "定位用短邊",
+        "Detect short side",
+        "定位前把影像縮小到此短邊（像素；不放大），加速並使像素參數與解析度無關。",
+        min=160,
+        max=2160,
+        step=16,
+        group="locate",
+    )
+    canny_low: int = param(
+        50,
+        "Canny 低門檻",
+        "Canny low",
+        "Canny 邊緣偵測的低門檻（滯後門檻下限）。",
+        min=0,
+        max=500,
+        step=5,
+        calibrate=True,
+        group="locate",
+    )
+    canny_high: int = param(
+        150,
+        "Canny 高門檻",
+        "Canny high",
+        "Canny 邊緣偵測的高門檻；須不小於低門檻。",
+        min=1,
+        max=1000,
+        step=5,
+        calibrate=True,
+        group="locate",
+    )
+    approx_eps_ratio: float = param(
+        0.02,
+        "多邊形近似容差",
+        "Approx epsilon",
+        "輪廓近似的容差，為輪廓周長的比例；越大越容易把輪廓簡化成四邊形。",
+        min=0.001,
+        max=0.2,
+        step=0.001,
+        calibrate=True,
+        group="locate",
+    )
+    min_quad_area_ratio: float = param(
+        0.1,
+        "最小表格面積",
+        "Min quad area",
+        "四邊形面積佔整張影像的比例低於此值時不採用（輪廓法與直線法皆適用）。",
+        min=0.0,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="locate",
+    )
+    max_quad_area_ratio: float = param(
+        0.95,
+        "最大表格面積",
+        "Max quad area",
+        "四邊形面積佔整張影像的比例高於此值時不採用：通常是雜訊或紋理連成一片、"
+        "沿畫面邊緣形成的假輪廓。標示幾乎填滿畫面時本來就不需校正。",
+        min=0.0,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="locate",
+    )
+    hough_threshold: int = param(
+        80,
+        "直線票數門檻",
+        "Hough threshold",
+        "備援的 HoughLinesP 累加器門檻；越大只留越明顯的直線。",
+        min=1,
+        max=1000,
+        step=5,
+        calibrate=True,
+        group="locate",
+    )
+    hough_min_line_ratio: float = param(
+        0.25,
+        "最短直線",
+        "Hough min line",
+        "直線最短長度，為（縮小後）影像短邊的比例。",
+        min=0.01,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="locate",
+    )
+    hough_max_gap: int = param(
+        20,
+        "直線最大間隙",
+        "Hough max gap",
+        "同一直線上兩段之間可連接的最大間隙（像素，以定位用尺寸為準）。",
+        min=0,
+        max=200,
+        step=1,
+        calibrate=True,
+        group="locate",
+    )
+    rectify_max_side: int = param(
+        2000,
+        "校正輸出長邊上限",
+        "Rectify max side",
+        "校正後的尺寸依四邊長度推算；長邊超過此值時等比縮小（像素）。",
+        min=64,
+        max=8000,
+        step=16,
+        group="rectify",
+    )
+    glare_v_min: int = param(
+        250,
+        "光斑亮度下限",
+        "Glare V min",
+        "HSV 亮度（V）不低於此值才可能是光斑。白色包裝本身很亮，下限太低會誤判。",
+        min=0,
+        max=255,
+        step=1,
+        calibrate=True,
+        group="glare",
+    )
+    glare_s_max: int = param(
+        30,
+        "光斑飽和度上限",
+        "Glare S max",
+        "HSV 飽和度（S）不高於此值才可能是光斑（反光接近白色）。灰階影像不使用。",
+        min=0,
+        max=255,
+        step=1,
+        calibrate=True,
+        group="glare",
+    )
+    glare_dilate_px: int = param(
+        3,
+        "光斑遮罩擴張",
+        "Glare dilate",
+        "把光斑遮罩向外擴張的像素數，涵蓋光斑邊緣的漸層；0 為不擴張。",
+        min=0,
+        max=50,
+        step=1,
+        group="glare",
+    )
+    glare_max_ratio: float = param(
+        0.1,
+        "可修補光斑上限",
+        "Glare max ratio",
+        "光斑面積比例超過此值時不修補，改為警告 GLARE_RETAKE。",
+        min=0.0,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="glare",
+    )
+    inpaint_radius: int = param(
+        5,
+        "修補半徑",
+        "Inpaint radius",
+        "cv2.inpaint（Telea）參考的鄰域半徑（像素）。",
+        min=1,
+        max=50,
+        step=1,
+        group="glare",
+    )
+    clahe_clip: float = param(
+        2.0,
+        "CLAHE 限幅",
+        "CLAHE clip limit",
+        "CLAHE 的對比限幅；越大對比越強、雜訊也越明顯。",
+        min=0.1,
+        max=40.0,
+        step=0.1,
+        calibrate=True,
+        group="contrast",
+    )
+    clahe_tile: int = param(
+        8,
+        "CLAHE 格數",
+        "CLAHE tiles",
+        "CLAHE 把影像切成 tile × tile 格分別均衡化。",
+        min=1,
+        max=64,
+        step=1,
+        group="contrast",
+    )
+    clahe_on_lab: bool = param(
+        True,
+        "保留色彩（LAB）",
+        "Keep color (LAB L)",
+        "開啟時對 LAB 的 L 通道做 CLAHE 並保留色彩；關閉時輸出灰階。灰階輸入一律輸出灰階。",
+        group="contrast",
+    )
+
+    def __post_init__(self) -> None:
+        for name in (
+            "detect_short_side",
+            "hough_threshold",
+            "rectify_max_side",
+            "inpaint_radius",
+            "clahe_tile",
+        ):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 必須為正整數，收到 {getattr(self, name)}")
+        if not 0 <= self.canny_low <= self.canny_high:
+            raise ValueError("須滿足 0 <= canny_low <= canny_high")
+        if not 0 < self.approx_eps_ratio < 1:
+            raise ValueError("approx_eps_ratio 必須介於 0 與 1（不含）")
+        if not 0 < self.hough_min_line_ratio <= 1:
+            raise ValueError("hough_min_line_ratio 必須介於 0（不含）與 1")
+        if not 0.0 <= self.min_quad_area_ratio <= self.max_quad_area_ratio <= 1.0:
+            raise ValueError("須滿足 0 <= min_quad_area_ratio <= max_quad_area_ratio <= 1")
+        if not 0.0 <= self.glare_max_ratio <= 1.0:
+            raise ValueError("glare_max_ratio 必須介於 0 與 1")
+        for name in ("glare_v_min", "glare_s_max"):
+            if not 0 <= getattr(self, name) <= 255:
+                raise ValueError(f"{name} 必須介於 0 與 255")
+        if self.hough_max_gap < 0 or self.glare_dilate_px < 0:
+            raise ValueError("hough_max_gap 與 glare_dilate_px 不得為負")
+        if self.clahe_clip <= 0:
+            raise ValueError("clahe_clip 必須大於 0")

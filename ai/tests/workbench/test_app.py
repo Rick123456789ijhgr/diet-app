@@ -36,6 +36,7 @@ def _run_batch(at: AppTest, folder: Path) -> None:
         None,
         "app_pages/quality.py",
         "app_pages/barcode.py",
+        "app_pages/label.py",
         "app_pages/sweep.py",
         "app_pages/batch.py",
         "app_pages/dev_checks.py",
@@ -187,6 +188,50 @@ def test_sweep_barcode_target_compares_raw_and_ladder():
     raw = next(m for m in at.metric if "只用原圖" in m.label)
     ladder = next(m for m in at.metric if "逐步升級" in m.label)
     assert int(ladder.value.rstrip("%")) > int(raw.value.rstrip("%"))
+
+
+def test_label_page_locates_synthetic_label():
+    at = _app("app_pages/label.py")
+    assert any("處理完成" in m.value for m in at.markdown)
+    method = next(m for m in at.metric if "定位方法" in m.label)
+    assert "輪廓法" in method.value
+    error = next(m for m in at.metric if "四角平均誤差" in m.label)
+    assert float(error.value.removesuffix(" px")) < 10
+
+
+def test_label_page_views_switch():
+    at = _app("app_pages/label.py")
+    for view in ("edges", "glare", "output"):
+        at.segmented_control(key="label.view").set_value(view).run()
+        assert not at.exception, view
+
+
+def test_label_page_large_glare_requests_retake():
+    at = _app("app_pages/label.py")
+    at.slider(key="label.d.glare").set_value(0.2).run()
+    assert not at.exception, at.exception
+    assert any("有警告" in m.value for m in at.markdown)
+    glare = next(m for m in at.metric if "光斑比例" in m.label)
+    assert float(glare.value.rstrip("%")) > 10  # 超過預設上限 glare_max_ratio
+    error = next(m for m in at.metric if "四角平均誤差" in m.label)
+    assert error.value == "—"  # 套用退化後沒有真值
+
+
+def test_label_page_gray_output_and_steps_off():
+    at = _app("app_pages/label.py")
+    at.toggle(key="cfg.label.clahe_on_lab").set_value(False).run()
+    at.segmented_control(key="label.view").set_value("output").run()
+    assert not at.exception, at.exception
+    for name in ("enable_rectify", "enable_glare", "enable_contrast"):
+        at.toggle(key=f"cfg.label.{name}").set_value(False).run()
+    assert not at.exception, at.exception
+    assert any("未啟用" in m.value for m in at.metric)
+
+
+def test_label_page_rejects_invalid_config():
+    at = _app("app_pages/label.py")
+    at.number_input(key="cfg.label.canny_low").set_value(400).run()
+    assert any("參數不合法" in e.value for e in at.error)
 
 
 def test_dev_checks_page_renders():

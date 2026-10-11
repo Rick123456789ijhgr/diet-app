@@ -19,6 +19,8 @@ WARNING_TEXT: dict[PreprocessWarning, tuple[str, str]] = {
     PreprocessWarning.BARCODE_NOT_FOUND: ("找不到條碼", "Barcode not found"),
     PreprocessWarning.INVOICE_QR_PARTIAL: ("只找到一個發票 QR", "Only one invoice QR"),
     PreprocessWarning.INVOICE_QR_NOT_FOUND: ("找不到發票 QR", "Invoice QR not found"),
+    PreprocessWarning.LABEL_NOT_LOCATED: ("找不到標示表格框", "Label not located"),
+    PreprocessWarning.GLARE_RETAKE: ("反光過大，請重拍", "Too much glare, retake"),
 }
 
 # 條碼逐步升級各階的顯示文字與圖示
@@ -43,6 +45,11 @@ GROUP_TEXT: dict[str, tuple[str, str, str]] = {
     "deskew": ("旋轉校正", "Deskew", ":material/rotate_right:"),
     "verify": ("驗證", "Verify", ":material/verified:"),
     "zxing": ("解碼器", "Decoder", ":material/qr_code_scanner:"),
+    "label_steps": ("步驟開關", "Steps", ":material/toggle_on:"),
+    "locate": ("表格定位", "Locate", ":material/crop_free:"),
+    "rectify": ("透視校正", "Rectify", ":material/transform:"),
+    "glare": ("光斑", "Glare", ":material/flare:"),
+    "contrast": ("對比增強", "Contrast", ":material/tonality:"),
     "": ("其他", "Other", ":material/tune:"),
 }
 

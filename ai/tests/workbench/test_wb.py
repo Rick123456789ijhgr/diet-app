@@ -203,6 +203,24 @@ def test_exposure_overlay_marks_dark_pixels():
     assert out[0, 0, 0] > 0 and out[0, 0, 2] == 0
 
 
+def test_draw_quads_and_mask_overlay_keep_input():
+    img = np.full((100, 120), 200, dtype=np.uint8)
+    quad = np.array([[10, 10], [100, 12], [98, 90], [12, 88]], dtype=np.float32)
+    out = viz.draw_quads(img, [(quad, viz.FOUND_COLOR, "contour")])
+    assert out.shape == (100, 120, 3)
+    assert (img == 200).all()
+    mask = np.zeros((100, 120), dtype=bool)
+    mask[:10] = True
+    overlay = viz.mask_overlay(img, mask)
+    assert overlay[0, 0, 2] > overlay[0, 0, 0] and (overlay[50, 50] == 200).all()
+
+
+def test_quad_errors():
+    truth = np.zeros((4, 2), dtype=np.float32)
+    found = truth + np.array([3, 4], dtype=np.float32)
+    assert viz.quad_errors(found, truth) == [5.0] * 4
+
+
 def test_report_rows():
     report = check_quality(np.zeros((10, 10), dtype=np.uint8))
     row = viz.report_metrics(report)

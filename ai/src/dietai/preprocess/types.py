@@ -13,6 +13,9 @@ import numpy.typing as npt
 # 影像：uint8，彩色為 (H, W, 3) BGR，灰階為 (H, W)。
 Image: TypeAlias = npt.NDArray[np.uint8]
 
+# 四邊形：float32，形狀 (4, 2) 的 (x, y)，順序為左上、右上、右下、左下（見 ops.order_quad）。
+Quad: TypeAlias = npt.NDArray[np.float32]
+
 
 @dataclass(frozen=True)
 class StepRecord:
@@ -36,6 +39,8 @@ class PreprocessWarning(StrEnum):
     BARCODE_NOT_FOUND = "BARCODE_NOT_FOUND"
     INVOICE_QR_PARTIAL = "INVOICE_QR_PARTIAL"
     INVOICE_QR_NOT_FOUND = "INVOICE_QR_NOT_FOUND"
+    LABEL_NOT_LOCATED = "LABEL_NOT_LOCATED"  # 找不到營養標示的表格框，以原圖繼續
+    GLARE_RETAKE = "GLARE_RETAKE"  # 反光面積過大，無法修補，建議重拍
 
 
 class Rung(StrEnum):

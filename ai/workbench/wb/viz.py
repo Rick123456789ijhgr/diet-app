@@ -7,16 +7,20 @@ from typing import Any
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 
 from dietai.preprocess import DecodeHit, QualityConfig, QualityReport, RungAttempt
 from dietai.preprocess.ops import to_gray
 from dietai.preprocess.quality import exposure_masks, laplacian_map
-from dietai.preprocess.types import Image
+from dietai.preprocess.types import Image, Quad
 
 # BGR
 DARK_COLOR = (255, 80, 0)
 BRIGHT_COLOR = (0, 0, 255)
 HIT_COLORS = ((40, 180, 40), (230, 120, 0), (0, 140, 255))
+FOUND_COLOR = (40, 180, 40)
+TRUTH_COLOR = (230, 120, 0)
+GLARE_COLOR = (0, 0, 255)
 
 
 def laplacian_heatmap(img: Image, cfg: QualityConfig) -> Image:
@@ -57,14 +61,7 @@ def report_metrics(report: QualityReport) -> dict[str, Any]:
 
 
 def steps_rows(report: QualityReport) -> list[dict[str, Any]]:
-    return [
-        {
-            "步驟": s.name,
-            "耗時（ms）": round(s.elapsed_ms, 3),
-            "參數": ", ".join(f"{k}={v}" for k, v in s.params.items()),
-        }
-        for s in report.steps
-    ]
+    return step_rows(report.steps)
 
 
 def draw_hits(img: Image, hits: Sequence[DecodeHit], labels: Sequence[str] | None = None) -> Image:
@@ -131,3 +128,44 @@ def attempt_rows(
             }
         )
     return rows
+
+
+def draw_quads(img: Image, quads: Sequence[tuple[Quad, tuple[int, int, int], str]]) -> Image:
+    """畫出四邊形（BGR）：每筆為（四角, 顏色, 標籤）。左上角以實心圓標示，四角以小圓點標示。"""
+    out = img.copy() if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    thickness = max(2, round(min(out.shape[:2]) / 300))
+    for n, (quad, color, text) in enumerate(quads):
+        pts = np.asarray(quad, dtype=np.float64).round().astype(np.int32)
+        cv2.polylines(out, [pts], isClosed=True, color=color, thickness=thickness)
+        for i, (x, y) in enumerate(pts):
+            cv2.circle(out, (int(x), int(y)), thickness * (3 if i == 0 else 2), color, -1)
+        # 多個四邊形的左上角常重疊，標籤依序往上錯開
+        x, y = int(pts[0][0]), max(20, int(pts[0][1]) - 10 - n * thickness * 12)
+        cv2.putText(out, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, thickness / 3, color, thickness)
+    return np.asarray(out, dtype=np.uint8)
+
+
+def mask_overlay(img: Image, mask: npt.NDArray[np.bool_], alpha: float = 0.6) -> Image:
+    """以紅色標出遮罩區域（BGR），例如光斑遮罩。"""
+    base = img if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    out = base.astype(np.float32)
+    color = np.array(GLARE_COLOR, dtype=np.float32)
+    out[mask] = out[mask] * (1 - alpha) + color * alpha
+    return out.astype(np.uint8)
+
+
+def quad_errors(found: Quad, truth: Quad) -> list[float]:
+    """四角各自的誤差（像素），順序為左上、右上、右下、左下。"""
+    return [float(d) for d in np.linalg.norm(np.asarray(found) - np.asarray(truth), axis=1)]
+
+
+def step_rows(steps: Sequence[Any]) -> list[dict[str, Any]]:
+    """``StepRecord`` 序列攤平成表格列。"""
+    return [
+        {
+            "步驟": s.name,
+            "耗時（ms）": round(s.elapsed_ms, 3),
+            "參數": ", ".join(f"{k}={v}" for k, v in s.params.items()),
+        }
+        for s in steps
+    ]
