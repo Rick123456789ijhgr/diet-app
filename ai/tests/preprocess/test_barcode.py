@@ -165,7 +165,8 @@ def test_checksum_verification_can_be_disabled(fake_decoder):
 
 def test_checksum_not_applied_to_other_formats(fake_decoder):
     decoder = fake_decoder([[_hit("hello", CodeFormat.QR_CODE)]])
-    assert decode_with_ladder(_blank(), decoder, RAW_ONLY).success
+    cfg = LadderConfig(rungs=(Rung.RAW,), accept_formats=())
+    assert decode_with_ladder(_blank(), decoder, cfg).success
 
 
 def test_rung_order_follows_config(fake_decoder):
@@ -309,7 +310,16 @@ def test_accept_formats_rejects_other_symbologies(fake_decoder):
 
 def test_accept_formats_empty_accepts_all(fake_decoder):
     decoder = fake_decoder([[_hit("0171381000054", CodeFormat.UPCE)]])
-    assert decode_with_ladder(_blank(), decoder, RAW_ONLY).success
+    cfg = LadderConfig(rungs=(Rung.RAW,), accept_formats=())
+    assert decode_with_ladder(_blank(), decoder, cfg).success
+
+
+def test_defaults_reject_upce_and_put_sharpen_last(fake_decoder):
+    """2026-10-12 決定的預設：只收零售格式、sharpen 為最後一階。"""
+    assert LadderConfig().accept_formats == RETAIL
+    assert LadderConfig().rungs[-1] is Rung.SHARPEN
+    decoder = fake_decoder([[_hit("0171381000054", CodeFormat.UPCE)]])
+    assert not decode_with_ladder(_blank(), decoder, RAW_ONLY).success
 
 
 def test_accept_formats_from_json_strings():

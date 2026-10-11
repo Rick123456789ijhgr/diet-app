@@ -16,6 +16,7 @@
       "deskew",
       "multiscale",
       "sharpen"
-    ]
+    ],
+    "accept_formats": []
   }
 }

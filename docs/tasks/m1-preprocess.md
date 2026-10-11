@@ -284,13 +284,14 @@ def locate_invoice_qrs(img, decoder, cfg) -> InvoiceQrResult
 | 誤讀的來源 | E1 合成資料找出兩類：① 斜拍 EAN-13 被部分掃描成合法的 **UPC-E**（`verify_ean13` 只檢查 EAN-13）；② `sharpen` 產生檢查碼正確的另一個 EAN-13。`results.csv` 新增 `formats` 欄、`attempts.csv` 新增 `rejected_texts` 欄，方便診斷。 |
 | 新增 `LadderConfig.accept_formats` | 採用的格式（空 = 全部）；其他格式的結果歸入 `rejected`、階梯繼續。序列欄位，工作台由條碼頁元件提供。電子發票不受影響（`invoice_qr` 一律忽略此欄位，只取 QR）。`CodeFormat` 移到 `types.py`，`decoders` 保留舊匯入路徑。 |
 | 新增 `LadderConfig.min_agree` | 同一個（格式, 內容）須在幾次不同嘗試中解出才採用（多尺度每個倍率算一次）；未確認時附新警告 `BARCODE_UNCONFIRMED`。只作用於 `decode_with_ladder`。 |
-| 預設值 | **不改**（`accept_formats=()`、`min_agree=1`，行為與 Phase 2 相同）：屬第 10 節由人依 E1 結果決定。合成資料上格式限制無代價且擋下 ① 類，`min_agree=2` 使成功率由 84% 降到 56%，建議優先評估 `m4_retail_sharpen_last`。 |
+| 預設值（2026-10-12 由專案負責人決定） | `accept_formats` 預設為 `RETAIL_FORMATS`（EAN-13／EAN-8／UPC-A）；`DEFAULT_RUNGS` 改為 sharpen 最後（raw → gray → binarize → denoise → deskew → multiscale → sharpen）；`min_agree` 維持 1（合成資料上 2 使成功率由 84% 降到 56%）。合成資料：上線組態成功率 84.4% → 88.3%、誤讀 6 → 1。真實照片的 E1 結果出來後再複核。 |
+| 預設改變與舊實驗組 | 所有實驗組設定一律明寫 `rungs` 與 `accept_formats`（測試檢查），舊實驗組釘在 Phase 2 的值，結果可重現；新增 `z2_default_v2` 對應新預設（測試確認與程式預設一致，預設再改時應新增實驗組）。 |
 | 新實驗組 | `m0`～`m5`（sharpen 移後、兩次一致、格式限制及其組合），結果見 E1 README。 |
 
 ## 10. 需要人決定、不要交給 AI 決定的事
 
 - 各門檻的實際數值（由 100–200 張標記照片校準）。
 - 逐步升級的最終步驟順序（由 E1 結果決定）。
-- `LadderConfig.accept_formats`、`min_agree` 的上線預設值（由 E1 結果決定）。
+- `LadderConfig.accept_formats`、`min_agree` 的上線預設值（已於 2026-10-12 依合成資料暫定，見第 9 節；以真實照片 E1 複核）。
 - VLM 輸入的最終尺寸（由 E2 結果決定）。
 - 是否引入 SAM 取代輪廓裁切。

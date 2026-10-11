@@ -49,6 +49,8 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 每個 JSON 檔是一個實驗組：`decoder`（`zxing`／`pyzbar`）、`zxing`（`ZxingConfig` 欄位）、
 `ladder`（`LadderConfig` 欄位），省略的欄位用預設值。也接受工作台匯出的 `{"class": ..., "values": ...}`。
 **改參數就新增檔案，不覆寫舊的**（research/CLAUDE.md）。
+每個檔案都必須明寫 `ladder.rungs` 與 `ladder.accept_formats`（測試會檢查），程式預設改變時舊實驗組的意義才不會跟著變。
+`a0`～`a6`、`z0`、`z1`、`p*` 都釘在 Phase 2 的階梯順序、不限格式。
 
 | 設定 | 階梯 | zxing-cpp 內建嘗試 | 用途 |
 | --- | --- | --- | --- |
@@ -69,6 +71,7 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 | `m3_retail_formats` | 完整階梯，`accept_formats` 只收 EAN-13／EAN-8／UPC-A | 關 | 誤讀對策 |
 | `m4_retail_sharpen_last` | m3＋sharpen 移到最後 | 關 | 誤讀對策 |
 | `m5_retail_zxing_default` | 同 z1，加格式限制 | 開 | 誤讀對策 |
+| `z2_default_v2` | sharpen 最後＋只收零售格式 | 開 | 目前的程式預設（2026-10-12 起） |
 
 消融組關閉 zxing-cpp 內建的旋轉／縮小／反色，才量得到階梯本身的貢獻（模組一 Phase 2 決議）。
 
@@ -113,7 +116,8 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 - **兩次一致**（`min_agree=2`）代價過高：raw 與 gray 對 zxing-cpp 幾乎是同一張圖，會「一致地」誤讀，擋不住第 ① 類；
   而旋轉、暗光、梯度只有單一階救得回，成功率掉 28 個百分點。
 - 第 ② 類仍剩 1 次（該影像只有 sharpen 讀得出來）。
-- 程式預設值**未改**（`accept_formats=()`、`min_agree=1`），由研究組以真實照片確認後決定；建議優先採用 `m4` 的設定。
+- 2026-10-12 決定：程式預設改為 `m4` 的設定（sharpen 最後＋只收零售格式），`min_agree` 維持 1；對應實驗組為
+  `z2_default_v2`（合成資料 88.3%、誤讀 1，舊預設 `z1` 為 84.4%、誤讀 6）。真實照片結果出來後複核。
 
 ## 結論
 

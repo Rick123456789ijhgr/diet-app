@@ -11,6 +11,7 @@
     "rungs": [
       "raw",
       "gray"
-    ]
+    ],
+    "accept_formats": []
   }
 }

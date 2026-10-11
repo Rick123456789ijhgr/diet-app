@@ -177,15 +177,21 @@ class ZxingConfig:
     )
 
 
+# 預設階梯順序。sharpen 放最後：E1 發現它會把模糊／縮小的條碼讀成另一個檢查碼正確的
+# EAN-13；放最後時只在其他階都失敗才執行，不會搶先於其他階的正確結果（2026-10-12 決定）。
 DEFAULT_RUNGS: tuple[Rung, ...] = (
     Rung.RAW,
     Rung.GRAY,
     Rung.BINARIZE,
-    Rung.SHARPEN,
     Rung.DENOISE,
     Rung.DESKEW,
     Rung.MULTISCALE,
+    Rung.SHARPEN,
 )
+
+# 預設採用的格式：台灣零售商品條碼（EAN-13 為主，含 EAN-8 與 UPC-A）。不收 UPC-E：
+# E1 發現斜拍的 EAN-13 會被部分掃描成合法的 UPC-E（2026-10-12 決定）。
+RETAIL_FORMATS: tuple[CodeFormat, ...] = (CodeFormat.EAN13, CodeFormat.EAN8, CodeFormat.UPCA)
 
 
 @dataclass(frozen=True)
@@ -193,15 +199,16 @@ class LadderConfig:
     """條碼逐步升級（``barcode.decode_with_ladder``）的參數。
 
     ``rungs`` 決定嘗試的階與順序（最終順序由 E1 結果決定，見任務書第 10 節）；
-    ``scales`` 為多尺度階依序嘗試的倍率；``accept_formats`` 為採用的條碼格式（空 = 全部），
-    其他格式的結果歸入 ``rejected``——例如斜拍的 EAN-13 可能被部分掃描成另一個合法的
-    UPC-E，``verify_ean13`` 擋不住。這三個欄位是序列，不以 ``param()`` 宣告，
-    工作台的條碼頁另有專用元件。由 JSON 讀入時接受字串與數字的串列。
+    ``scales`` 為多尺度階依序嘗試的倍率；``accept_formats`` 為採用的條碼格式
+    （預設 ``RETAIL_FORMATS``，空 = 全部），其他格式的結果歸入 ``rejected``——例如斜拍的
+    EAN-13 可能被部分掃描成另一個合法的 UPC-E，``verify_ean13`` 擋不住。
+    這三個欄位是序列，不以 ``param()`` 宣告，工作台的條碼頁另有專用元件。
+    由 JSON 讀入時接受字串與數字的串列。
     """
 
     rungs: tuple[Rung, ...] = DEFAULT_RUNGS
     scales: tuple[float, ...] = (2.0, 0.5)
-    accept_formats: tuple[CodeFormat, ...] = ()
+    accept_formats: tuple[CodeFormat, ...] = RETAIL_FORMATS
     binarize_block_size: int = param(
         31,
         "二值化鄰域",

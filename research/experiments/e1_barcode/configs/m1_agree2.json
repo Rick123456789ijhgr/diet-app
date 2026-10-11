@@ -8,6 +8,16 @@
     "try_invert": false
   },
   "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "multiscale"
+    ],
+    "accept_formats": [],
     "min_agree": 2
   }
 }

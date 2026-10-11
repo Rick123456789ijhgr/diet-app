@@ -18,6 +18,7 @@ from dietai.preprocess.barcode import (
 )
 from dietai.preprocess.config import (
     DEFAULT_RUNGS,
+    RETAIL_FORMATS,
     FoodConfig,
     InvoiceQrConfig,
     LabelConfig,
@@ -85,6 +86,7 @@ __all__ = [
     "Quad",
     "QualityConfig",
     "QualityReport",
+    "RETAIL_FORMATS",
     "Rung",
     "RungAttempt",
     "StepRecord",

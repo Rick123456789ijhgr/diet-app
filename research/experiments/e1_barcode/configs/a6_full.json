@@ -16,6 +16,7 @@
       "denoise",
       "deskew",
       "multiscale"
-    ]
+    ],
+    "accept_formats": []
   }
 }
