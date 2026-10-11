@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Any, TypeVar
 
-from dietai.preprocess.types import Rung
+from dietai.preprocess.types import CodeFormat, Rung
 
 T = TypeVar("T", int, float, bool)
 
@@ -193,12 +193,15 @@ class LadderConfig:
     """條碼逐步升級（``barcode.decode_with_ladder``）的參數。
 
     ``rungs`` 決定嘗試的階與順序（最終順序由 E1 結果決定，見任務書第 10 節）；
-    ``scales`` 為多尺度階依序嘗試的倍率。這兩個欄位是序列，不以 ``param()`` 宣告，
+    ``scales`` 為多尺度階依序嘗試的倍率；``accept_formats`` 為採用的條碼格式（空 = 全部），
+    其他格式的結果歸入 ``rejected``——例如斜拍的 EAN-13 可能被部分掃描成另一個合法的
+    UPC-E，``verify_ean13`` 擋不住。這三個欄位是序列，不以 ``param()`` 宣告，
     工作台的條碼頁另有專用元件。由 JSON 讀入時接受字串與數字的串列。
     """
 
     rungs: tuple[Rung, ...] = DEFAULT_RUNGS
     scales: tuple[float, ...] = (2.0, 0.5)
+    accept_formats: tuple[CodeFormat, ...] = ()
     binarize_block_size: int = param(
         31,
         "二值化鄰域",
@@ -271,11 +274,29 @@ class LadderConfig:
         "檢查碼錯誤的 EAN-13 不算成功，避免把誤讀當成功。",
         group="verify",
     )
+    min_agree: int = param(
+        1,
+        "需一致的嘗試次數",
+        "Min agreeing attempts",
+        "同一個條碼內容須在幾次不同的嘗試中解出才採用；1 為第一次解出即採用。"
+        "2 可擋下單一階造成的誤讀（例如銳化把模糊條碼解成另一個檢查碼正確的號碼），"
+        "代價是較慢、只有單一階救得回的影像會失敗。只作用於 decode_with_ladder；"
+        "預設值由 E1 決定。",
+        min=1,
+        max=4,
+        step=1,
+        group="verify",
+    )
 
     def __post_init__(self) -> None:
         # JSON 讀入時為串列與字串，統一轉成 tuple 與列舉，維持 frozen 與可比較
         object.__setattr__(self, "rungs", tuple(Rung(r) for r in self.rungs))
         object.__setattr__(self, "scales", tuple(float(s) for s in self.scales))
+        object.__setattr__(
+            self, "accept_formats", tuple(CodeFormat(f) for f in self.accept_formats)
+        )
+        if len(set(self.accept_formats)) != len(self.accept_formats):
+            raise ValueError(f"accept_formats 不得重複，收到 {self.accept_formats}")
         if len(set(self.rungs)) != len(self.rungs):
             raise ValueError(f"rungs 不得重複，收到 {[r.value for r in self.rungs]}")
         if any(s <= 0 or s == 1 for s in self.scales):
@@ -290,13 +311,16 @@ class LadderConfig:
             raise ValueError("須滿足 sharpen_sigma > 0、sharpen_amount ≥ 0")
         if self.deskew_min_deg < 0:
             raise ValueError("deskew_min_deg 不得為負")
+        if self.min_agree < 1:
+            raise ValueError(f"min_agree 至少為 1，收到 {self.min_agree}")
 
 
 @dataclass(frozen=True)
 class InvoiceQrConfig:
     """電子發票雙 QR 定位（``invoice_qr.locate_invoice_qrs``）的參數。
 
-    沿用 ``LadderConfig`` 的階梯；``verify_ean13`` 對 QR 不適用。
+    沿用 ``LadderConfig`` 的階梯；``verify_ean13``、``min_agree``、``accept_formats`` 對 QR 不適用
+    （QR 有 Reed–Solomon 錯誤更正，誤讀機率極低）。
     """
 
     ladder: LadderConfig = LadderConfig()

@@ -37,6 +37,7 @@ class PreprocessWarning(StrEnum):
     TOO_BRIGHT = "TOO_BRIGHT"
     LOW_RESOLUTION = "LOW_RESOLUTION"
     BARCODE_NOT_FOUND = "BARCODE_NOT_FOUND"
+    BARCODE_UNCONFIRMED = "BARCODE_UNCONFIRMED"  # 有解碼結果但未達 min_agree，建議靠近或重拍
     INVOICE_QR_PARTIAL = "INVOICE_QR_PARTIAL"
     INVOICE_QR_NOT_FOUND = "INVOICE_QR_NOT_FOUND"
     LABEL_NOT_LOCATED = "LABEL_NOT_LOCATED"  # 找不到營養標示的表格框，以原圖繼續
@@ -126,6 +127,18 @@ class Ellipse:
         x0, y0 = int(np.floor(self.cx - hx)), int(np.floor(self.cy - hy))
         x1, y1 = int(np.ceil(self.cx + hx)), int(np.ceil(self.cy + hy))
         return Box(x0, y0, max(1, x1 - x0), max(1, y1 - y0))
+
+
+class CodeFormat(StrEnum):
+    """條碼格式（與解碼套件無關的代碼）。"""
+
+    EAN13 = "EAN13"
+    EAN8 = "EAN8"
+    UPCA = "UPCA"
+    UPCE = "UPCE"
+    CODE128 = "CODE128"
+    QR_CODE = "QR_CODE"
+    OTHER = "OTHER"
 
 
 class Rung(StrEnum):

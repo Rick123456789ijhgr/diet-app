@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections import Counter
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,8 +20,8 @@ import numpy.typing as npt
 
 from dietai.preprocess import ops
 from dietai.preprocess.config import LadderConfig
-from dietai.preprocess.decoders import CodeFormat, DecodeHit, Decoder
-from dietai.preprocess.types import Image, PreprocessWarning, Rung, StepRecord
+from dietai.preprocess.decoders import DecodeHit, Decoder
+from dietai.preprocess.types import CodeFormat, Image, PreprocessWarning, Rung, StepRecord
 
 Affine = npt.NDArray[np.float64]  # 2×3 仿射矩陣
 _IDENTITY: Affine = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
@@ -60,8 +61,9 @@ class LadderResult:
     """``decode_with_ladder`` 的結果。
 
     ``success_index`` 為成功那一次嘗試在 ``attempts`` 中的索引（從 0 起算），
-    ``image`` 為成功時送進解碼器的影像版本；失敗時兩者皆為 ``None``，
-    ``warnings`` 含 ``BARCODE_NOT_FOUND``。``hits`` 的座標為原圖座標。
+    ``image`` 為成功時送進解碼器的影像版本；失敗時兩者皆為 ``None``。
+    失敗時 ``warnings`` 為 ``BARCODE_NOT_FOUND``；若有解碼結果但都未達
+    ``min_agree`` 則為 ``BARCODE_UNCONFIRMED``。``hits`` 的座標為原圖座標。
     """
 
     success: bool
@@ -151,7 +153,8 @@ def iter_attempts(
     """逐階產生影像版本並解碼，產出（版本, 嘗試紀錄）。供 ``decode_with_ladder`` 與
     ``invoice_qr`` 共用；何時停止由呼叫端決定。
 
-    ``cfg.verify_ean13`` 為 ``True`` 時，檢查碼錯誤的 EAN-13 歸入 ``rejected``。
+    格式不在 ``cfg.accept_formats``（非空時）的結果，以及 ``cfg.verify_ean13`` 為 ``True``
+    時檢查碼錯誤的 EAN-13，歸入 ``rejected``。
     耗時含產生影像版本與解碼。
     """
     variants = ladder_variants(img, cfg)
@@ -165,7 +168,7 @@ def iter_attempts(
         if variant.image is not None:
             for hit in decoder(variant.image):
                 mapped = _map_hit(hit, variant.to_original)
-                if (
+                if (cfg.accept_formats and mapped.format not in cfg.accept_formats) or (
                     cfg.verify_ean13
                     and mapped.format is CodeFormat.EAN13
                     and not ean13_checksum_ok(mapped.text)
@@ -187,7 +190,11 @@ def iter_attempts(
 def decode_with_ladder(
     img: Image, decoder: Decoder, cfg: LadderConfig = LadderConfig()
 ) -> LadderResult:
-    """依 ``cfg.rungs`` 逐階嘗試解碼，第一次有採用的結果即停止。
+    """依 ``cfg.rungs`` 逐階嘗試解碼，有結果被確認即停止。
+
+    「確認」：同一個（格式, 內容）累計在 ``cfg.min_agree`` 次不同的嘗試中解出
+    （多尺度的每個倍率各算一次嘗試）。``min_agree`` 為 1 時即第一次解出就採用；
+    成功時 ``hits`` 只含當次嘗試中已確認的結果，``success_rung`` 為達到確認的那一階。
 
     輸入為 BGR 或灰階 ``uint8`` 影像，不會被修改。``decoder`` 可為任何符合
     ``Decoder`` 介面的實作（預設實作為 ``ZxingDecoder``）。
@@ -195,15 +202,18 @@ def decode_with_ladder(
     """
     ops.validate_image(img)
     attempts: list[RungAttempt] = []
+    votes: Counter[tuple[CodeFormat, str]] = Counter()
     for variant, attempt in iter_attempts(img, decoder, cfg):
         attempts.append(attempt)
-        if attempt.hits:
+        votes.update({(h.format, h.text) for h in attempt.hits})  # 同一次嘗試只算一票
+        confirmed = tuple(h for h in attempt.hits if votes[h.format, h.text] >= cfg.min_agree)
+        if confirmed:
             return LadderResult(
                 success=True,
                 success_rung=attempt.rung,
                 success_index=len(attempts) - 1,
                 image=variant.image,
-                hits=attempt.hits,
+                hits=confirmed,
                 attempts=tuple(attempts),
                 steps=attempts_to_steps(attempts),
                 warnings=(),
@@ -216,7 +226,9 @@ def decode_with_ladder(
         hits=(),
         attempts=tuple(attempts),
         steps=attempts_to_steps(attempts),
-        warnings=(PreprocessWarning.BARCODE_NOT_FOUND,),
+        warnings=(
+            PreprocessWarning.BARCODE_UNCONFIRMED if votes else PreprocessWarning.BARCODE_NOT_FOUND,
+        ),
     )
 
 

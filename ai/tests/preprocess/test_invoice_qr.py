@@ -124,3 +124,19 @@ def test_rejects_bad_image(zxing):
 def test_invoice_config_round_trips_through_json():
     cfg = InvoiceQrConfig(LadderConfig(rungs=(Rung.GRAY,), scales=(3.0,)))
     assert InvoiceQrConfig(**json.loads(json.dumps(asdict(cfg)))) == cfg
+
+
+def test_accept_formats_does_not_block_invoice_qr(fake_decoder):
+    """商品條碼的格式限制（例如只收 EAN-13）不影響發票 QR。"""
+    from dietai.preprocess import CodeFormat, InvoiceQrConfig, LadderConfig, Rung
+
+    corners_l = ((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))
+    corners_r = ((50.0, 0.0), (60.0, 0.0), (60.0, 10.0), (50.0, 10.0))
+    hits = [
+        DecodeHit(CodeFormat.QR_CODE, "L", b"L", corners_l),
+        DecodeHit(CodeFormat.QR_CODE, "R", b"R", corners_r),
+    ]
+    ladder = LadderConfig(rungs=(Rung.RAW,), accept_formats=(CodeFormat.EAN13,))
+    img = np.full((40, 80, 3), 255, dtype=np.uint8)
+    result = locate_invoice_qrs(img, fake_decoder([hits]), InvoiceQrConfig(ladder=ladder))
+    assert result.left is not None and result.right is not None
