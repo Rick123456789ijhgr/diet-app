@@ -62,6 +62,14 @@ PAGES = {
             url_path="batch",
         ),
     ],
+    "研究實驗": [
+        st.Page(
+            "app_pages/e1.py",
+            title="E1 條碼消融 · E1 Ablation",
+            icon=":material/science:",
+            url_path="e1",
+        ),
+    ],
     "開發工具": [
         st.Page(
             "app_pages/dev_checks.py",

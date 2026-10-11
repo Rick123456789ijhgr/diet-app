@@ -1,0 +1,7 @@
+{
+  "name": "z1_full_zxing_default",
+  "description": "對照：完整階梯＋zxing-cpp 內建嘗試全開（目前的上線預設）",
+  "decoder": "zxing",
+  "zxing": {},
+  "ladder": {}
+}

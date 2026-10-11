@@ -83,7 +83,7 @@ with left:
             ("Phase 2", "條碼與電子發票 QR · Barcode & invoice QR", "完成", "green"),
             ("Phase 3", "營養標示 · Nutrition label", "完成", "green"),
             ("Phase 4", "食物照片 · Food photo", "完成", "green"),
-            ("Phase 5", "E1 實驗骨架 · E1 experiment", "未開始", "gray"),
+            ("Phase 5", "E1 實驗骨架 · E1 experiment", "完成", "green"),
         ]:
             with st.container(horizontal=True, vertical_alignment="center"):
                 st.badge(status, color=color, width=72)  # type: ignore[arg-type]

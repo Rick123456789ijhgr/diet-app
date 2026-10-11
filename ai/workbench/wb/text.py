@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dietai.evaluation import Outcome
 from dietai.preprocess import PreprocessWarning, Rung
 
 
@@ -33,6 +34,16 @@ RUNG_TEXT: dict[Rung, tuple[str, str, str]] = {
     Rung.DENOISE: ("去雜訊", "Denoise", ":material/grain:"),
     Rung.DESKEW: ("旋轉校正", "Deskew", ":material/rotate_right:"),
     Rung.MULTISCALE: ("多尺度", "Multi-scale", ":material/zoom_in:"),
+}
+
+# E1 判定結果的顯示文字與 badge 顏色
+OUTCOME_TEXT: dict[Outcome, tuple[str, str, str]] = {
+    Outcome.CORRECT: ("正確", "Correct", "green"),
+    Outcome.MISREAD: ("誤讀", "Misread", "red"),
+    Outcome.MISSED: ("漏讀", "Missed", "orange"),
+    Outcome.FALSE_POSITIVE: ("負樣本誤報", "False positive", "red"),
+    Outcome.TRUE_NEGATIVE: ("正確拒絕", "True negative", "green"),
+    Outcome.ERROR: ("讀檔／處理錯誤", "Error", "gray"),
 }
 
 # 設定欄位分組（ParamInfo.group）的顯示文字與圖示。
@@ -75,4 +86,13 @@ def group_label(group: str) -> tuple[str, str]:
 def rung_label(rung: Rung) -> str:
     """階的顯示文字，例如「旋轉校正 · Deskew」。"""
     zh, en, _ = RUNG_TEXT.get(rung, (rung.value, rung.value, ""))
+    return zh_en(zh, en)
+
+
+def outcome_label(outcome: str) -> str:
+    """判定結果的顯示文字，例如「誤讀 · Misread」；未知代碼原樣顯示。"""
+    try:
+        zh, en, _ = OUTCOME_TEXT[Outcome(outcome)]
+    except (KeyError, ValueError):
+        return outcome
     return zh_en(zh, en)

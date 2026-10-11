@@ -1,0 +1,6 @@
+{
+  "name": "p1_full_pyzbar",
+  "description": "解碼器對照：pyzbar（ZBar）＋完整階梯",
+  "decoder": "pyzbar",
+  "ladder": {}
+}

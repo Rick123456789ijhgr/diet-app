@@ -1,0 +1,10 @@
+{
+  "name": "p0_raw_pyzbar",
+  "description": "解碼器對照：pyzbar（ZBar）只用原圖",
+  "decoder": "pyzbar",
+  "ladder": {
+    "rungs": [
+      "raw"
+    ]
+  }
+}

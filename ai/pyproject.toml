@@ -36,6 +36,7 @@ markers = ["slow: 效能基準等較慢的測試（CI 以 -m 'not slow' 略過�
 line-length = 100
 target-version = "py311"
 src = ["src", "workbench"]
+# research/ 以 research/ruff.toml 沿用本設定；lint 指令另外傳入 ../research
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
@@ -53,7 +54,13 @@ extend-immutable-calls = [
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/dietai/preprocess", "src/dietai/synthetic", "workbench"]
+files = [
+  "src/dietai/preprocess",
+  "src/dietai/synthetic",
+  "src/dietai/evaluation",
+  "workbench",
+  "../research/experiments/e1_barcode",
+]
 mypy_path = ["src", "workbench"]
 explicit_package_bases = true
 strict = true

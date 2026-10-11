@@ -260,6 +260,23 @@ def locate_invoice_qrs(img, decoder, cfg) -> InvoiceQrResult
 | 已知限制 | ① 相鄰或接觸的盤子併成一個框；② 背景以單一顏色估計，桌布花紋、明暗梯度、特寫（菜佔滿邊框）、白盤放白桌時會失準；③ 盤緣只偵測完整度高的橢圓，被遮擋一半以上的盤子找不到。對策列為後續事項（以盤緣橢圓拆分合併框、距離轉換＋watershed、多色背景模型）。 |
 | 合成資料 | `synthetic.food_scene`：木紋桌面、白盤（含內圈盤緣）、不規則食物與一雙筷子，回傳真實盤緣橢圓。 |
 
+### Phase 5 開工時
+
+| 衝突或未定義處 | 決議 |
+| --- | --- |
+| 實驗邏輯放哪裡 | 「跑哪些設定、怎麼判對錯、怎麼統計」放在新套件 `dietai.evaluation`（`manifest`、`stats`、`barcode`），研究腳本（`run.py`、`analyze.py`、`make_synthetic.py`）只解析參數；工作台的 E1 頁面共用同一套函式，CI 可測試。合成資料集產生器放在 `dietai.synthetic.datasets`。 |
+| MLflow／W&B（專案未選定） | 都不用：每次執行寫成本地資料夾（`run.json`＋CSV），見 `docs/adr/0002-experiment-records.md`。 |
+| CSV／Parquet | 只輸出 CSV（零新依賴、Excel 可開）；需要時可用 pandas 轉 Parquet。 |
+| 設定檔格式 | JSON（不新增 PyYAML 依賴，且與工作台的設定匯出格式相容）。舊的 `step*.yaml` 從未產生結果，直接刪除。 |
+| 消融設計 | `a0_raw`～`a6_full`：依 `DEFAULT_RUNGS` 逐階累加，zxing-cpp 內建嘗試關閉；另有上線情境（`z*`，內建嘗試開啟）與 pyzbar 對照（`p*`）。 |
+| 「成功」的定義 | 解出且文字等於真值才算 `correct`；解出但不符為 `misread`（階梯在誤讀時停止，這是真實行為），與 `missed` 分開統計。`truth` 空白為負樣本，量測 `false_positive`。讀檔／處理失敗記為 `error`，不中斷整批、不計入成功率。 |
+| 統計方法 | 成功率附 Wilson 95% CI；與基準組（預設為第一組）以同一批影像配對做 McNemar 精確檢定。只用標準函式庫，不需 scipy。 |
+| manifest 欄位 | 必填 `image`、`truth`；選填 `split`、`id`；其餘欄位一律視為拍攝條件標籤，分析時可依任一欄分組。 |
+| 測試集鎖定 | `split=test` 或路徑含 `splits/test` 的列預設排除並計數；正式實驗須加 `--include-test`，並記錄在 `run.json`。工作台的 `wb.images` 改用同一個 `is_test_split`。 |
+| 結果不覆寫 | 執行資料夾以時間戳記命名，已存在且非空時拒絕寫入；`runs/`、`synthetic/` 加入 gitignore。 |
+| research 的 lint | `research/ruff.toml` 沿用 `ai/pyproject.toml`；`make lint-ai` 與 CI 一併檢查 `../research`，mypy 涵蓋 E1 腳本；CI 的 ai job 在 `research/**` 變更時也執行。 |
+| 已知觀察 | 合成資料上，`sharpen` 會把縮小 0.35 倍的條碼解成另一個**檢查碼正確**的 EAN-13，所有含 sharpen 的實驗組都繼承這個誤讀。是否調整階梯（例如要求兩階結果一致才採用）屬第 10 節「由人依 E1 結果決定」，本 Phase 不改。 |
+
 ## 10. 需要人決定、不要交給 AI 決定的事
 
 - 各門檻的實際數值（由 100–200 張標記照片校準）。

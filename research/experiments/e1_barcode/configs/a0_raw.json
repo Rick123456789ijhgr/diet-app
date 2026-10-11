@@ -1,0 +1,15 @@
+{
+  "name": "a0_raw",
+  "description": "消融：原圖（zxing-cpp 內建嘗試關閉，只量測階梯本身）",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw"
+    ]
+  }
+}

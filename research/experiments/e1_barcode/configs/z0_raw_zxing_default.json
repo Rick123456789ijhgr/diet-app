@@ -1,0 +1,11 @@
+{
+  "name": "z0_raw_zxing_default",
+  "description": "對照：只用原圖，zxing-cpp 內建旋轉／縮小／反色全開（不做前處理的上線情境）",
+  "decoder": "zxing",
+  "zxing": {},
+  "ladder": {
+    "rungs": [
+      "raw"
+    ]
+  }
+}

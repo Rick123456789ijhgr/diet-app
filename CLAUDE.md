@@ -38,6 +38,7 @@ make test      # 全部測試
 make lint      # 全部 lint
 make gen       # 依規格重新產生程式碼（OpenAPI、proto、sqlc）
 make workbench # 開發工作台：以合成影像或開發照片測試各模組、調整參數
+make e1-synthetic # E1 條碼消融：以合成資料端到端跑一次（research/experiments/e1_barcode）
 ```
 
 Windows 安裝 make：`winget install ezwinports.make`（裝完重開終端機）。
