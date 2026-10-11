@@ -7,7 +7,7 @@ import numpy as np
 
 from dietai.preprocess.barcode import ean13_check_digit
 from dietai.preprocess.ops import order_quad
-from dietai.preprocess.types import Image, Quad
+from dietai.preprocess.types import Ellipse, Image, Quad
 
 _BASE_H, _BASE_W = 1080, 1920
 
@@ -212,3 +212,92 @@ def label_perspective_scene(
     alpha = (cover.astype(np.float32) / 255)[..., None]
     out = img.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
     return out.astype(np.uint8), quad
+
+
+_TABLE = (70, 105, 150)  # 木紋色餐桌（BGR）
+_PLATE = (236, 238, 240)
+_PLATE_RIM = (196, 202, 208)
+
+
+def food_scene(
+    n_dishes: int = 3,
+    seed: int = 0,
+    height: int = 720,
+    width: int = 960,
+    tilt: float = 0.3,
+) -> tuple[Image, list[Ellipse]]:
+    """餐桌上的 ``n_dishes`` 個盤子（BGR），回傳（影像, 各盤緣的真實橢圓）。
+
+    桌面有淡淡的木紋與雜訊；盤子為白色橢圓、內圈有一道淺灰盤緣，盤中是幾個重疊的
+    彩色圓組成的不規則食物。短長軸比隨機介於 ``1 - tilt`` 與 1（模擬俯拍角度，0–0.6），
+    長軸角度在水平 ±15° 內。盤子之間至少相隔短邊的 4%，放不下時丟 ``ValueError``。
+    另有一雙細長筷子作為干擾（面積很小，應被切菜過濾）。
+    """
+    if not 0 <= tilt <= 0.6:
+        raise ValueError(f"tilt 必須介於 0 與 0.6，收到 {tilt}")
+    if n_dishes < 0:
+        raise ValueError(f"n_dishes 不得為負，收到 {n_dishes}")
+    rng = np.random.default_rng(seed)
+    short = min(height, width)
+    rows = np.arange(height, dtype=np.float32)[:, None, None]
+    grain = 6 * np.sin(rows / 9 + rng.uniform(0, np.pi)) + rng.normal(0, 3, (height, width, 1))
+    img = np.clip(np.array(_TABLE, np.float32) + grain, 0, 255).astype(np.uint8)
+
+    gap = 0.04 * short
+    major_range = (0.28 * short, 0.4 * short) if n_dishes <= 4 else (0.2 * short, 0.3 * short)
+    plates: list[Ellipse] = []
+    boxes: list[tuple[float, float, float, float]] = []
+    for _ in range(2000):
+        if len(plates) == n_dishes:
+            break
+        major = float(rng.uniform(*major_range))
+        e = Ellipse(
+            float(rng.uniform(0, width)),
+            float(rng.uniform(0, height)),
+            major,
+            major * float(rng.uniform(1 - tilt, 1)),
+            float(rng.uniform(-15, 15) % 180),
+        )
+        b = e.bbox()
+        if b.x < gap or b.y < gap or b.x1 > width - gap or b.y1 > height - gap:
+            continue
+        if any(
+            b.x < x1 + gap and x0 < b.x1 + gap and b.y < y1 + gap and y0 < b.y1 + gap
+            for x0, y0, x1, y1 in boxes
+        ):
+            continue
+        plates.append(e)
+        boxes.append((b.x, b.y, b.x1, b.y1))
+    if len(plates) < n_dishes:
+        raise ValueError(f"{width}×{height} 的畫面放不下 {n_dishes} 個盤子")
+
+    for e in plates:
+        center = (round(e.cx), round(e.cy))
+        axes = (round(e.major / 2), round(e.minor / 2))
+        cv2.ellipse(img, center, axes, e.angle, 0, 360, _PLATE, -1, cv2.LINE_AA)
+        inner = (round(0.82 * e.major / 2), round(0.82 * e.minor / 2))
+        cv2.ellipse(img, center, inner, e.angle, 0, 360, _PLATE_RIM, 2, cv2.LINE_AA)
+        color = tuple(int(c) for c in rng.integers(20, 230, 3))
+        t = np.radians(e.angle)
+        for _ in range(5):  # 幾個重疊的圓組成不規則食物（留在內圈之內），不應被當成盤緣橢圓
+            r = float(rng.uniform(0.25, 0.4)) * e.minor / 2
+            rho, phi = 0.35 * np.sqrt(rng.uniform()), rng.uniform(0, 2 * np.pi)
+            u, v = rho * np.cos(phi) * e.major / 2, rho * np.sin(phi) * e.minor / 2
+            fc = (
+                round(e.cx + u * np.cos(t) - v * np.sin(t)),
+                round(e.cy + u * np.sin(t) + v * np.cos(t)),
+            )
+            cv2.circle(img, fc, round(r), color, -1, cv2.LINE_AA)
+
+    length, thick = round(0.18 * width), max(2, round(0.006 * short))
+    for _ in range(200):  # 筷子：放在不碰到盤子的位置，放不下就省略
+        x, y = int(rng.integers(0, width - length)), int(rng.integers(0, height - 3 * thick))
+        if any(
+            x < x1 + gap and x0 < x + length + gap and y < y1 + gap and y0 < y + 3 * thick + gap
+            for x0, y0, x1, y1 in boxes
+        ):
+            continue
+        for dy in (0, 2 * thick):
+            cv2.line(img, (x, y + dy), (x + length, y + dy), (40, 60, 90), thick)
+        break
+    return img, plates

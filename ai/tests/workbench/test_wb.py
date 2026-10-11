@@ -7,8 +7,10 @@ import numpy as np
 import pytest
 
 from dietai.preprocess import (
+    Box,
     CodeFormat,
     DecodeHit,
+    Ellipse,
     LadderConfig,
     PreprocessWarning,
     QualityConfig,
@@ -213,6 +215,31 @@ def test_draw_quads_and_mask_overlay_keep_input():
     mask[:10] = True
     overlay = viz.mask_overlay(img, mask)
     assert overlay[0, 0, 2] > overlay[0, 0, 0] and (overlay[50, 50] == 200).all()
+
+
+def test_draw_boxes_and_ellipses_keep_input():
+    img = np.full((100, 120), 200, dtype=np.uint8)
+    out = viz.draw_boxes(img, [(Box(10, 10, 50, 40), viz.FOUND_COLOR, "#1")])
+    assert out.shape == (100, 120, 3) and (img == 200).all()
+    assert tuple(out[10, 30]) == viz.FOUND_COLOR
+    out = viz.draw_ellipses(img, [(Ellipse(60, 50, 60, 40, 0), viz.TRUTH_COLOR)])
+    assert tuple(out[50, 60]) == viz.TRUTH_COLOR  # 中心點
+
+
+def test_mask_on_small_resizes_to_mask():
+    img = np.full((200, 300, 3), 100, dtype=np.uint8)
+    mask = np.zeros((100, 150), dtype=bool)
+    mask[:10] = True
+    out = viz.mask_on_small(img, mask)
+    assert out.shape == (100, 150, 3) and out[0, 0, 2] > out[0, 0, 0]
+
+
+def test_vlm_size_rows_shrink_with_side():
+    img = label_scene(600, 800)
+    rows = viz.vlm_size_rows(img, [256, 512, 1024], 85)
+    assert [r["輸出尺寸"] for r in rows] == ["256×192", "512×384", "800×600"]
+    sizes = [r["JPEG（KB）"] for r in rows]
+    assert sizes == sorted(sizes)
 
 
 def test_quad_errors():

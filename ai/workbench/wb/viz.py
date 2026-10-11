@@ -9,10 +9,16 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from dietai.preprocess import DecodeHit, QualityConfig, QualityReport, RungAttempt
+from dietai.preprocess import (
+    DecodeHit,
+    QualityConfig,
+    QualityReport,
+    RungAttempt,
+    resize_for_vlm,
+)
 from dietai.preprocess.ops import to_gray
 from dietai.preprocess.quality import exposure_masks, laplacian_map
-from dietai.preprocess.types import Image, Quad
+from dietai.preprocess.types import Box, Ellipse, Image, Quad
 
 # BGR
 DARK_COLOR = (255, 80, 0)
@@ -169,3 +175,53 @@ def step_rows(steps: Sequence[Any]) -> list[dict[str, Any]]:
         }
         for s in steps
     ]
+
+
+def draw_boxes(img: Image, boxes: Sequence[tuple[Box, tuple[int, int, int], str]]) -> Image:
+    """畫出矩形框（BGR）：每筆為（框, 顏色, 標籤）。標籤寫在框的左上角內側。"""
+    out = img.copy() if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    thickness = max(2, round(min(out.shape[:2]) / 300))
+    for box, color, text in boxes:
+        cv2.rectangle(out, (box.x, box.y), (box.x1 - 1, box.y1 - 1), color, thickness)
+        if text:
+            org = (box.x + 2 * thickness, box.y + 12 * thickness)
+            cv2.putText(out, text, org, cv2.FONT_HERSHEY_SIMPLEX, thickness / 2.5, color, thickness)
+    return np.asarray(out, dtype=np.uint8)
+
+
+def draw_ellipses(img: Image, ellipses: Sequence[tuple[Ellipse, tuple[int, int, int]]]) -> Image:
+    """畫出橢圓與中心點（BGR）：每筆為（橢圓, 顏色）。"""
+    out = img.copy() if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    thickness = max(2, round(min(out.shape[:2]) / 300))
+    for e, color in ellipses:
+        center = (round(e.cx), round(e.cy))
+        axes = (round(e.major / 2), round(e.minor / 2))
+        cv2.ellipse(out, center, axes, e.angle, 0, 360, color, thickness, cv2.LINE_AA)
+        cv2.circle(out, center, thickness * 2, color, -1)
+    return np.asarray(out, dtype=np.uint8)
+
+
+def mask_on_small(img: Image, mask: npt.NDArray[np.bool_]) -> Image:
+    """把縮小後算出的遮罩（如 ``food.dish_foreground``）疊在同尺寸的縮圖上（BGR）。"""
+    h, w = mask.shape
+    small = (
+        img if img.shape[:2] == (h, w) else cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+    )
+    return mask_overlay(np.asarray(small, dtype=np.uint8), mask)
+
+
+def vlm_size_rows(img: Image, sides: Sequence[int], jpeg_quality: int) -> list[dict[str, Any]]:
+    """不同 VLM 長邊下的輸出尺寸與 JPEG 大小（E2 的事前試算），全部由 ``resize_for_vlm`` 計算。"""
+    rows: list[dict[str, Any]] = []
+    for side in sides:
+        out = resize_for_vlm(img, side, jpeg_quality)
+        h, w = out.image.shape[:2]
+        rows.append(
+            {
+                "長邊上限": side,
+                "輸出尺寸": f"{w}×{h}",
+                "JPEG（KB）": round(out.num_bytes / 1024, 1),
+                "像素數（MP）": round(w * h / 1e6, 2),
+            }
+        )
+    return rows

@@ -554,3 +554,239 @@ class LabelConfig:
             raise ValueError("hough_max_gap 與 glare_dilate_px 不得為負")
         if self.clahe_clip <= 0:
             raise ValueError("clahe_clip 必須大於 0")
+
+
+@dataclass(frozen=True)
+class FoodConfig:
+    """食物照片前處理（``dietai.preprocess.food``）的參數。
+
+    ``preprocess_food`` 的流程為「切出各道菜 →（選做）盤緣橢圓 → 整張與各裁切縮放壓縮給 VLM」，
+    前兩段由 ``enable_*`` 開關（E2 比較整張與裁切時使用）。
+    偵測在縮小到短邊 ``detect_short_side`` 的影像上進行，像素單位的參數皆以該尺寸為準。
+    VLM 輸入的最終尺寸由 E2 實驗決定（見任務書第 10 節），這裡只是預設值。
+    """
+
+    enable_crop: bool = param(
+        True,
+        "切出各道菜",
+        "Crop dishes",
+        "以背景色差切出各道菜的框；切不出時警告 DISH_NOT_FOUND，只送整張影像。",
+        group="food_steps",
+    )
+    enable_plate: bool = param(
+        False,
+        "盤緣橢圓",
+        "Plate ellipse",
+        "以橢圓擬合偵測盤緣（選做）；結果目前只供觀察，尚無下游使用，預設關閉。",
+        group="food_steps",
+    )
+    detect_short_side: int = param(
+        512,
+        "偵測用短邊",
+        "Detect short side",
+        "偵測前把影像縮小到此短邊（像素；不放大），加速並使像素參數與解析度無關。",
+        min=128,
+        max=2160,
+        step=16,
+        group="segment",
+    )
+    bg_border_ratio: float = param(
+        0.04,
+        "背景取樣邊寬",
+        "Background border",
+        "以影像四周這個比例寬度的邊框估計桌面背景色（LAB 中位數）。菜佔滿邊框時估計會失準。",
+        min=0.005,
+        max=0.3,
+        step=0.005,
+        group="segment",
+    )
+    bg_distance: float = param(
+        30.0,
+        "前景色差門檻",
+        "Foreground ΔE",
+        "與背景色的 LAB 距離超過此值的像素視為前景（盤子或食物）。紋理明顯的桌面需調高。",
+        min=1.0,
+        max=200.0,
+        step=1.0,
+        calibrate=True,
+        group="segment",
+    )
+    morph_px: int = param(
+        4,
+        "形態學半徑",
+        "Morphology radius",
+        "前景遮罩先閉運算填補縫隙、再開運算去除細碎雜點的結構元素半徑（像素）；0 為不處理。"
+        "過大會把斜拍小盤子的細窄盤緣切斷。",
+        min=0,
+        max=50,
+        step=1,
+        calibrate=True,
+        group="segment",
+    )
+    min_dish_area_ratio: float = param(
+        0.005,
+        "最小菜面積",
+        "Min dish area",
+        "框面積佔整張影像的比例低於此值時不採用（餐具、碎屑）；過大會漏掉小碟醬料或配菜。",
+        min=0.0,
+        max=1.0,
+        step=0.005,
+        calibrate=True,
+        group="dish_filter",
+    )
+    max_dish_area_ratio: float = param(
+        0.9,
+        "最大菜面積",
+        "Max dish area",
+        "框面積比例高於此值時不採用：通常是背景估計失準、整張被當成前景。",
+        min=0.0,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="dish_filter",
+    )
+    max_overlap: float = param(
+        0.5,
+        "最大重疊（IoU）",
+        "Max overlap (IoU)",
+        "兩個框的交集除以聯集超過此值時只保留較大者。",
+        min=0.0,
+        max=1.0,
+        step=0.05,
+        calibrate=True,
+        group="dish_filter",
+    )
+    max_dishes: int = param(
+        10,
+        "最多菜數",
+        "Max dishes",
+        "依面積由大到小最多保留的框數。",
+        min=1,
+        max=50,
+        step=1,
+        group="dish_filter",
+    )
+    box_pad_ratio: float = param(
+        0.05,
+        "裁切外擴",
+        "Box padding",
+        "每個框向外擴張其邊長的比例（保留盤緣與周圍脈絡），超出影像的部分截掉。",
+        min=0.0,
+        max=0.5,
+        step=0.01,
+        group="dish_filter",
+    )
+    plate_canny_low: int = param(
+        40,
+        "盤緣 Canny 低門檻",
+        "Plate Canny low",
+        "盤緣偵測的 Canny 低門檻。",
+        min=0,
+        max=500,
+        step=5,
+        calibrate=True,
+        group="plate",
+    )
+    plate_canny_high: int = param(
+        120,
+        "盤緣 Canny 高門檻",
+        "Plate Canny high",
+        "盤緣偵測的 Canny 高門檻；須不小於低門檻。",
+        min=1,
+        max=1000,
+        step=5,
+        calibrate=True,
+        group="plate",
+    )
+    plate_min_size_ratio: float = param(
+        0.15,
+        "最小盤徑",
+        "Min plate size",
+        "橢圓長軸至少為（縮小後）影像短邊的此比例。",
+        min=0.01,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="plate",
+    )
+    plate_min_axis_ratio: float = param(
+        0.35,
+        "最小短長軸比",
+        "Min axis ratio",
+        "短軸／長軸低於此值時不採用（拍攝角度過斜，或其實是長條物）。",
+        min=0.05,
+        max=1.0,
+        step=0.05,
+        calibrate=True,
+        group="plate",
+    )
+    plate_max_residual: float = param(
+        0.05,
+        "最大擬合殘差",
+        "Max fit residual",
+        "輪廓點的正規化半徑與 1 的平均差；越小越要求輪廓接近完整橢圓。",
+        min=0.001,
+        max=0.5,
+        step=0.005,
+        calibrate=True,
+        group="plate",
+    )
+    plate_min_coverage: float = param(
+        0.7,
+        "最小圓周覆蓋",
+        "Min arc coverage",
+        "輪廓點在橢圓周上涵蓋的角度比例；避免只憑一小段弧線擬合出大橢圓。",
+        min=0.1,
+        max=1.0,
+        step=0.05,
+        calibrate=True,
+        group="plate",
+    )
+    vlm_max_side: int = param(
+        1024,
+        "VLM 長邊",
+        "VLM max side",
+        "送給 VLM 前把長邊縮小到此值（像素；不放大）。不影響準確率的最小尺寸由 E2 決定。",
+        min=64,
+        max=4096,
+        step=32,
+        calibrate=True,
+        group="vlm",
+    )
+    vlm_jpeg_quality: int = param(
+        85,
+        "JPEG 品質",
+        "JPEG quality",
+        "送給 VLM 的 JPEG 壓縮品質（1–100）；越低檔案越小、失真越多。由 E2 決定。",
+        min=1,
+        max=100,
+        step=1,
+        calibrate=True,
+        group="vlm",
+    )
+
+    def __post_init__(self) -> None:
+        for name in ("detect_short_side", "max_dishes", "vlm_max_side"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} 必須為正整數，收到 {getattr(self, name)}")
+        if not 0 < self.bg_border_ratio < 0.5:
+            raise ValueError("bg_border_ratio 必須介於 0 與 0.5（不含）")
+        if self.bg_distance <= 0:
+            raise ValueError("bg_distance 必須大於 0")
+        if self.morph_px < 0:
+            raise ValueError("morph_px 不得為負")
+        if not 0.0 <= self.min_dish_area_ratio <= self.max_dish_area_ratio <= 1.0:
+            raise ValueError("須滿足 0 <= min_dish_area_ratio <= max_dish_area_ratio <= 1")
+        if not 0.0 <= self.max_overlap <= 1.0:
+            raise ValueError("max_overlap 必須介於 0 與 1")
+        if not 0.0 <= self.box_pad_ratio <= 0.5:
+            raise ValueError("box_pad_ratio 必須介於 0 與 0.5")
+        if not 0 <= self.plate_canny_low <= self.plate_canny_high:
+            raise ValueError("須滿足 0 <= plate_canny_low <= plate_canny_high")
+        for name in ("plate_min_size_ratio", "plate_min_axis_ratio", "plate_min_coverage"):
+            if not 0 < getattr(self, name) <= 1:
+                raise ValueError(f"{name} 必須介於 0（不含）與 1")
+        if self.plate_max_residual <= 0:
+            raise ValueError("plate_max_residual 必須大於 0")
+        if not 1 <= self.vlm_jpeg_quality <= 100:
+            raise ValueError("vlm_jpeg_quality 必須介於 1 與 100")

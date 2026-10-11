@@ -28,6 +28,7 @@
 | 品質檢查 · Quality | 左欄選影像並疊加模擬退化，右欄依序顯示判定、四項指標、檢視（原圖／邊緣響應／曝光遮罩／直方圖）與步驟紀錄 |
 | 條碼 · Barcode | 商品條碼／電子發票 QR 兩種模式；調整階梯順序與多尺度倍率、切換 zxing-cpp／pyzbar，顯示成功於哪一階、與「只用原圖」比較、各階送進解碼器的影像與耗時 |
 | 營養標示 · Label | 合成標示可調透視強度；顯示找到的四角與真實四角（含逐角誤差）、定位方法（輪廓法／直線法）、Canny 邊緣、光斑遮罩、處理後輸出與步驟紀錄 |
+| 食物照片 · Food | 合成餐桌可調盤數與俯拍傾斜；顯示切出的框與真實盤子比較、前景遮罩、盤緣橢圓、各道菜裁切、VLM 實際收到的 JPEG 與不同長邊的檔案大小試算 |
 | 參數掃描 · Sweep | 一種退化由弱到強。「品質檢查」列出每種警告在哪個等級首次觸發；「條碼解碼」以多個合成 EAN-13 比較只用原圖與逐步升級的成功率曲線，並統計成功於哪一階 |
 | 資料夾批次 · Batch | 整個資料夾的通過率、分數分布、警告次數；點選表格列可檢視單張影像的遮罩 |
 | 測試與檢查 · Checks | 執行 pytest（可選範圍、`-k`、slow）、ruff、mypy；保留最近 10 次結果 |
@@ -77,7 +78,7 @@ workbench/
 
 純邏輯模組的測試在 `ai/tests/workbench/test_wb.py`，介面冒煙測試（`AppTest`，不開瀏覽器）在 `test_app.py`。
 
-## 新模組加頁面（例：Phase 3 營養標示，已完成，可參考 `app_pages/label.py`）
+## 新模組加頁面（例：Phase 3 營養標示，已完成，可參考 `app_pages/label.py`、`app_pages/food.py`）
 
 1. 在 `dietai/preprocess/config.py` 以 `param()` 宣告 `LabelConfig` 欄位，並加入 `wb/configs.py` 的 `CONFIG_CLASSES`。
    參數面板只處理 `param()` 的純量欄位；序列等欄位（如 `LadderConfig.rungs`）由頁面自行提供元件，

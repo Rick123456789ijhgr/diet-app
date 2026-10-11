@@ -37,6 +37,7 @@ def _run_batch(at: AppTest, folder: Path) -> None:
         "app_pages/quality.py",
         "app_pages/barcode.py",
         "app_pages/label.py",
+        "app_pages/food.py",
         "app_pages/sweep.py",
         "app_pages/batch.py",
         "app_pages/dev_checks.py",
@@ -231,6 +232,40 @@ def test_label_page_gray_output_and_steps_off():
 def test_label_page_rejects_invalid_config():
     at = _app("app_pages/label.py")
     at.number_input(key="cfg.label.canny_low").set_value(400).run()
+    assert any("參數不合法" in e.value for e in at.error)
+
+
+def test_food_page_crops_synthetic_dishes():
+    at = _app("app_pages/food.py")
+    assert any("處理完成" in m.value for m in at.markdown)
+    dishes = next(m for m in at.metric if "菜數" in m.label)
+    assert dishes.value == "3"  # 預設合成 3 盤
+    plates = next(m for m in at.metric if "盤緣" in m.label)
+    assert plates.value == "未啟用"
+
+
+def test_food_page_views_switch():
+    at = _app("app_pages/food.py")
+    for view in ("mask", "plates", "crops", "vlm"):
+        at.segmented_control(key="food.view").set_value(view).run()
+        assert not at.exception, view
+    assert len(at.dataframe) >= 1  # VLM 尺寸試算表
+
+
+def test_food_page_plates_and_no_dish():
+    at = _app("app_pages/food.py")
+    at.toggle(key="cfg.food.enable_plate").set_value(True).run()
+    assert not at.exception, at.exception
+    plates = next(m for m in at.metric if "盤緣" in m.label)
+    assert plates.value == "3"
+    at.number_input(key="food.n").set_value(0).run()
+    assert not at.exception, at.exception
+    assert any("有警告" in m.value for m in at.markdown)
+
+
+def test_food_page_rejects_invalid_config():
+    at = _app("app_pages/food.py")
+    at.number_input(key="cfg.food.plate_canny_low").set_value(400).run()
     assert any("參數不合法" in e.value for e in at.error)
 
 

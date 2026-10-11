@@ -33,6 +33,13 @@ TOOLS = [
         "定位表格、透視校正、光斑修補與對比增強，與真實四角比較誤差。",
     ),
     (
+        "app_pages/food.py",
+        ":material/restaurant:",
+        "食物照片",
+        "Food photo",
+        "切出各道菜、偵測盤緣橢圓，試算送給 VLM 的尺寸與檔案大小。",
+    ),
+    (
         "app_pages/sweep.py",
         ":material/ssid_chart:",
         "參數掃描",
@@ -75,7 +82,7 @@ with left:
             ("Phase 1", "共通品質檢查 · Quality check", "完成", "green"),
             ("Phase 2", "條碼與電子發票 QR · Barcode & invoice QR", "完成", "green"),
             ("Phase 3", "營養標示 · Nutrition label", "完成", "green"),
-            ("Phase 4", "食物照片 · Food photo", "未開始", "gray"),
+            ("Phase 4", "食物照片 · Food photo", "完成", "green"),
             ("Phase 5", "E1 實驗骨架 · E1 experiment", "未開始", "gray"),
         ]:
             with st.container(horizontal=True, vertical_alignment="center"):

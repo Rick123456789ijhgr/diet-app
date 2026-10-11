@@ -48,6 +48,7 @@ extend-immutable-calls = [
   "dietai.preprocess.config.LadderConfig",
   "dietai.preprocess.config.InvoiceQrConfig",
   "dietai.preprocess.config.LabelConfig",
+  "dietai.preprocess.config.FoodConfig",
 ]
 
 [tool.mypy]

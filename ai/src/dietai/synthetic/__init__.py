@@ -15,6 +15,7 @@ from dietai.synthetic.degrade import (
 from dietai.synthetic.scenes import (
     ean13_codes,
     ean13_scene,
+    food_scene,
     invoice_qr_scene,
     label_perspective_scene,
     label_scene,
@@ -27,6 +28,7 @@ __all__ = [
     "downscale",
     "ean13_codes",
     "ean13_scene",
+    "food_scene",
     "gaussian_blur",
     "gaussian_noise",
     "invoice_qr_scene",
