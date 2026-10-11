@@ -1,5 +1,13 @@
 @echo off
+rem Keep this block ASCII-only. A chcp in the middle of a script makes cmd mis-parse the
+rem UTF-8 lines after it, so switch to 65001 first and re-run this file in a new cmd.
+if defined WB_UTF8 goto :main
+set "WB_UTF8=1"
 chcp 65001 >nul
+cmd /c ""%~f0" %*"
+exit /b %errorlevel%
+
+:main
 setlocal
 title 開發工作台 Workbench
 

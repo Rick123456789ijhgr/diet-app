@@ -33,3 +33,22 @@ class PreprocessWarning(StrEnum):
     TOO_DARK = "TOO_DARK"
     TOO_BRIGHT = "TOO_BRIGHT"
     LOW_RESOLUTION = "LOW_RESOLUTION"
+    BARCODE_NOT_FOUND = "BARCODE_NOT_FOUND"
+    INVOICE_QR_PARTIAL = "INVOICE_QR_PARTIAL"
+    INVOICE_QR_NOT_FOUND = "INVOICE_QR_NOT_FOUND"
+
+
+class Rung(StrEnum):
+    """條碼逐步升級（``barcode.decode_with_ladder``）的一階。
+
+    每一階都由原圖獨立產生一個影像版本，不疊加前一階的結果，
+    以便 E1 消融實驗判斷「是哪一個步驟救回來的」。
+    """
+
+    RAW = "raw"  # 原圖
+    GRAY = "gray"  # 灰階
+    BINARIZE = "binarize"  # 自適應二值化
+    SHARPEN = "sharpen"  # 反銳化遮罩
+    DENOISE = "denoise"  # 中值濾波
+    DESKEW = "deskew"  # 估計傾斜角後旋轉校正
+    MULTISCALE = "multiscale"  # 依設定的倍率逐一縮放

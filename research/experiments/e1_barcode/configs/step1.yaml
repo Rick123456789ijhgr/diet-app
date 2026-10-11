@@ -1,2 +1,3 @@
+# 已廢止：舊 @register pipeline 格式，pipeline 已於模組一 Phase 2 移除；Phase 5 改用 LadderConfig 格式。
 steps: [gray]
 params: {}

@@ -6,9 +6,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dietai.preprocess import QualityConfig, check_quality
+from dietai.preprocess import (
+    CodeFormat,
+    DecodeHit,
+    LadderConfig,
+    PreprocessWarning,
+    QualityConfig,
+    Rung,
+    RungAttempt,
+    check_quality,
+)
 from dietai.synthetic import label_scene
-from wb import checks, configs, degradations, viz
+from wb import checks, configs, degradations, ladder_eval, viz
 from wb.images import (
     SplitLockedError,
     decode_image,
@@ -91,8 +100,59 @@ def test_config_python_lists_only_changed_fields():
 
 def test_calibration_rows_cover_flagged_fields():
     names = {r["欄位"] for r in configs.calibration_rows()}
-    assert "blur_min" in names
-    assert "blur_short_side" not in names
+    assert {"blur_min", "binarize_block_size", "deskew_min_deg"} <= names
+    assert "blur_short_side" not in names and "verify_ean13" not in names
+
+
+def test_ladder_config_json_roundtrip_with_sequences():
+    cfg = LadderConfig(rungs=(Rung.DESKEW, Rung.RAW), scales=(3.0,), binarize_c=2.0)
+    assert configs.config_from_json(LadderConfig, configs.config_to_json(cfg)) == cfg
+    assert configs.changed_fields(cfg) == ["rungs", "scales", "binarize_c"]
+
+
+def _hit(x: float, text: str = "4710088410108") -> DecodeHit:
+    return DecodeHit(
+        CodeFormat.EAN13, text, text.encode(), ((x, 10), (x + 30, 10), (x + 30, 30), (x, 30))
+    )
+
+
+def test_draw_hits_marks_corners_without_modifying_input():
+    img = np.full((60, 120), 255, dtype=np.uint8)
+    out = viz.draw_hits(img, [_hit(10), _hit(70)], ["a", "b"])
+    assert out.shape == (60, 120, 3) and (img == 255).all()
+    assert (out[10, 25] != 255).any()  # 框線經過上緣
+
+
+def test_hex_and_ascii_preview():
+    raw = b"AB" + bytes([0xFF, 0x00])
+    assert viz.hex_preview(raw) == "41 42 FF 00"
+    assert viz.hex_preview(bytes(100), limit=2).endswith("（共 100 bytes）")
+    assert viz.ascii_preview(raw) == "AB··"
+
+
+def test_attempt_rows_status():
+    attempts = [
+        RungAttempt(Rung.RAW, {}, 1.0, ()),
+        RungAttempt(Rung.DESKEW, {"skew_deg": 0.5}, 0.1, (), skipped=True),
+        RungAttempt(Rung.GRAY, {}, 1.0, (), rejected=(_hit(0, "4710088410109"),)),
+        RungAttempt(Rung.BINARIZE, {"c": 5}, 2.0, (_hit(0),)),
+    ]
+    rows = viz.attempt_rows(attempts, {"raw": "原圖"})
+    assert [r["結果"] for r in rows] == ["失敗", "略過", "檢查碼錯誤", "成功"]
+    assert rows[0]["階"] == "原圖" and rows[3]["參數"] == "c=5"
+    assert viz.hit_rows([_hit(0)])[0]["格式"] == "EAN13"
+
+
+def test_every_warning_has_text():
+    from wb.text import WARNING_TEXT
+
+    assert set(WARNING_TEXT) == set(PreprocessWarning)
+
+
+def test_every_rung_has_text():
+    from wb.text import RUNG_TEXT
+
+    assert set(RUNG_TEXT) == set(Rung)
 
 
 def test_identity_degradation_returns_equal_copy():
@@ -153,7 +213,7 @@ def test_report_rows():
 def test_discover_test_targets():
     targets = checks.discover_test_targets()
     assert "tests/preprocess" in targets
-    assert "tests/test_pipeline.py" in targets
+    assert "tests/test_validation.py" in targets
 
 
 def test_pytest_command_flags():
@@ -210,3 +270,36 @@ def test_every_config_field_has_known_group():
 
     for cls in configs.CONFIG_CLASSES:
         assert {i.group for i in param_info(cls).values()} <= set(GROUP_TEXT)
+
+
+def _rows():
+    R, L = ladder_eval.RAW, ladder_eval.LADDER
+    return [
+        {"等級": 0.0, "樣本": 0, R: True, L: True, "成功階": "raw", "嘗試次數": 1},
+        {"等級": 0.0, "樣本": 1, R: True, L: True, "成功階": "raw", "嘗試次數": 1},
+        {"等級": 1.0, "樣本": 0, R: False, L: True, "成功階": "deskew", "嘗試次數": 6},
+        {"等級": 1.0, "樣本": 1, R: False, L: False, "成功階": "", "嘗試次數": 8},
+    ]
+
+
+def test_ladder_success_rates_and_summary():
+    rates = {(r["等級"], r["方法"]): r["成功率"] for r in ladder_eval.success_rates(_rows())}
+    assert rates[(1.0, ladder_eval.RAW)] == 0 and rates[(1.0, ladder_eval.LADDER)] == 0.5
+    assert ladder_eval.overall(_rows(), ladder_eval.LADDER) == 0.75
+    assert ladder_eval.overall([], ladder_eval.RAW) == 0
+    assert ladder_eval.first_failure(_rows(), ladder_eval.RAW) == 1.0
+    assert ladder_eval.first_failure(_rows()[:2], ladder_eval.LADDER) is None
+    counts = {(c["等級"], c["階"]): c["次數"] for c in ladder_eval.rung_counts(_rows())}
+    assert counts == {(0.0, "raw"): 2, (1.0, "deskew"): 1}
+
+
+def test_ladder_sweep_runs_both_methods():
+    from dietai.preprocess import ZxingDecoder
+    from dietai.synthetic import ean13_codes, ean13_scene, rotate
+
+    samples = [ean13_scene(c) for c in ean13_codes(2)]
+    rows = ladder_eval.ladder_sweep(samples, rotate, [0.0, 45.0], ZxingDecoder(), LadderConfig())
+    assert len(rows) == 4
+    at_45 = [r for r in rows if r["等級"] == 45.0]
+    assert all(r[ladder_eval.LADDER] and not r[ladder_eval.RAW] for r in at_45)
+    assert {r["成功階"] for r in at_45} == {"deskew"}

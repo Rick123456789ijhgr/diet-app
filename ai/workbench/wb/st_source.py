@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import streamlit as st
 
 from dietai.preprocess.types import Image
-from dietai.synthetic import label_scene
+from dietai.synthetic import ean13_scene, invoice_qr_scene, label_scene
 from wb import degradations
 from wb.images import SplitLockedError, decode_image, load_image
 
@@ -35,6 +36,9 @@ _SLIDERS: dict[str, list[tuple[str, str, str, float, float, float, float, str]]]
 }
 _SHORT = {f: zh for group in _SLIDERS.values() for f, zh, *_ in group}
 
+# 合成影像的種類：營養標示、EAN-13 條碼、電子發票雙 QR
+Scene = Literal["label", "ean13", "invoice"]
+
 
 @dataclass(frozen=True)
 class Source:
@@ -48,12 +52,48 @@ def _synthetic(height: int, width: int, seed: int) -> Image:
     return label_scene(height, width, seed)
 
 
+@st.cache_data(max_entries=16, show_spinner=False)
+def _ean13(code: str, module_px: int) -> Image:
+    return ean13_scene(code, module_px)
+
+
+@st.cache_data(max_entries=16, show_spinner=False)
+def _invoice(left: bytes, right: bytes, module_px: int) -> Image:
+    return invoice_qr_scene(left, right, module_px)
+
+
 @st.cache_data(max_entries=8, show_spinner=False)
 def _decode(data: bytes) -> Image:
     return decode_image(data)
 
 
-def _pick_base(key: str) -> Source | None:
+def _synthetic_ean13(key: str) -> Source | None:
+    with st.container(horizontal=True):
+        code = st.text_input("條碼 · EAN-13", "4710088410108", max_chars=13, key=f"{key}.code")
+        module = st.number_input("模組寬 · Module px", 1, 12, 4, key=f"{key}.module")
+    try:
+        img = _ean13(code.strip(), int(module))
+    except ValueError as exc:  # 檢查碼錯誤、非數字或畫布放不下
+        st.error(f"無法產生條碼：{exc}", icon=":material/error:")
+        return None
+    return Source(img, f"合成 EAN-13 {code.strip()}")
+
+
+def _synthetic_invoice(key: str) -> Source | None:
+    left = st.text_input("左碼內容 · Left QR", "AB12345678 茶葉蛋:1:25", key=f"{key}.left")
+    right = st.text_input("右碼內容 · Right QR", "**鮮奶:1:35", key=f"{key}.right")
+    with st.container(horizontal=True):
+        encoding = st.selectbox("編碼 · Encoding", ["big5", "utf-8"], key=f"{key}.enc")
+        module = st.number_input("模組寬 · Module px", 1, 12, 4, key=f"{key}.module")
+    try:
+        img = _invoice(left.encode(encoding), right.encode(encoding), int(module))
+    except (UnicodeEncodeError, ValueError) as exc:
+        st.error(f"無法產生 QR：{exc}", icon=":material/error:")
+        return None
+    return Source(img, f"合成電子發票（{encoding}）")
+
+
+def _pick_base(key: str, scene: Scene) -> Source | None:
     kind = st.segmented_control(
         "影像來源 · Source",
         list(SOURCES),
@@ -94,6 +134,10 @@ def _pick_base(key: str) -> Source | None:
         except (OSError, ValueError) as exc:
             st.error(str(exc), icon=":material/error:")
         return None
+    if scene == "ean13":
+        return _synthetic_ean13(key)
+    if scene == "invoice":
+        return _synthetic_invoice(key)
     with st.container(horizontal=True):
         height = st.number_input("高 · H", 16, 4320, 1080, step=8, key=f"{key}.h")
         width = st.number_input("寬 · W", 16, 7680, 1920, step=8, key=f"{key}.w")
@@ -143,9 +187,12 @@ def _degradation_controls(key: str) -> degradations.Degradation:
     return d
 
 
-def image_source(key: str, allow_degradation: bool = True) -> Source | None:
-    """顯示來源面板，回傳（可能經退化的）影像；尚未選好時回傳 ``None``。"""
-    base = _pick_base(key)
+def image_source(key: str, allow_degradation: bool = True, scene: Scene = "label") -> Source | None:
+    """顯示來源面板，回傳（可能經退化的）影像；尚未選好時回傳 ``None``。
+
+    ``scene`` 決定「合成」來源產生哪一種影像。
+    """
+    base = _pick_base(key, scene)
     if not allow_degradation:
         return base
     d = _degradation_controls(key)

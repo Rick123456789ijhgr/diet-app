@@ -6,7 +6,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from dietai.preprocess import PreprocessWarning, QualityConfig, check_quality
+from dietai.preprocess import QualityConfig, check_quality
+from dietai.preprocess.quality import QUALITY_WARNINGS
 from wb import viz
 from wb.images import SplitLockedError, list_images, load_image
 from wb.st_config import config_sidebar
@@ -95,7 +96,7 @@ ok = df[df["錯誤"].isna()]
 with st.container(horizontal=True, gap="small"):
     st.metric("張數 · Images", len(df), border=True)
     st.metric("通過率 · Pass rate", f"{ok['通過'].mean():.1%}" if len(ok) else "—", border=True)
-    for code in PreprocessWarning:
+    for code in QUALITY_WARNINGS:
         count = int(ok["警告"].str.contains(code.value).sum()) if len(ok) else 0
         st.metric(warning_label(code), count, border=True)
     if len(df) > len(ok):
@@ -133,8 +134,8 @@ if len(ok):
         section("警告次數", "Warnings", ":material/report:")
         counts = pd.DataFrame(
             {
-                "警告": [warning_label(c) for c in PreprocessWarning],
-                "張數": [int(ok["警告"].str.contains(c.value).sum()) for c in PreprocessWarning],
+                "警告": [warning_label(c) for c in QUALITY_WARNINGS],
+                "張數": [int(ok["警告"].str.contains(c.value).sum()) for c in QUALITY_WARNINGS],
             }
         )
         st.bar_chart(counts, x="警告", y="張數", horizontal=True, height=260, alt="各警告的張數")

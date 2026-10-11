@@ -32,6 +32,12 @@ PAGES = {
             url_path="quality",
         ),
         st.Page(
+            "app_pages/barcode.py",
+            title="條碼 · Barcode",
+            icon=":material/barcode_reader:",
+            url_path="barcode",
+        ),
+        st.Page(
             "app_pages/sweep.py",
             title="參數掃描 · Sweep",
             icon=":material/ssid_chart:",

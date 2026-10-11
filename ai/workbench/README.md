@@ -26,7 +26,8 @@
 | --- | --- |
 | 總覽 | 快速開始卡片、模組進度、使用規則、待校準門檻（由 `param(calibrate=True)` 自動列出） |
 | 品質檢查 · Quality | 左欄選影像並疊加模擬退化，右欄依序顯示判定、四項指標、檢視（原圖／邊緣響應／曝光遮罩／直方圖）與步驟紀錄 |
-| 參數掃描 · Sweep | 一種退化由弱到強；直接列出每種警告在哪個等級首次觸發，附縮圖與趨勢圖 |
+| 條碼 · Barcode | 商品條碼／電子發票 QR 兩種模式；調整階梯順序與多尺度倍率、切換 zxing-cpp／pyzbar，顯示成功於哪一階、與「只用原圖」比較、各階送進解碼器的影像與耗時 |
+| 參數掃描 · Sweep | 一種退化由弱到強。「品質檢查」列出每種警告在哪個等級首次觸發；「條碼解碼」以多個合成 EAN-13 比較只用原圖與逐步升級的成功率曲線，並統計成功於哪一階 |
 | 資料夾批次 · Batch | 整個資料夾的通過率、分數分布、警告次數；點選表格列可檢視單張影像的遮罩 |
 | 測試與檢查 · Checks | 執行 pytest（可選範圍、`-k`、slow）、ruff、mypy；保留最近 10 次結果 |
 
@@ -60,11 +61,13 @@ workbench/
 │   ├── images.py        影像讀寫、test split 防護（純邏輯）
 │   ├── configs.py       設定匯出入、待校準清單、CONFIG_CLASSES（純邏輯）
 │   ├── degradations.py  模擬退化與掃描軸，呼叫 dietai.synthetic（純邏輯）
+│   ├── ladder_eval.py   條碼掃描：只用原圖 vs 逐步升級的成功率彙整（純邏輯）
 │   ├── viz.py           視覺化，數值取自 dietai（純邏輯）
 │   ├── checks.py        執行 pytest／ruff／mypy（純邏輯）
 │   ├── text.py          中英文標籤與警告代碼文字
 │   ├── st_config.py     依 ParamInfo 自動產生分組參數面板、網址同步（Streamlit 元件）
 │   ├── st_source.py     影像來源選擇＋模擬退化（Streamlit 元件）
+│   ├── st_ladder.py     階梯順序、倍率、解碼器選擇與側欄（Streamlit 元件，條碼頁與掃描頁共用）
 │   ├── st_layout.py     頁首、區塊標題、空狀態（Streamlit 元件）
 │   └── st_theme.py      淺色／深色切換開關（自訂元件 CCv2）
 ├── assets/              logo 與圖示
@@ -73,9 +76,12 @@ workbench/
 
 純邏輯模組的測試在 `ai/tests/workbench/test_wb.py`，介面冒煙測試（`AppTest`，不開瀏覽器）在 `test_app.py`。
 
-## 新模組加頁面（例：Phase 2 條碼）
+## 新模組加頁面（例：Phase 3 營養標示）
 
-1. 在 `dietai/preprocess/config.py` 以 `param()` 宣告 `LadderConfig` 欄位，並加入 `wb/configs.py` 的 `CONFIG_CLASSES`。
-2. 新增 `app_pages/barcode.py`：`page_header(...)`、`config_sidebar(LadderConfig, "ladder")`，左欄 `image_source("barcode")`、右欄呼叫 `decode_with_ladder` 並顯示結果。欄位以 `param(group=...)` 分組，新分組在 `wb/text.py` 的 `GROUP_TEXT` 加上名稱與圖示。
+1. 在 `dietai/preprocess/config.py` 以 `param()` 宣告 `LabelConfig` 欄位，並加入 `wb/configs.py` 的 `CONFIG_CLASSES`。
+   參數面板只處理 `param()` 的純量欄位；序列等欄位（如 `LadderConfig.rungs`）由頁面自行提供元件，
+   以 `config_sidebar(cls, prefix, extra_keys={欄位: 元件鍵})` 登記；匯入 JSON 與「還原」會寫回這些元件
+   （參考 `wb/st_ladder.py`）。
+2. 新增 `app_pages/label.py`：`page_header(...)`、`config_sidebar(LabelConfig, "label")`，左欄 `image_source("label")`、右欄呼叫 `preprocess_label` 並顯示結果。需要新的合成場景時加到 `dietai.synthetic`，並在 `wb/st_source.py` 的 `Scene` 登記。欄位以 `param(group=...)` 分組，新分組在 `wb/text.py` 的 `GROUP_TEXT` 加上名稱與圖示。
 3. 在 `streamlit_app.py` 的「模組一 影像前處理」區段登記頁面；更新 `app_pages/home.py` 的模組進度。
-4. 在 `tests/workbench/test_app.py` 加一個冒煙測試。
+4. 在 `tests/workbench/test_app.py` 加冒煙測試；新的警告代碼在 `wb/text.py` 的 `WARNING_TEXT` 加上文字（`test_wb.py` 會檢查是否齊全）。

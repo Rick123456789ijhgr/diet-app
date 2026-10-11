@@ -8,6 +8,7 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from dietai.preprocess import ops
 from dietai.preprocess.ops import validate_image
 from dietai.preprocess.types import Image
 
@@ -45,17 +46,8 @@ def gaussian_noise(img: Image, std: float, seed: int = 0) -> Image:
 
 
 def rotate(img: Image, degrees: float, border: int = 255) -> Image:
-    """以中心逆時針旋轉，畫布擴大以保留整張影像，空白處填 ``border``。"""
-    validate_image(img)
-    h, w = img.shape[:2]
-    m = cv2.getRotationMatrix2D((w / 2, h / 2), degrees, 1.0)
-    cos, sin = abs(m[0, 0]), abs(m[0, 1])
-    new_w, new_h = int(round(h * sin + w * cos)), int(round(h * cos + w * sin))
-    m[0, 2] += new_w / 2 - w / 2
-    m[1, 2] += new_h / 2 - h / 2
-    value = (border, border, border) if img.ndim == 3 else border
-    out = cv2.warpAffine(img, m, (new_w, new_h), borderValue=value)
-    return np.asarray(out, dtype=np.uint8)
+    """以中心逆時針旋轉，畫布擴大以保留整張影像，空白處填 ``border``（同 ``ops.rotate``）。"""
+    return ops.rotate(img, degrees, border)
 
 
 def downscale(img: Image, factor: float) -> Image:

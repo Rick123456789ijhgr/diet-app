@@ -16,6 +16,14 @@ from dietai.preprocess.config import QualityConfig
 from dietai.preprocess.ops import resize_short_side, to_gray, validate_image
 from dietai.preprocess.types import Image, PreprocessWarning, StepRecord
 
+# check_quality 可能產生的警告（依產生順序）
+QUALITY_WARNINGS: tuple[PreprocessWarning, ...] = (
+    PreprocessWarning.LOW_RESOLUTION,
+    PreprocessWarning.TOO_BLURRY,
+    PreprocessWarning.TOO_DARK,
+    PreprocessWarning.TOO_BRIGHT,
+)
+
 
 @dataclass(frozen=True)
 class ExposureStats:
