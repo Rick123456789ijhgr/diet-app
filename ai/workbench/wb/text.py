@@ -1,15 +1,12 @@
-"""介面文字：中文為主、英文為輔。"""
+"""介面文字。
+
+工作台標籤只顯示中文；各對照表保留英文名稱作為程式內的對照，不顯示在介面上。
+"""
 
 from __future__ import annotations
 
 from dietai.evaluation import Outcome
 from dietai.preprocess import PreprocessWarning, Rung
-
-
-def zh_en(zh: str, en: str) -> str:
-    """組合「中文 · English」標籤。"""
-    return f"{zh} · {en}"
-
 
 # 警告代碼的工作台顯示文字（APP 端另有自己的對照，不共用）。
 WARNING_TEXT: dict[PreprocessWarning, tuple[str, str]] = {
@@ -73,27 +70,24 @@ GROUP_TEXT: dict[str, tuple[str, str, str]] = {
 
 
 def warning_label(code: PreprocessWarning) -> str:
-    """警告代碼的顯示文字，例如「過於模糊 · Too blurry」。"""
-    zh, en = WARNING_TEXT.get(code, (code.value, code.value))
-    return zh_en(zh, en)
+    """警告代碼的顯示文字，例如「過於模糊」。未知代碼原樣顯示。"""
+    return WARNING_TEXT.get(code, (code.value, code.value))[0]
 
 
 def group_label(group: str) -> tuple[str, str]:
-    """（「模糊 · Blur」, 圖示）。未知分組以代碼本身顯示。"""
-    zh, en, icon = GROUP_TEXT.get(group, (group, group, ":material/tune:"))
-    return zh_en(zh, en), icon
+    """設定分組的（顯示文字, 圖示），例如（「模糊」, 圖示）。未知分組以代碼本身顯示。"""
+    zh, _en, icon = GROUP_TEXT.get(group, (group, group, ":material/tune:"))
+    return zh, icon
 
 
 def rung_label(rung: Rung) -> str:
-    """階的顯示文字，例如「旋轉校正 · Deskew」。"""
-    zh, en, _ = RUNG_TEXT.get(rung, (rung.value, rung.value, ""))
-    return zh_en(zh, en)
+    """階的顯示文字，例如「旋轉校正」。"""
+    return RUNG_TEXT.get(rung, (rung.value, rung.value, ""))[0]
 
 
 def outcome_label(outcome: str) -> str:
-    """判定結果的顯示文字，例如「誤讀 · Misread」；未知代碼原樣顯示。"""
+    """判定結果的顯示文字，例如「誤讀」；未知代碼原樣顯示。"""
     try:
-        zh, en, _ = OUTCOME_TEXT[Outcome(outcome)]
+        return OUTCOME_TEXT[Outcome(outcome)][0]
     except (KeyError, ValueError):
         return outcome
-    return zh_en(zh, en)

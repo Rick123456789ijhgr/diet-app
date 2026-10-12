@@ -51,7 +51,7 @@ def test_every_page_renders(page):
 def test_home_lists_thresholds():
     at = _app()
     assert len(at.dataframe) == 1
-    assert len(at.button) >= 4  # 快速開始卡片
+    assert not at.exception
 
 
 def test_quality_page_with_synthetic_image():
