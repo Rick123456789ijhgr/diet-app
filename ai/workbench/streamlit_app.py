@@ -1,90 +1,33 @@
 """飲食 APP 開發工作台（Diet app workbench）。
 
 執行：在 ``ai/`` 下 ``streamlit run workbench/streamlit_app.py``（或 ``make workbench``、
-雙擊根目錄 ``啟動工作台.bat``）。工作台只呼叫 ``dietai`` 套件，不複製處理邏輯；
-新增模組時在下方 ``PAGES`` 加入頁面。
+雙擊根目錄 ``啟動工作台.bat``）。工作台只呼叫 ``dietai`` 套件，不複製處理邏輯。
+
+版面：左側直欄切換研究模組，頂部膠囊切換模組內的頁面（各 Phase 與輔助工具）。
+新增頁面或模組請改 ``wb/nav.py`` 的註冊表，導覽與總覽頁會自動更新。
 """
 
 from pathlib import Path
 
 import streamlit as st
 
-from wb.st_theme import theme_toggle
+from wb.st_layout import reset_cards
+from wb.st_nav import pages, rail, topbar
+from wb.st_style import apply_style
 
 ASSETS = Path(__file__).parent / "assets"
 
 st.set_page_config(
-    page_title="開發工作台 · Workbench",
+    page_title="開發工作台",
     page_icon=str(ASSETS / "icon.svg"),
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
-st.logo(str(ASSETS / "logo.svg"), icon_image=str(ASSETS / "icon.svg"), size="large")
+apply_style()
 
-PAGES = {
-    "": [
-        st.Page("app_pages/home.py", title="總覽", icon=":material/home:", default=True),
-    ],
-    "模組一 影像前處理": [
-        st.Page(
-            "app_pages/quality.py",
-            title="品質檢查 · Quality",
-            icon=":material/image_search:",
-            url_path="quality",
-        ),
-        st.Page(
-            "app_pages/barcode.py",
-            title="條碼 · Barcode",
-            icon=":material/barcode_reader:",
-            url_path="barcode",
-        ),
-        st.Page(
-            "app_pages/label.py",
-            title="營養標示 · Label",
-            icon=":material/receipt_long:",
-            url_path="label",
-        ),
-        st.Page(
-            "app_pages/food.py",
-            title="食物照片 · Food",
-            icon=":material/restaurant:",
-            url_path="food",
-        ),
-        st.Page(
-            "app_pages/sweep.py",
-            title="參數掃描 · Sweep",
-            icon=":material/ssid_chart:",
-            url_path="sweep",
-        ),
-        st.Page(
-            "app_pages/batch.py",
-            title="資料夾批次 · Batch",
-            icon=":material/photo_library:",
-            url_path="batch",
-        ),
-    ],
-    "研究實驗": [
-        st.Page(
-            "app_pages/e1.py",
-            title="E1 條碼消融 · E1 Ablation",
-            icon=":material/science:",
-            url_path="e1",
-        ),
-    ],
-    "開發工具": [
-        st.Page(
-            "app_pages/dev_checks.py",
-            title="測試與檢查 · Checks",
-            icon=":material/fact_check:",
-            url_path="checks",
-        ),
-    ],
-}
+page = st.navigation(pages(), position="hidden")
+rail(page.url_path)
+topbar(page.url_path)
 
-page = st.navigation(PAGES, position="top")
-
-with st.container(horizontal=True, vertical_alignment="center", key="wb-topbar"):
-    st.caption("飲食 APP 研究系統 · 僅限本機開發使用")
-    st.space("stretch")
-    theme_toggle([f"/{p.url_path}" for group in PAGES.values() for p in group])
-
+reset_cards()
 page.run()

@@ -26,15 +26,15 @@ SOURCES = {
 
 # (欄位, 中文, 英文, 最小, 最大, 預設, 步進, 格式)
 _SLIDERS: dict[str, list[tuple[str, str, str, float, float, float, float, str]]] = {
-    "幾何 · Geometry": [
+    "幾何": [
         ("rotate_deg", "旋轉", "Rotate", -90.0, 90.0, 0.0, 1.0, "%.0f°"),
         ("scale", "縮小", "Scale", 0.05, 1.0, 1.0, 0.05, "×%.2f"),
     ],
-    "光學 · Optics": [
+    "光學": [
         ("blur_sigma", "模糊 σ", "Blur", 0.0, 20.0, 0.0, 0.5, "%.1f"),
         ("noise_std", "雜訊", "Noise", 0.0, 80.0, 0.0, 1.0, "%.0f"),
     ],
-    "光線 · Lighting": [
+    "光線": [
         ("gain", "亮度", "Gain", 0.0, 3.0, 1.0, 0.05, "×%.2f"),
         ("gradient", "梯度", "Gradient", 0.0, 1.0, 0.0, 0.05, "%.2f"),
         ("glare", "光斑", "Glare", 0.0, 0.6, 0.0, 0.02, "%.2f"),
@@ -87,8 +87,8 @@ def _decode(data: bytes) -> Image:
 
 def _synthetic_ean13(key: str) -> Source | None:
     with st.container(horizontal=True):
-        code = st.text_input("條碼 · EAN-13", "4710088410108", max_chars=13, key=f"{key}.code")
-        module = st.number_input("模組寬 · Module px", 1, 12, 4, key=f"{key}.module")
+        code = st.text_input("條碼", "4710088410108", max_chars=13, key=f"{key}.code")
+        module = st.number_input("模組寬", 1, 12, 4, key=f"{key}.module")
     try:
         img = _ean13(code.strip(), int(module))
     except ValueError as exc:  # 檢查碼錯誤、非數字或畫布放不下
@@ -98,11 +98,11 @@ def _synthetic_ean13(key: str) -> Source | None:
 
 
 def _synthetic_invoice(key: str) -> Source | None:
-    left = st.text_input("左碼內容 · Left QR", "AB12345678 茶葉蛋:1:25", key=f"{key}.left")
-    right = st.text_input("右碼內容 · Right QR", "**鮮奶:1:35", key=f"{key}.right")
+    left = st.text_input("左碼內容", "AB12345678 茶葉蛋:1:25", key=f"{key}.left")
+    right = st.text_input("右碼內容", "**鮮奶:1:35", key=f"{key}.right")
     with st.container(horizontal=True):
-        encoding = st.selectbox("編碼 · Encoding", ["big5", "utf-8"], key=f"{key}.enc")
-        module = st.number_input("模組寬 · Module px", 1, 12, 4, key=f"{key}.module")
+        encoding = st.selectbox("編碼", ["big5", "utf-8"], key=f"{key}.enc")
+        module = st.number_input("模組寬", 1, 12, 4, key=f"{key}.module")
     try:
         img = _invoice(left.encode(encoding), right.encode(encoding), int(module))
     except (UnicodeEncodeError, ValueError) as exc:
@@ -114,7 +114,7 @@ def _synthetic_invoice(key: str) -> Source | None:
 def _synthetic_nutrition(key: str) -> Source:
     with st.container(horizontal=True):
         strength = st.slider(
-            "透視強度 · Perspective",
+            "透視強度",
             0.0,
             0.3,
             0.15,
@@ -122,17 +122,17 @@ def _synthetic_nutrition(key: str) -> Source:
             key=f"{key}.strength",
             help="四角隨機位移的最大比例（相對於標示邊長）；0 為正視。超過 0.25 時可能找不到。",
         )
-        seed = st.number_input("種子 · Seed", 0, 10_000, 0, key=f"{key}.seed")
+        seed = st.number_input("種子", 0, 10_000, 0, key=f"{key}.seed")
     img, quad = _nutrition(float(strength), int(seed))
     return Source(img, f"合成營養標示（透視 {strength:.2f}、種子 {int(seed)}）", truth_quad=quad)
 
 
 def _synthetic_food(key: str) -> Source | None:
     with st.container(horizontal=True):
-        n = st.number_input("盤數 · Dishes", 0, 6, 3, key=f"{key}.n")
-        seed = st.number_input("種子 · Seed", 0, 10_000, 0, key=f"{key}.seed")
+        n = st.number_input("盤數", 0, 6, 3, key=f"{key}.n")
+        seed = st.number_input("種子", 0, 10_000, 0, key=f"{key}.seed")
     tilt = st.slider(
-        "俯拍傾斜 · Tilt",
+        "俯拍傾斜",
         0.0,
         0.6,
         0.3,
@@ -154,7 +154,7 @@ def _synthetic_food(key: str) -> Source | None:
 
 def _pick_base(key: str, scene: Scene) -> Source | None:
     kind = st.segmented_control(
-        "影像來源 · Source",
+        "影像來源",
         list(SOURCES),
         format_func=SOURCES.__getitem__,
         default="synthetic",
@@ -163,7 +163,7 @@ def _pick_base(key: str, scene: Scene) -> Source | None:
     )
     if kind == "upload":
         uploaded = st.file_uploader(
-            "選擇影像 · Choose image",
+            "選擇影像",
             type=["jpg", "jpeg", "png", "bmp", "webp"],
             key=f"{key}.upload",
             label_visibility="collapsed",
@@ -178,7 +178,7 @@ def _pick_base(key: str, scene: Scene) -> Source | None:
             return None
     if kind == "local":
         path = st.text_input(
-            "影像路徑 · Image path",
+            "影像路徑",
             key=f"{key}.path",
             placeholder=r"..\research\data\splits\dev\0001.jpg",
             help="相對於 ai/ 或絕對路徑。不得讀取 splits/test（測試集鎖定）。",
@@ -202,9 +202,9 @@ def _pick_base(key: str, scene: Scene) -> Source | None:
     if scene == "food":
         return _synthetic_food(key)
     with st.container(horizontal=True):
-        height = st.number_input("高 · H", 16, 4320, 1080, step=8, key=f"{key}.h")
-        width = st.number_input("寬 · W", 16, 7680, 1920, step=8, key=f"{key}.w")
-        seed = st.number_input("種子 · Seed", 0, 10_000, 0, key=f"{key}.seed")
+        height = st.number_input("高", 16, 4320, 1080, step=8, key=f"{key}.h")
+        width = st.number_input("寬", 16, 7680, 1920, step=8, key=f"{key}.w")
+        seed = st.number_input("種子", 0, 10_000, 0, key=f"{key}.seed")
     return Source(_synthetic(int(height), int(width), int(seed)), f"合成標示（種子 {int(seed)}）")
 
 
@@ -216,13 +216,17 @@ def _reset_degradations(key: str) -> None:
 
 def _degradation_controls(key: str) -> degradations.Degradation:
     values: dict[str, float] = {}
-    with st.expander("模擬退化 · Degradations", icon=":material/tune:", key=f"{key}.degrade"):
+    with st.expander("模擬退化", icon=":material/tune:", expanded=True, key=f"{key}.degrade"):
         st.caption("依序套用：旋轉 → 縮小 → 模糊 → 亮度 → 梯度 → 光斑 → 雜訊")
-        for group, sliders in _SLIDERS.items():
-            st.markdown(f"**{group}**")
-            for field_name, zh, en, lo, hi, default, step, fmt in sliders:
-                values[field_name] = st.slider(
-                    f"{zh} · {en}",
+        # 兩欄排列，讓整組滑桿留在一個畫面內
+        sliders = [item for group in _SLIDERS.values() for item in group]
+        for i in range(0, len(sliders), 2):
+            cols = st.columns(2, gap="small")
+            for col, (field_name, zh, _en, lo, hi, default, step, fmt) in zip(
+                cols, sliders[i : i + 2], strict=False
+            ):
+                values[field_name] = col.slider(
+                    zh,
                     lo,
                     hi,
                     default,
@@ -231,7 +235,7 @@ def _degradation_controls(key: str) -> degradations.Degradation:
                     key=f"{key}.d.{field_name}",
                 )
         with st.container(horizontal=True, vertical_alignment="bottom"):
-            seed = st.number_input("隨機種子 · Seed", 0, 10_000, 0, key=f"{key}.d.seed")
+            seed = st.number_input("隨機種子", 0, 10_000, 0, key=f"{key}.d.seed")
             st.button(
                 "全部歸零",
                 icon=":material/restart_alt:",
