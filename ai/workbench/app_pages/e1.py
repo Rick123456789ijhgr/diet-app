@@ -52,6 +52,9 @@ with panel:
     with tab_runs:
         root = Path(st.text_input("結果資料夾", str(E1_DIR / "runs"), key="e1.root"))
         runs = list_runs(root)
+        # 換了資料夾（或原本沒有結果）時，選取值不在新清單中：改選最新的一次
+        if st.session_state.get("e1.run") not in runs:
+            st.session_state["e1.run"] = runs[0] if runs else None
         run_dir = st.selectbox(
             "執行",
             runs,
