@@ -45,6 +45,7 @@ jobs:
             ai:
               - 'ai/**'
               - 'proto/**'
+              - 'research/**'
             app:
               - 'app/**'
               - 'openapi/**'
@@ -88,8 +89,9 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libzbar0
       # preprocess 測試需要 OpenCV（vision），工作台測試需要 Streamlit（workbench）
       - run: pip install -e ".[dev,vision,workbench]"
-      - run: ruff check .
-      - run: ruff format --check .
+      # research/ 只呼叫 dietai，一併檢查（設定沿用 ai/pyproject.toml，見 research/ruff.toml）
+      - run: ruff check . ../research
+      - run: ruff format --check . ../research
       - run: mypy
       # CI 不呼叫真實 LLM：測試一律使用假實作或快取
       # 效能基準受 runner 負載影響，CI 略過；本機以 make test-ai 執行

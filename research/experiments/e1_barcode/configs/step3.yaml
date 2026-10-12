@@ -1,5 +1,0 @@
-# 已廢止：舊 @register pipeline 格式，pipeline 已於模組一 Phase 2 移除；Phase 5 改用 LadderConfig 格式。
-# adaptive_bin、deskew 尚待實作於 ai/src/dietai/preprocess/steps_cv.py
-steps: [gray, adaptive_bin, deskew]
-params:
-  adaptive_bin: {block_size: 31, c: 5}

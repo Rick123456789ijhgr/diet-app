@@ -2,6 +2,7 @@
 
 本機路徑一律經過 test split 檢查（根目錄 CLAUDE.md 規則 7）：
 工作台用於調整門檻與觀察行為，不得讀取 ``splits/test`` 中的資料。
+判定規則與實驗腳本共用 ``dietai.evaluation.manifest.is_test_split``。
 """
 
 from __future__ import annotations
@@ -11,19 +12,21 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from dietai.evaluation.manifest import SplitLockedError, is_test_split
 from dietai.preprocess.types import Image
 
+__all__ = [
+    "IMAGE_SUFFIXES",
+    "SplitLockedError",
+    "decode_image",
+    "encode_png",
+    "guard_path",
+    "is_test_split",
+    "list_images",
+    "load_image",
+]
+
 IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"})
-
-
-class SplitLockedError(ValueError):
-    """嘗試讀取鎖定的測試集。"""
-
-
-def is_test_split(path: str | Path) -> bool:
-    """路徑中是否含有連續的 ``splits/test`` 目錄（不分大小寫）。"""
-    parts = [p.lower() for p in Path(path).parts]
-    return any(a == "splits" and b == "test" for a, b in zip(parts, parts[1:], strict=False))
 
 
 def guard_path(path: str | Path) -> Path:

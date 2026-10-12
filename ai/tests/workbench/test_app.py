@@ -40,6 +40,7 @@ def _run_batch(at: AppTest, folder: Path) -> None:
         "app_pages/food.py",
         "app_pages/sweep.py",
         "app_pages/batch.py",
+        "app_pages/e1.py",
         "app_pages/dev_checks.py",
     ],
 )
@@ -272,3 +273,48 @@ def test_food_page_rejects_invalid_config():
 def test_dev_checks_page_renders():
     at = _app("app_pages/dev_checks.py")
     assert len(at.button) >= 4
+
+
+def test_e1_page_empty_folder(tmp_path):
+    at = _app("app_pages/e1.py")
+    at.text_input(key="e1.root").input(str(tmp_path)).run()
+    assert not at.exception, at.exception
+    assert any("尚無執行結果" in m.value for m in at.markdown)
+
+
+def test_e1_page_shows_run(tmp_path):
+    from dietai.evaluation import Arm, read_manifest, run_experiment
+    from dietai.preprocess import LadderConfig, ZxingConfig
+    from dietai.synthetic import write_barcode_dataset
+
+    manifest = read_manifest(write_barcode_dataset(tmp_path / "data", n_codes=1))
+    off = ZxingConfig(False, False, False)
+    arms = [Arm("raw", zxing=off, ladder=LadderConfig(rungs=(Rung.RAW,))), Arm("full", zxing=off)]
+    run_experiment(manifest, arms, tmp_path / "runs" / "r1")
+
+    at = _app("app_pages/e1.py")
+    at.text_input(key="e1.root").input(str(tmp_path / "runs")).run()
+    assert not at.exception, at.exception
+    assert at.metric[0].value == str(len(manifest.items))
+    at.selectbox(key="e1.by").set_value("condition").run()
+    assert not at.exception, at.exception
+    assert len(at.dataframe) >= 2  # 整體彙整與失敗清單
+
+
+def test_e1_page_follows_folder_change(tmp_path):
+    """換資料夾後應改選新資料夾中最新的一次執行，不可沿用舊選取（或維持空白）。"""
+    from dietai.evaluation import Arm, read_manifest, run_experiment
+    from dietai.preprocess import ZxingConfig
+    from dietai.synthetic import write_barcode_dataset
+
+    manifest = read_manifest(write_barcode_dataset(tmp_path / "data", n_codes=1))
+    arm = Arm("raw", zxing=ZxingConfig(False, False, False))
+    for folder in ("a", "b"):
+        run_experiment(manifest, [arm], tmp_path / folder / "r1")
+
+    at = _app("app_pages/e1.py")
+    at.text_input(key="e1.root").input(str(tmp_path / "a")).run()
+    assert at.selectbox(key="e1.run").value == tmp_path / "a" / "r1"
+    at.text_input(key="e1.root").input(str(tmp_path / "b")).run()
+    assert not at.exception, at.exception
+    assert at.selectbox(key="e1.run").value == tmp_path / "b" / "r1"

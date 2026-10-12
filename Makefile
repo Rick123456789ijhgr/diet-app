@@ -1,4 +1,4 @@
-.PHONY: up down setup test lint gen test-api test-ai lint-api lint-ai workbench
+.PHONY: up down setup test lint gen test-api test-ai lint-api lint-ai workbench e1-synthetic
 
 # Windows（PowerShell／cmd 下由 cmd.exe 執行）與 Linux／macOS（sh）共用：
 # 指令只用兩邊都支援的語法，含斜線的執行檔路徑一律加引號。
@@ -48,11 +48,18 @@ lint-api:
 	cd api && go vet ./... && $(GOFMT_CHECK)
 
 lint-ai:
-	cd ai && $(AI_PY) -m ruff check . && $(AI_PY) -m ruff format --check . && $(AI_PY) -m mypy
+	cd ai && $(AI_PY) -m ruff check . ../research && $(AI_PY) -m ruff format --check . ../research && $(AI_PY) -m mypy
 
 # 開發工作台，開啟 http://localhost:8501（未安裝請先 make setup）
 workbench:
 	cd ai && $(AI_PY) -m streamlit run workbench/streamlit_app.py --server.headless false
+
+# E1 條碼消融：以合成資料端到端跑一次（產生資料 → 執行所有實驗組 → 分組彙整）
+E1 := ../research/experiments/e1_barcode
+e1-synthetic:
+	cd ai && $(AI_PY) $(E1)/make_synthetic.py
+	cd ai && $(AI_PY) $(E1)/run.py --manifest $(E1)/synthetic/manifest.csv --label synthetic
+	cd ai && $(AI_PY) $(E1)/analyze.py
 
 gen:
 	cd proto && buf generate

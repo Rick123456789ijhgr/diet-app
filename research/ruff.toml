@@ -1,0 +1,2 @@
+# 研究腳本沿用 ai/ 的 ruff 設定（行寬、規則）；在 ai/ 下執行 ruff check ../research
+extend = "../ai/pyproject.toml"

@@ -157,6 +157,15 @@ def test_every_rung_has_text():
     assert set(RUNG_TEXT) == set(Rung)
 
 
+def test_every_outcome_has_text():
+    from dietai.evaluation import Outcome
+    from wb.text import OUTCOME_TEXT, outcome_label
+
+    assert set(OUTCOME_TEXT) == set(Outcome)
+    assert outcome_label("misread") == "誤讀 · Misread"
+    assert outcome_label("unknown") == "unknown"
+
+
 def test_identity_degradation_returns_equal_copy():
     img = label_scene(40, 60)
     out = degradations.apply(img, degradations.Degradation(seed=3))
