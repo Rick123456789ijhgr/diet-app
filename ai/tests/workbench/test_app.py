@@ -300,3 +300,22 @@ def test_e1_page_shows_run(tmp_path):
     at.selectbox(key="e1.by").set_value("condition").run()
     assert not at.exception, at.exception
     assert len(at.dataframe) >= 2  # 整體彙整與失敗清單
+
+
+def test_e1_page_follows_folder_change(tmp_path):
+    """換資料夾後應改選新資料夾中最新的一次執行，不可沿用舊選取（或維持空白）。"""
+    from dietai.evaluation import Arm, read_manifest, run_experiment
+    from dietai.preprocess import ZxingConfig
+    from dietai.synthetic import write_barcode_dataset
+
+    manifest = read_manifest(write_barcode_dataset(tmp_path / "data", n_codes=1))
+    arm = Arm("raw", zxing=ZxingConfig(False, False, False))
+    for folder in ("a", "b"):
+        run_experiment(manifest, [arm], tmp_path / folder / "r1")
+
+    at = _app("app_pages/e1.py")
+    at.text_input(key="e1.root").input(str(tmp_path / "a")).run()
+    assert at.selectbox(key="e1.run").value == tmp_path / "a" / "r1"
+    at.text_input(key="e1.root").input(str(tmp_path / "b")).run()
+    assert not at.exception, at.exception
+    assert at.selectbox(key="e1.run").value == tmp_path / "b" / "r1"
