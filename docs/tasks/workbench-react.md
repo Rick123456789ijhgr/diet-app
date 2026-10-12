@@ -1,0 +1,294 @@
+# 任務書：開發工作台改版（React＋Go）與冷啟動上傳工具
+
+> 對應決策：`docs/adr/0003-workbench-react-go.md`
+> 使用方式：一次只做一個階段，一個階段一個 PR。規格草稿（第 2 節）經 Rick 審核同意後才寫入 `proto/`、`openapi/`、`db/migrations/`。
+> 審核紀錄：2026-10-13 Rick 同意第 2.1 至 2.3 節（含第 2.5 節的修正）；第 2.4 節待階段 5 前審核。
+
+---
+
+## 1. 範圍
+
+### 要做
+- `workbench/`：React 前端（開發工具各頁＋冷啟動上傳）。
+- `api/internal/workbench/`、`api/internal/platform/aiclient/`：Go 的工作台路由與呼叫 Python 的 gRPC 客戶端。
+- `ai/src/dietai/server/`：Python gRPC 服務（`PreprocessService`、`WorkbenchService`）。
+- `ai/src/dietai/devtools/`：從 `ai/workbench/wb/` 搬來的純邏輯（模擬退化、掃描彙整、設定結構、測試集防護、診斷影像）。
+- 冷啟動上傳：登入、上傳三種照片、前處理、人工確認、寫入產品資料庫。
+
+### 不做
+- 「測試與檢查」頁（改用終端機與 CI）。
+- 線上部署（位置未定；先做本機可用版本，但登入機制一併完成）。
+- 營養標示的自動欄位解析（屬模組二；第一版由人工輸入）。
+
+---
+
+## 2. 規格草稿（待審核）
+
+每份草稿附白話說明。審核時請確認「審核重點」，回覆「同意」或要改的地方。
+
+### 2.1 `proto/dietai/v1/preprocess.proto`（正式前處理，Go → Python）
+
+**白話說明**：讓 Go 能請 Python 做五種前處理。影像可以直接附上，或用工作台暫存過的 `image_id`；參數只傳要改的欄位（JSON），不傳則用預設值。回傳的分數、警告、步驟紀錄都有明確型別，之後 APP 的流程也用這一份。
+
+```proto
+syntax = "proto3";
+package dietai.v1;
+option go_package = "github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1";
+
+service PreprocessService {
+  rpc CheckQuality(CheckQualityRequest) returns (CheckQualityResponse);
+  rpc DecodeBarcode(DecodeBarcodeRequest) returns (DecodeBarcodeResponse);
+  rpc LocateInvoiceQr(LocateInvoiceQrRequest) returns (LocateInvoiceQrResponse);
+  rpc PreprocessLabel(PreprocessLabelRequest) returns (PreprocessLabelResponse);
+  rpc PreprocessFood(PreprocessFoodRequest) returns (PreprocessFoodResponse);
+}
+
+// 影像來源：直接附上編碼後的影像（JPEG／PNG），或工作台暫存的影像 ID
+message ImageInput {
+  oneof source {
+    bytes encoded = 1;
+    string image_id = 2;
+  }
+}
+
+// 只含與預設值不同的設定欄位，例如 {"blur_min": 150}；空字串表示全部用預設值
+message ConfigOverride { string json = 1; }
+
+message Step { string name = 1; double elapsed_ms = 2; string params_json = 3; }
+message Point { double x = 1; double y = 2; }
+message Box { int32 x = 1; int32 y = 2; int32 w = 3; int32 h = 4; }
+message Ellipse { double cx = 1; double cy = 2; double major = 3; double minor = 4; double angle = 5; }
+
+// 影像型結果：開發模式回傳 artifact_id（由 WorkbenchService.GetArtifact 取得），否則直接附上
+message ImageOutput {
+  oneof data {
+    bytes encoded = 1;
+    string artifact_id = 2;
+  }
+  int32 width = 3;
+  int32 height = 4;
+}
+
+message CheckQualityRequest { ImageInput image = 1; ConfigOverride config = 2; }
+message CheckQualityResponse {
+  bool passed = 1;
+  double blur_score = 2;
+  double mean_brightness = 3;
+  double dark_ratio = 4;
+  double bright_ratio = 5;
+  bool resolution_ok = 6;
+  repeated string warnings = 7;   // PreprocessWarning 代碼，例如 TOO_BLURRY
+  repeated Step steps = 8;
+}
+
+message DecodeHit {
+  string format = 1;              // CodeFormat，例如 EAN13
+  string text = 2;
+  bytes raw = 3;                  // 原始位元組；發票中文由 Go 解碼
+  repeated Point corners = 4;
+}
+message RungAttempt {
+  string rung = 1;                // Rung，例如 deskew
+  string params_json = 2;
+  double elapsed_ms = 3;
+  repeated DecodeHit hits = 4;
+  repeated DecodeHit rejected = 5;
+  bool skipped = 6;
+}
+message DecodeBarcodeRequest {
+  ImageInput image = 1;
+  ConfigOverride ladder = 2;      // LadderConfig
+  ConfigOverride zxing = 3;       // ZxingConfig
+}
+message DecodeBarcodeResponse {
+  bool success = 1;
+  string success_rung = 2;
+  int32 success_index = 3;        // -1 表示失敗
+  repeated DecodeHit hits = 4;
+  repeated RungAttempt attempts = 5;
+  repeated string warnings = 6;
+  repeated Step steps = 7;
+}
+
+message LocateInvoiceQrRequest { ImageInput image = 1; ConfigOverride ladder = 2; ConfigOverride zxing = 3; }
+message LocateInvoiceQrResponse {
+  DecodeHit left = 1;             // 未找到則不填
+  DecodeHit right = 2;
+  repeated RungAttempt attempts = 3;
+  repeated string warnings = 4;
+  repeated Step steps = 5;
+}
+
+message PreprocessLabelRequest { ImageInput image = 1; ConfigOverride config = 2; }
+message PreprocessLabelResponse {
+  ImageOutput image = 1;          // 校正、修補、增強後的標示
+  repeated Point quad = 2;        // 原圖上的表格四角（左上起順時針）；找不到則為空
+  string quad_method = 3;         // contour／hough
+  double glare_ratio = 4;         // 光斑步驟未啟用時為 -1
+  repeated string warnings = 5;
+  repeated Step steps = 6;
+}
+
+message VlmImage { ImageOutput image = 1; int64 num_bytes = 2; double scale = 3; }
+message PreprocessFoodRequest { ImageInput image = 1; ConfigOverride config = 2; }
+message PreprocessFoodResponse {
+  VlmImage whole = 1;
+  bool dishes_enabled = 2;
+  repeated Box dishes = 3;
+  repeated VlmImage crops = 4;
+  bool plates_enabled = 5;
+  repeated Ellipse plates = 6;
+  repeated string warnings = 7;
+  repeated Step steps = 8;
+}
+```
+
+**審核重點**
+- 參數以 JSON 傳（不逐欄定義）可以接受嗎？好處是調參數不必改 proto；代價是型別檢查在 Python 端。
+- 營養標示的回傳只有影像與四角，**不含欄位數值**（數值由人工輸入或日後模組二提供）。
+- gRPC 單則訊息上限將從預設 4 MB 調高到 32 MB（照片原檔可能超過 4 MB）。
+
+### 2.2 `proto/dietai/v1/workbench.proto`（開發用，只在開發模式啟用）
+
+**白話說明**：工作台調參時需要的輔助功能：把影像暫存起來重複使用、產生合成影像、加上模擬退化、產生診斷用影像（邊緣響應、遮罩等）、參數掃描、資料夾批次、E1 實驗。這些功能不會出現在正式系統。回傳內容以 JSON 為主，因為只有工作台會讀，結構常隨研究需求調整。
+
+```proto
+service WorkbenchService {
+  rpc GetConfigSchemas(GetConfigSchemasRequest) returns (GetConfigSchemasResponse);
+  rpc PutImage(PutImageRequest) returns (ImageRef);          // 上傳並暫存
+  rpc Synthesize(SynthesizeRequest) returns (ImageRef);      // 合成影像（附真值）
+  rpc Degrade(DegradeRequest) returns (ImageRef);            // 模擬退化，產生新的暫存影像
+  rpc RenderView(RenderViewRequest) returns (RenderViewResponse); // 診斷影像或圖表資料
+  rpc GetArtifact(GetArtifactRequest) returns (GetArtifactResponse);
+  rpc Sweep(SweepRequest) returns (JsonResponse);
+  rpc RunBatch(RunBatchRequest) returns (stream JsonResponse); // 逐張回傳，前端顯示進度
+  rpc ListE1Runs(ListE1RunsRequest) returns (JsonResponse);
+  rpc GetE1Run(GetE1RunRequest) returns (JsonResponse);
+  rpc StartE1Run(StartE1RunRequest) returns (stream JsonResponse); // 進度＋最後結果
+}
+
+message ImageRef {
+  string image_id = 1;
+  int32 width = 2;
+  int32 height = 3;
+  string description = 4;
+  string truth_json = 5;          // 合成影像的真值（四角、盤緣等）；沒有則為空
+}
+message PutImageRequest { bytes encoded = 1; string name = 2; }
+message SynthesizeRequest { string scene = 1; string params_json = 2; }   // scene：label／ean13／invoice／nutrition／food
+message DegradeRequest { string image_id = 1; string degradation_json = 2; }
+message RenderViewRequest { string image_id = 1; string view = 2; string config_json = 3; }
+  // view：laplacian／exposure／histogram／label_edges／glare_mask／food_mask／ladder_variant
+message RenderViewResponse {
+  ImageRef image = 1;             // 影像型檢視（邊緣響應、遮罩等）
+  string data_json = 2;           // 資料型檢視（例如直方圖），由前端畫圖
+}
+message GetArtifactRequest { string id = 1; }  // 暫存影像的 image_id 與診斷影像共用同一個 ID 空間
+message GetArtifactResponse { bytes encoded = 1; string content_type = 2; }
+message GetConfigSchemasRequest {}
+message GetConfigSchemasResponse { string json = 1; }      // 各設定類別的 param() 欄位資訊
+message SweepRequest { string target = 1; string params_json = 2; }      // target：quality／barcode
+message RunBatchRequest { string folder = 1; bool recursive = 2; int32 limit = 3; string config_json = 4; }
+message ListE1RunsRequest { string root = 1; }
+message GetE1RunRequest { string run_dir = 1; }
+message StartE1RunRequest { repeated string arms = 1; int32 n_codes = 2; string root = 3; }
+message JsonResponse { string json = 1; }
+```
+
+**審核重點**
+- 讀取本機路徑的 RPC（`RunBatch`、E1）一律經 `dietai.evaluation`／`guard_path` 的測試集鎖定，拒絕 `splits/test`。
+- 暫存影像放在 Python 記憶體（LRU，上限約 64 張）；重啟就會清空，前端遇到「找不到 image_id」時自動重新上傳。
+
+### 2.3 `openapi/workbench.yaml`（React → Go）
+
+**白話說明**：前端呼叫的網址。開發工具（`/workbench/v1/dev/*`）只在本機開發模式存在；冷啟動（`/workbench/v1/coldstart/*`）與登入可上線，除登入外都須登入後才能使用。
+
+| 方法與路徑 | 用途 | 對應 |
+| --- | --- | --- |
+| `POST /workbench/v1/auth/login` | 帳號密碼登入，設定 HttpOnly Cookie | Go |
+| `POST /workbench/v1/auth/logout` | 登出 | Go |
+| `GET /workbench/v1/auth/me` | 目前登入者 | Go |
+| `GET /workbench/v1/dev/config-schemas` | 參數表單結構 | `GetConfigSchemas` |
+| `POST /workbench/v1/dev/images` | 上傳影像（multipart） | `PutImage` |
+| `POST /workbench/v1/dev/images:synthesize` | 合成影像 | `Synthesize` |
+| `POST /workbench/v1/dev/images/{id}:degrade` | 模擬退化 | `Degrade` |
+| `POST /workbench/v1/dev/views` | 診斷影像 | `RenderView` |
+| `GET /workbench/v1/dev/artifacts/{id}` | 取得影像型結果（PNG／JPEG） | `GetArtifact` |
+| `POST /workbench/v1/dev/quality` | 品質檢查 | `CheckQuality` |
+| `POST /workbench/v1/dev/barcode` | 條碼逐步升級 | `DecodeBarcode` |
+| `POST /workbench/v1/dev/invoice-qr` | 發票雙 QR | `LocateInvoiceQr` |
+| `POST /workbench/v1/dev/label` | 營養標示 | `PreprocessLabel` |
+| `POST /workbench/v1/dev/food` | 食物照片 | `PreprocessFood` |
+| `POST /workbench/v1/dev/sweeps` | 參數掃描 | `Sweep` |
+| `POST /workbench/v1/dev/batches` | 資料夾批次（SSE 回報進度） | `RunBatch` |
+| `GET /workbench/v1/dev/e1/runs`、`GET …/runs/{id}` | E1 結果 | `ListE1Runs`、`GetE1Run` |
+| `POST /workbench/v1/dev/e1/runs` | 快速執行（SSE 回報進度） | `StartE1Run` |
+| `POST /workbench/v1/coldstart/submissions` | 建立一筆上傳 | Go |
+| `PUT /workbench/v1/coldstart/submissions/{id}/images/{kind}` | 上傳照片，kind：front／barcode／label；Go 存 MinIO 後呼叫前處理 | Go＋`PreprocessService` |
+| `GET /workbench/v1/coldstart/submissions/{id}` | 取得上傳內容與前處理結果 | Go |
+| `PUT /workbench/v1/coldstart/submissions/{id}/draft` | 儲存人工輸入（條碼、品名、營養數值） | Go |
+| `POST /workbench/v1/coldstart/submissions/{id}:confirm` | 確認並寫入產品資料庫 | Go |
+| `GET /workbench/v1/coldstart/submissions?status=` | 列出上傳（草稿／已確認） | Go |
+
+錯誤回應統一為 `{"code": "IMAGE_NOT_FOUND", "message": "…"}`，`code` 用英文代碼，前端對應中文。
+
+**審核重點**
+- 開發工具路由由 `WORKBENCH_DEV_TOOLS=1` 開啟；未開啟時一律 404。線上部署時不開。
+- 登入：Cookie 為 HttpOnly、SameSite=Lax；線上部署時加 Secure（需 HTTPS）。
+
+### 2.4 資料表（`db/migrations/`，階段 5 才寫）
+
+**白話說明**：冷啟動需要「使用者」「登入工作階段」「上傳草稿」「產品」「營養標示」「產品照片」六張表。**欄位須先與規劃書 6.1、9.2 對齊**；以下只是初稿，用來確認方向。
+
+| 資料表 | 主要欄位 | 說明 |
+| --- | --- | --- |
+| `users` | id、username（唯一）、password_hash（argon2id）、display_name、created_at、disabled | 組員帳號；由管理指令建立，不開放註冊 |
+| `sessions` | id（隨機 token 的雜湊）、user_id、expires_at、created_at | 登入工作階段；登出或過期即刪除 |
+| `product_submissions` | id、status（draft／confirmed／rejected）、barcode、draft（JSONB）、preprocess（JSONB，前處理結果摘要）、created_by、confirmed_by、confirmed_at、product_id | 一筆上傳；確認前可反覆修改 |
+| `products` | id、barcode（唯一）、name、brand、serving_size_g、servings_per_package、source（coldstart）、created_at | 產品主檔 |
+| `nutrition_facts` | product_id、basis（per_serving／per_100g）、energy_kcal、protein_g、fat_g、saturated_fat_g、trans_fat_g、carbohydrate_g、sugar_g、sodium_mg、confirmed_by、confirmed_at | 台灣營養標示的八項必要欄位；數值為人工確認的真值 |
+| `product_images` | id、product_id、submission_id、kind（front／barcode／label）、object_key（MinIO）、sha256、width、height、created_at | 原始照片；前處理後影像不另存（可由原圖與設定重現） |
+
+**審核重點**
+- 同一條碼已存在時：預設擋下並顯示既有產品，由人決定「補照片」或「修正數值」（修正保留歷史紀錄的方式待定）。
+- 是否需要 `ai_*` view 給 Python 讀取（例如 RAG 用的產品清單）？可在之後另開 migration。
+
+---
+
+### 2.5 審核時的修正（2026-10-13 同意）
+
+- **Python 產生碼位置**：`proto/buf.gen.yaml` 的 Python 輸出改為 `../ai/src`，產生碼落在 `ai/src/dietai/v1/`（產生的程式以 `from dietai.v1 import …` 互相引用，放在 `dietai/gen/` 下會找不到）。此資料夾視同 `gen/`：不手改，ruff／mypy 排除；另加 `pyi` 外掛供 mypy strict 檢查型別。
+- **`RenderView` 回傳**：改為 `RenderViewResponse`，直方圖等資料型檢視放 `data_json`，不轉成影像。
+- **`GetArtifact`**：暫存影像（含退化後影像）與診斷影像共用 ID，前端顯示退化後影像也用它取得。Python 以（原圖 ID, 退化參數）快取退化結果。
+- **產生碼提交進 git**（`api/gen/`、`ai/src/dietai/v1/`、`workbench/src/api/gen/`）；CI 執行 `make gen` 後 `git diff` 必須為空。
+
+## 3. 共通約定
+
+- **前端**：Vite＋React＋TypeScript（strict）、Tailwind、shadcn/ui、TanStack Query、React Router；圖表用 Vega-Lite（react-vega）。型別以 openapi-typescript 由 `openapi/workbench.yaml` 產生到 `workbench/src/api/gen/`。
+- **版面**：左側直欄＝模組（總覽、模組一到五、冷啟動），頂部膠囊＝模組內頁面；工具頁為左控制面板（影像／參數／匯出入分頁）＋右結果，兩欄固定一個畫面高、各自捲動。模組與頁面註冊表在 `workbench/src/nav.ts`。介面只寫中文（警告代碼等維持英文代碼，由前端對應中文）。色系：靛藍主色、紫輔色，不使用綠與橘。
+- **即時調參**：滑桿停止約 150 ms 後送出請求，並取消尚未回來的舊請求；結果區保留舊結果並淡化，直到新結果回來。
+- **Go**：`internal/workbench`（handler → service，service 依賴 `AIClient` 介面）；`internal/platform/aiclient` 實作 gRPC 連線；handler 不寫業務邏輯，日誌帶 `request_id` 並透傳給 Python（gRPC metadata）。
+- **Python**：`server/` 只做 proto ↔ dietai 轉換；設定 JSON 經 `dietai.devtools.configs` 建成 dataclass 並驗證，錯誤回 `INVALID_ARGUMENT`（附欄位名稱）。
+- **測試**：Go 用 `httptest`＋假的 AIClient；Python 以程序內 gRPC server 測 servicer；前端用 Vitest＋Testing Library＋MSW；每頁一個 Playwright 冒煙測試（接真的 Go 與 Python）。
+- **指令**：`make workbench` 同時啟動 Python gRPC、Go（`WORKBENCH_DEV_TOOLS=1`）、Vite；`make gen` 加入 oapi-codegen 與 openapi-typescript；`啟動工作台.bat` 改為啟動同樣三個程序。階段 1 至 3 先以 `make workbench-react` 啟動新版，`make workbench` 維持 Streamlit，到階段 4 再切換。
+
+---
+
+## 4. 階段
+
+| 階段 | 內容 | 驗收 |
+| --- | --- | --- |
+| 0 | ADR 0003、本任務書、規格草稿審核 | Rick 同意第 2.1 至 2.3 節 |
+| 1 | 打通串接＋外框＋品質檢查：`preprocess.proto`／`workbench.proto` 的對應 RPC、Python gRPC server、Go aiclient 與 `/workbench/v1/dev/*` 的品質檢查相關路由、React 外框（左欄、頂部膠囊、雙欄、參數表單自動產生、可疊圖影像檢視）、品質檢查頁；`dietai.devtools` 搬入模擬退化與設定結構 | 拖動退化滑桿時結果即時更新（本機 < 200 ms）；三端測試與 Playwright 冒煙測試通過。拆成四個 PR：1a 規格與產生碼 → 1b Python gRPC 服務與 `dietai.devtools` → 1c Go aiclient 與工作台路由 → 1d React 外框與品質檢查頁 |
+| 2 | 條碼與發票 QR、營養標示、食物照片 | 現有 `ai/tests/workbench/test_app.py` 涵蓋的行為在新版都能重現 |
+| 3 | 參數掃描、資料夾批次、E1（快速執行以 SSE 回報進度） | 開發工具各頁完成 |
+| 4 | 移除 Streamlit 版（`ai/workbench/`、`workbench` extras）；更新 README、CLAUDE.md、`.bat`；Go 以 `embed` 提供建置後的前端 | 只剩新版；`make workbench` 一個指令可用 |
+| 5 | 冷啟動上傳：資料表 migration（2.4 節審核後）、帳號密碼登入、上傳三種照片、前處理結果與人工確認畫面、寫入產品資料庫 | 組員可在本機登入、上傳、確認一筆產品並在資料庫查到；重複條碼會被擋下 |
+
+---
+
+## 5. 待決定（不影響階段 0 至 4）
+
+- 線上部署位置與 HTTPS。
+- 產品資料表與規劃書 6.1、9.2 的對齊。
+- 同一產品修正數值時的歷史紀錄方式。
