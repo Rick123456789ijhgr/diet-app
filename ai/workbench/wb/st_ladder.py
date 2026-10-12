@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from dietai.preprocess import (
+    CodeFormat,
     Decoder,
     LadderConfig,
     PyzbarDecoder,
@@ -22,12 +23,18 @@ ENGINES = {"zxing": "zxing-cpp（預設）", "pyzbar": "pyzbar（對照）"}
 def ladder_controls(key: str) -> dict[str, str]:
     """畫出階梯順序與多尺度倍率；回傳 ``extra_keys``，交給 ``ladder_sidebar``。
 
-    元件值存在 ``{key}.rungs``、``{key}.scales``；匯入 JSON 或「還原」時由參數面板寫回。
+    元件值存在 ``{key}.rungs``、``{key}.scales``、``{key}.formats``；
+    匯入 JSON 或「還原」時由參數面板寫回。
     """
-    keys = {"rungs": f"{key}.rungs", "scales": f"{key}.scales"}
+    keys = {
+        "rungs": f"{key}.rungs",
+        "scales": f"{key}.scales",
+        "accept_formats": f"{key}.formats",
+    }
     default = LadderConfig()
     st.session_state.setdefault(keys["rungs"], list(default.rungs))
     st.session_state.setdefault(keys["scales"], list(default.scales))
+    st.session_state.setdefault(keys["accept_formats"], list(default.accept_formats))
     st.multiselect(
         "嘗試順序 · Rung order",
         list(Rung),
@@ -43,6 +50,14 @@ def ladder_controls(key: str) -> dict[str, str]:
         format_func=lambda f: f"×{f:g}",
         key=keys["scales"],
         help="多尺度階依序嘗試的縮放倍率。",
+    )
+    st.multiselect(
+        "採用格式 · Accepted formats",
+        [f for f in CodeFormat if f is not CodeFormat.OTHER],
+        key=keys["accept_formats"],
+        placeholder="全部格式 · All",
+        help="空白為全部採用；其他格式的結果視為不採用（例如斜拍 EAN-13 被誤讀成 UPC-E）。"
+        "電子發票模式不受此限制。",
     )
     return keys
 

@@ -12,6 +12,7 @@
       "raw",
       "gray",
       "binarize"
-    ]
+    ],
+    "accept_formats": []
   }
 }

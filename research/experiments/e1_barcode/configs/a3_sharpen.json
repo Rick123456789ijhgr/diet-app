@@ -13,6 +13,7 @@
       "gray",
       "binarize",
       "sharpen"
-    ]
+    ],
+    "accept_formats": []
   }
 }

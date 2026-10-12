@@ -18,6 +18,7 @@ WARNING_TEXT: dict[PreprocessWarning, tuple[str, str]] = {
     PreprocessWarning.TOO_BRIGHT: ("過亮", "Too bright"),
     PreprocessWarning.LOW_RESOLUTION: ("解析度不足", "Low resolution"),
     PreprocessWarning.BARCODE_NOT_FOUND: ("找不到條碼", "Barcode not found"),
+    PreprocessWarning.BARCODE_UNCONFIRMED: ("條碼結果未經確認", "Barcode unconfirmed"),
     PreprocessWarning.INVOICE_QR_PARTIAL: ("只找到一個發票 QR", "Only one invoice QR"),
     PreprocessWarning.INVOICE_QR_NOT_FOUND: ("找不到發票 QR", "Invoice QR not found"),
     PreprocessWarning.LABEL_NOT_LOCATED: ("找不到標示表格框", "Label not located"),

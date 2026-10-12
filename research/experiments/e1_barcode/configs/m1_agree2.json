@@ -1,0 +1,23 @@
+{
+  "name": "m1_agree2",
+  "description": "誤讀對策：完整階梯，同一條碼須在兩次不同嘗試中解出才採用（zxing-cpp 內建嘗試關閉，與 a6_full 比較）",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "multiscale"
+    ],
+    "accept_formats": [],
+    "min_agree": 2
+  }
+}

@@ -134,12 +134,23 @@ def test_repository_configs_are_valid():
     """research/.../configs 的每個檔案都能讀入；a0–a6 為逐步加入的累積消融。"""
     arms = {a.name: a for a in load_arms(CONFIGS)}
     ablation = sorted(n for n in arms if n.startswith("a"))
-    assert len(ablation) == len(DEFAULT_RUNGS)
+    full = arms[ablation[-1]].ladder.rungs
+    assert len(ablation) == len(DEFAULT_RUNGS) and set(full) == set(DEFAULT_RUNGS)
     for i, name in enumerate(ablation):
         arm = arms[name]
-        assert arm.ladder.rungs == DEFAULT_RUNGS[: i + 1]
+        assert arm.ladder.rungs == full[: i + 1]
+        assert arm.ladder.accept_formats == ()
         assert arm.zxing == ZxingConfig(False, False, False)
-    assert arms["z1_full_zxing_default"].ladder == LadderConfig()
+    # z2 追蹤目前的程式預設；預設改變時本測試失敗，應新增一個實驗組而非修改 z2
+    assert arms["z2_default_v2"].ladder == LadderConfig()
+    assert arms["z2_default_v2"].zxing == ZxingConfig()
+
+
+def test_repository_configs_do_not_rely_on_code_defaults():
+    """rungs、accept_formats 須明寫：程式預設改變時，舊實驗組的意義不得跟著改變。"""
+    for path in sorted(CONFIGS.glob("*.json")):
+        ladder = json.loads(path.read_text(encoding="utf-8")).get("ladder", {})
+        assert {"rungs", "accept_formats"} <= set(ladder), path.name
 
 
 # ---- 批次執行 ----
