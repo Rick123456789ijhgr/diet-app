@@ -15,6 +15,18 @@ export const routes = [
         path: 'm1/quality',
         lazy: async () => ({ Component: (await import('@/pages/QualityPage')).QualityPage }),
       },
+      {
+        path: 'm1/barcode',
+        lazy: async () => ({ Component: (await import('@/pages/BarcodePage')).BarcodePage }),
+      },
+      {
+        path: 'm1/label',
+        lazy: async () => ({ Component: (await import('@/pages/LabelPage')).LabelPage }),
+      },
+      {
+        path: 'm1/food',
+        lazy: async () => ({ Component: (await import('@/pages/FoodPage')).FoodPage }),
+      },
       { path: ':module/:tool?', element: <PlaceholderPage /> },
     ],
   },

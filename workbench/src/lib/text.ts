@@ -35,6 +35,23 @@ export const ERROR_TEXT: Record<string, string> = {
   INTERNAL: '伺服器內部錯誤',
 }
 
+/** 條碼逐步升級的各階（Rung）。 */
+export const RUNG_TEXT: Record<string, string> = {
+  raw: '原圖',
+  gray: '灰階',
+  binarize: '自適應二值化',
+  sharpen: '銳化',
+  denoise: '去雜訊',
+  deskew: '旋轉校正',
+  multiscale: '多尺度',
+}
+
+/** 營養標示表格框的定位方法。 */
+export const QUAD_METHOD_TEXT: Record<string, string> = {
+  contour: '輪廓法',
+  hough: '直線法',
+}
+
 /** 設定欄位分組（ParamInfo.group）。 */
 export const GROUP_TEXT: Record<string, string> = {
   blur: '模糊',
@@ -66,3 +83,4 @@ export const GROUP_TEXT: Record<string, string> = {
 export const warningText = (code: string) => WARNING_TEXT[code] ?? code
 export const errorText = (code: string) => ERROR_TEXT[code] ?? code
 export const groupText = (group: string) => GROUP_TEXT[group] ?? group
+export const rungText = (rung: string) => RUNG_TEXT[rung] ?? rung

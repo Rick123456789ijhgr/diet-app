@@ -46,12 +46,19 @@ src/
   components/
     layout/           外框（AppShell）、工具頁雙欄（Workspace）
     ui/primitives.tsx 基本元件（shadcn/ui 風格，以 Radix 為底）
+    ToolPanel.tsx     左側控制面板（影像／參數／匯出入分頁）
     ParamForm.tsx     依 Python param() 宣告自動產生的參數表單
+    LadderControls    條碼階梯的序列參數（嘗試順序、多尺度倍率、採用格式）
     ImageViewer.tsx   可縮放、拖曳、查座標的影像檢視，幾何結果以 SVG 疊圖
-    ImageSourcePanel  影像來源（合成／上傳）＋模擬退化
+    overlays.tsx      疊圖用的四邊形、矩形、橢圓（找到＝紫、真值＝靛藍虛線）
+    results.tsx       結果區：AnalysisFrame（載入、錯誤、淡化）、狀態列、指標卡、表格
+    ImageSourcePanel  影像來源（合成場景參數／上傳）＋模擬退化
     ConfigIO.tsx      匯出 JSON、Python 建構式、匯入
-  hooks/              useImagePipeline（來源 → 原圖 → 退化）、useDebounced 等
-  lib/                設定覆寫、縮放計算、中文文字對照（純函式，有單元測試）
+  hooks/
+    useImagePipeline  來源 → 暫存原圖 → 退化後影像
+    useAnalysis       分析查詢：防抖、取消舊請求、往返時間、出錯時保留上次結果
+    useRenderView     診斷檢視（邊緣、遮罩、各階影像等）
+  lib/                設定覆寫、合成場景、縮放、位元組與幾何顯示、中文文字對照（純函式，有單元測試）
   pages/              各頁
 scripts/dev.mjs       一次啟動 Python、Go、Vite
 e2e/                  Playwright 冒煙測試
@@ -60,7 +67,7 @@ e2e/                  Playwright 冒煙測試
 ## 新增一個頁面
 
 1. 在 `nav.ts` 把該工具的 `ready` 改為 `true`。
-2. 在 `pages/` 新增頁面，版面用 `Workspace`（左控制面板＋右結果），參數用 `ParamForm`，影像用 `useImagePipeline`＋`ImageViewer`。
+2. 在 `pages/` 新增頁面：`Workspace`＋`ToolPanel` 排版，`useImagePipeline` 取影像、`useAnalysis` 呼叫分析、`AnalysisFrame` 處理載入與錯誤，參數用 `ParamForm`，影像用 `ImageViewer`（幾何結果用 `overlays.tsx` 疊圖）。可參考 `QualityPage`、`LabelPage`。
 3. 在 `App.tsx` 註冊路由（`lazy` 載入）。
 4. 補 `src/test/server.ts` 的假回應與頁面測試，並在 `e2e/` 加一個冒煙測試。
 
