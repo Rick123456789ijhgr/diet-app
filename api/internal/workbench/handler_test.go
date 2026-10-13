@@ -398,7 +398,7 @@ func TestDecodeBarcode(t *testing.T) {
 }
 
 func TestInvoiceRawBytesAreBase64(t *testing.T) {
-	big5 := []byte{0xAF, 0xF9, 0xB8, 0xA6} // 「茶葉」的 Big5
+	big5 := []byte{0xAF, 0xF9, 0xB8, 0xAD} // 「茶葉」的 Big5
 	ai := &fakeAI{invoice: func(*dietaiv1.LocateInvoiceQrRequest) (*dietaiv1.LocateInvoiceQrResponse, error) {
 		return &dietaiv1.LocateInvoiceQrResponse{
 			Left:     &dietaiv1.DecodeHit{Format: "QR_CODE", Raw: big5, Corners: corners()},
@@ -411,7 +411,7 @@ func TestInvoiceRawBytesAreBase64(t *testing.T) {
 		t.Fatal(err)
 	}
 	left := raw["left"].(map[string]any)
-	if left["raw"] != "r/m4pg==" || raw["right"] != nil {
+	if left["raw"] != "r/m4rQ==" || raw["right"] != nil {
 		t.Errorf("left = %v right = %v", left, raw["right"])
 	}
 }
