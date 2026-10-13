@@ -139,6 +139,8 @@ jobs:
           input: proto
           push: false
           breaking: ${{ github.event_name == 'pull_request' }}
+          # workflow 只有讀取權限；結果看 job 紀錄即可，不在 PR 留言
+          pr_comment: false
           breaking_against: ${{ github.event.repository.clone_url }}#format=git,commit=${{ github.event.pull_request.base.sha }},subdir=proto
 
   openapi:
