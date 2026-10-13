@@ -24,6 +24,9 @@ gen/              oapi-codegen、sqlc、buf 產生的程式碼，不手改
 - 錯誤用 `fmt.Errorf("...: %w", err)` 包裝；日誌用 `log/slog`，並帶 `request_id`。
 - 金額與營養數值的計算要有表格驅動測試（table-driven tests）。
 - 新增資料表：先在 `db/migrations/` 新增 migration，再寫 sqlc 查詢，最後 `make gen`。
+- 呼叫 Python 一律經 `internal/platform/aiclient`（自動帶 `request_id`、預設逾時）；錯誤以 `errors.As(err, &*aiclient.Error)` 取得 Python 回傳的錯誤代碼（`Reason`）與欄位（`Field`）。
+- 由 OpenAPI 產生的路由採 strict server：handler 只做轉接，錯誤一律回傳 `error`，由統一的錯誤處理輸出 `{"code","message","field"}`（見 `internal/workbench/errors.go`）。
+- 開發工作台路由（`internal/workbench`）的開發工具只在 `WORKBENCH_DEV_TOOLS=1` 時啟用，線上部署不開。
 
 ## 指令
 

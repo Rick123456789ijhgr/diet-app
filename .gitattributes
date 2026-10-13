@@ -1,6 +1,8 @@
 # Windows 批次檔必須是 CRLF，否則 cmd 可能解析錯誤
 *.bat text eol=crlf
 *.cmd text eol=crlf
+# gofmt 要求 LF；Windows 的 core.autocrlf 會把 checkout 的檔案轉成 CRLF，使 make lint 失敗
+*.go text eol=lf
 # 產生的程式碼（make gen）：GitHub 的 PR 差異預設摺疊
 api/gen/** linguist-generated=true
 ai/src/dietai/v1/** linguist-generated=true
