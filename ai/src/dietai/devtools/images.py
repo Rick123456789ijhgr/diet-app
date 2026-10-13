@@ -19,6 +19,7 @@ __all__ = [
     "IMAGE_SUFFIXES",
     "SplitLockedError",
     "decode_image",
+    "encode_jpeg",
     "encode_png",
     "guard_path",
     "is_test_split",
@@ -74,4 +75,12 @@ def encode_png(img: Image) -> bytes:
     ok, buf = cv2.imencode(".png", img)
     if not ok:
         raise ValueError("PNG 編碼失敗")
+    return bytes(buf.tobytes())
+
+
+def encode_jpeg(img: Image, quality: int = 90) -> bytes:
+    """編碼為 JPEG 位元組，供工作台顯示（比 PNG 快且小；需要逐像素一致時改用 PNG）。"""
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        raise ValueError("JPEG 編碼失敗")
     return bytes(buf.tobytes())

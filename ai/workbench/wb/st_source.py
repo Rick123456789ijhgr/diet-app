@@ -7,6 +7,8 @@ from typing import Literal
 
 import streamlit as st
 
+from dietai.devtools import degradations
+from dietai.devtools.images import SplitLockedError, decode_image, load_image
 from dietai.preprocess.types import Ellipse, Image, Quad
 from dietai.synthetic import (
     ean13_scene,
@@ -15,8 +17,6 @@ from dietai.synthetic import (
     label_perspective_scene,
     label_scene,
 )
-from wb import degradations
-from wb.images import SplitLockedError, decode_image, load_image
 
 SOURCES = {
     "synthetic": ":material/auto_awesome: 合成",

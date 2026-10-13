@@ -1,4 +1,4 @@
-"""工作台的模擬退化設定，實際運算全部呼叫 ``dietai.synthetic``。"""
+"""模擬退化設定，實際運算全部呼叫 ``dietai.synthetic``。"""
 
 from __future__ import annotations
 
@@ -6,21 +6,104 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from dietai import synthetic
+from dietai.preprocess.config import param
 from dietai.preprocess.types import Image
 
 
 @dataclass(frozen=True)
 class Degradation:
-    """一組退化參數；全部為預設值時不改變影像。套用順序同欄位順序。"""
+    """一組退化參數；全部為預設值時不改變影像。套用順序同欄位順序。
 
-    rotate_deg: float = 0.0
-    scale: float = 1.0
-    blur_sigma: float = 0.0
-    gain: float = 1.0
-    gradient: float = 0.0
-    glare: float = 0.0
-    noise_std: float = 0.0
-    seed: int = 0
+    以 ``param()`` 宣告，工作台據此自動產生退化表單（分組：geometry、optics、lighting、random）。
+    """
+
+    rotate_deg: float = param(
+        0.0,
+        "旋轉",
+        "Rotate",
+        "旋轉角度（度），正值為逆時針。",
+        min=-90.0,
+        max=90.0,
+        step=1.0,
+        group="geometry",
+    )
+    scale: float = param(
+        1.0,
+        "縮小",
+        "Scale",
+        "縮小倍率；1 為不縮小。",
+        min=0.05,
+        max=1.0,
+        step=0.05,
+        group="geometry",
+    )
+    blur_sigma: float = param(
+        0.0,
+        "模糊 σ",
+        "Blur",
+        "高斯模糊的標準差（像素）。",
+        min=0.0,
+        max=20.0,
+        step=0.5,
+        group="optics",
+    )
+    gain: float = param(
+        1.0,
+        "亮度",
+        "Gain",
+        "整體亮度倍率；1 為不變。",
+        min=0.0,
+        max=3.0,
+        step=0.05,
+        group="lighting",
+    )
+    gradient: float = param(
+        0.0,
+        "梯度",
+        "Gradient",
+        "由左到右的亮度梯度強度。",
+        min=0.0,
+        max=1.0,
+        step=0.05,
+        group="lighting",
+    )
+    glare: float = param(
+        0.0,
+        "光斑",
+        "Glare",
+        "光斑半徑相對於短邊的比例。",
+        min=0.0,
+        max=0.6,
+        step=0.02,
+        group="lighting",
+    )
+    noise_std: float = param(
+        0.0,
+        "雜訊",
+        "Noise",
+        "高斯雜訊的標準差（灰階值）。",
+        min=0.0,
+        max=80.0,
+        step=1.0,
+        group="optics",
+    )
+    seed: int = param(
+        0,
+        "隨機種子",
+        "Seed",
+        "光斑位置與雜訊的隨機種子。",
+        min=0,
+        max=10_000,
+        step=1,
+        group="random",
+    )
+
+    def __post_init__(self) -> None:
+        if not 0 < self.scale <= 1:
+            raise ValueError(f"scale 必須介於 0（不含）與 1，收到 {self.scale}")
+        for name in ("blur_sigma", "gain", "gradient", "glare", "noise_std", "seed"):
+            if getattr(self, name) < 0:
+                raise ValueError(f"{name} 不得為負，收到 {getattr(self, name)}")
 
     def is_identity(self) -> bool:
         return self.active_count() == 0

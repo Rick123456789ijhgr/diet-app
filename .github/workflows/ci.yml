@@ -96,8 +96,9 @@ jobs:
           cache-dependency-path: ai/pyproject.toml
       # pyzbar（條碼解碼對照組）需要系統的 zbar 函式庫；Windows wheel 已內含
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libzbar0
-      # preprocess 測試需要 OpenCV（vision），工作台測試需要 Streamlit（workbench）
-      - run: pip install -e ".[dev,vision,workbench]"
+      # preprocess 測試需要 OpenCV（vision），工作台測試需要 Streamlit（workbench），
+      # gRPC 服務測試需要 grpc
+      - run: pip install -e ".[dev,vision,workbench,grpc]"
       # research/ 只呼叫 dietai，一併檢查（設定沿用 ai/pyproject.toml，見 research/ruff.toml）
       - run: ruff check . ../research
       - run: ruff format --check . ../research

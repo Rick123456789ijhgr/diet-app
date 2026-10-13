@@ -2,9 +2,9 @@ import time
 
 import streamlit as st
 
+from dietai.devtools.images import decode_image
 from dietai.preprocess import FoodConfig, detect_plate_ellipse, dish_foreground, preprocess_food
 from wb import viz
-from wb.images import decode_image
 from wb.st_config import config_editor, config_io
 from wb.st_layout import (
     card,

@@ -9,48 +9,25 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
+from dietai.devtools.views import gray_histogram_counts
 from dietai.preprocess import (
     DecodeHit,
-    QualityConfig,
     QualityReport,
     RungAttempt,
     resize_for_vlm,
 )
-from dietai.preprocess.ops import to_gray
-from dietai.preprocess.quality import exposure_masks, laplacian_map
 from dietai.preprocess.types import Box, Ellipse, Image, Quad
 
 # BGR
-DARK_COLOR = (255, 80, 0)
-BRIGHT_COLOR = (0, 0, 255)
 HIT_COLORS = ((211, 38, 192), (230, 120, 0), (212, 182, 6))  # 紫、藍、青
 FOUND_COLOR = (211, 38, 192)  # 紫：程式找到的結果
 TRUTH_COLOR = (230, 120, 0)  # 藍：合成影像的真值
 GLARE_COLOR = (0, 0, 255)
 
 
-def laplacian_heatmap(img: Image, cfg: QualityConfig) -> Image:
-    """拉普拉斯響應強度熱度圖（BGR）。以第 99 百分位正規化，避免少數強邊緣壓暗整張圖。"""
-    mag = np.abs(laplacian_map(img, cfg))
-    top = float(np.percentile(mag, 99)) or 1.0
-    norm = np.clip(mag / top * 255, 0, 255).astype(np.uint8)
-    return np.asarray(cv2.applyColorMap(norm, cv2.COLORMAP_INFERNO), dtype=np.uint8)
-
-
-def exposure_overlay(img: Image, cfg: QualityConfig, alpha: float = 0.6) -> Image:
-    """在原圖上以藍色標出過暗、紅色標出過亮像素（BGR）。"""
-    dark, bright = exposure_masks(img, cfg)
-    base = img if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    out = base.astype(np.float32)
-    for mask, color in ((dark, DARK_COLOR), (bright, BRIGHT_COLOR)):
-        out[mask] = out[mask] * (1 - alpha) + np.array(color, dtype=np.float32) * alpha
-    return out.astype(np.uint8)
-
-
 def gray_histogram(img: Image) -> list[dict[str, int]]:
-    """灰階直方圖（0–255 每一階的像素數）。"""
-    counts = np.bincount(to_gray(img).ravel(), minlength=256)
-    return [{"灰階": i, "像素數": int(c)} for i, c in enumerate(counts)]
+    """灰階直方圖（0–255 每一階的像素數），欄位名稱供 Altair 使用。"""
+    return [{"灰階": i, "像素數": c} for i, c in enumerate(gray_histogram_counts(img))]
 
 
 def report_metrics(report: QualityReport) -> dict[str, Any]:

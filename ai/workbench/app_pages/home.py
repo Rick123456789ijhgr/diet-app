@@ -2,7 +2,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from wb.configs import calibration_rows
+from dietai.devtools.configs import calibration_rows
 from wb.nav import MODULES
 from wb.st_layout import card, metric_row, page_header, section
 

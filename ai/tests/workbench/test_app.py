@@ -9,9 +9,9 @@ pytest.importorskip("streamlit")
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
+from dietai.devtools.images import encode_png  # noqa: E402
 from dietai.preprocess import DEFAULT_RUNGS, RETAIL_FORMATS, Rung  # noqa: E402
 from dietai.synthetic import label_scene  # noqa: E402
-from wb.images import encode_png  # noqa: E402
 
 APP = str(Path(__file__).resolve().parents[2] / "workbench" / "streamlit_app.py")
 

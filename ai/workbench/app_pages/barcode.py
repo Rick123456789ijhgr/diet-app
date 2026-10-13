@@ -4,6 +4,7 @@ from itertools import islice
 
 import streamlit as st
 
+from dietai.devtools.images import encode_png
 from dietai.preprocess import (
     InvoiceQrConfig,
     LadderConfig,
@@ -13,7 +14,6 @@ from dietai.preprocess import (
     locate_invoice_qrs,
 )
 from wb import viz
-from wb.images import encode_png
 from wb.st_config import config_io
 from wb.st_ladder import engine_control, ladder_controls, ladder_params, make_decoder
 from wb.st_layout import (

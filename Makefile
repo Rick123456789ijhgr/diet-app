@@ -28,10 +28,10 @@ up:
 down:
 	docker compose -f deploy/docker-compose.yml --env-file .env down
 
-# 建立 ai/.venv 並安裝開發所需套件（含工作台）
+# 建立 ai/.venv 並安裝開發所需套件（含工作台與 gRPC 服務）
 setup:
 	cd ai && python -m venv .venv
-	cd ai && "$(VENV_BIN)/python" -m pip install -e ".[dev,vision,workbench]"
+	cd ai && "$(VENV_BIN)/python" -m pip install -e ".[dev,vision,workbench,grpc]"
 
 test: test-api test-ai
 

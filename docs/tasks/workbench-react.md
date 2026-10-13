@@ -197,7 +197,7 @@ message JsonResponse { string json = 1; }
 
 **審核重點**
 - 讀取本機路徑的 RPC（`RunBatch`、E1）一律經 `dietai.evaluation`／`guard_path` 的測試集鎖定，拒絕 `splits/test`。
-- 暫存影像放在 Python 記憶體（LRU，上限約 64 張）；重啟就會清空，前端遇到「找不到 image_id」時自動重新上傳。
+- 暫存影像放在 Python 記憶體（LRU，上限 64 張且合計 1 GiB；1200 萬像素的照片解碼後約 36 MB）；重啟就會清空，前端遇到「找不到 image_id」時自動重新上傳。
 
 ### 2.3 `openapi/workbench.yaml`（React → Go）
 

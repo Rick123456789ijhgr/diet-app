@@ -6,10 +6,11 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from dietai.devtools import views
+from dietai.devtools.images import SplitLockedError, list_images, load_image
 from dietai.preprocess import QualityConfig, check_quality
 from dietai.preprocess.quality import QUALITY_WARNINGS
 from wb import viz
-from wb.images import SplitLockedError, list_images, load_image
 from wb.st_config import config_editor, config_io
 from wb.st_layout import card, empty_state, metric_row, page_header, panel_tabs, workspace
 from wb.text import warning_label
@@ -199,13 +200,13 @@ with results:
                 a, b, c = st.columns(3)
                 a.image(img, channels="BGR", caption="原圖", alt="選取的影像")
                 b.image(
-                    viz.laplacian_heatmap(img, cfg),
+                    views.laplacian_heatmap(img, cfg),
                     channels="BGR",
                     caption="邊緣響應",
                     alt="拉普拉斯響應熱度圖",
                 )
                 c.image(
-                    viz.exposure_overlay(img, cfg),
+                    views.exposure_overlay(img, cfg),
                     channels="BGR",
                     caption="曝光遮罩",
                     alt="過暗與過亮像素遮罩",
