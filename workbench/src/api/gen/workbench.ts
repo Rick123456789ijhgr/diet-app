@@ -377,8 +377,11 @@ export interface components {
             label: string;
             label_en: string;
             help: string;
+            /** Format: double */
             min?: number;
+            /** Format: double */
             max?: number;
+            /** Format: double */
             step?: number;
             /** @description true 表示數值待校準 */
             calibrate: boolean;
@@ -427,13 +430,16 @@ export interface components {
         };
         Step: {
             name: string;
+            /** Format: double */
             elapsed_ms: number;
             params: {
                 [key: string]: unknown;
             };
         };
         Point: {
+            /** Format: double */
             x: number;
+            /** Format: double */
             y: number;
         };
         Box: {
@@ -443,10 +449,15 @@ export interface components {
             h: number;
         };
         Ellipse: {
+            /** Format: double */
             cx: number;
+            /** Format: double */
             cy: number;
+            /** Format: double */
             major: number;
+            /** Format: double */
             minor: number;
+            /** Format: double */
             angle: number;
         };
         ImageOutput: {
@@ -459,9 +470,13 @@ export interface components {
         };
         QualityResult: {
             passed: boolean;
+            /** Format: double */
             blur_score: number;
+            /** Format: double */
             mean_brightness: number;
+            /** Format: double */
             dark_ratio: number;
+            /** Format: double */
             bright_ratio: number;
             resolution_ok: boolean;
             /** @description PreprocessWarning 代碼，例如 TOO_BLURRY */
@@ -485,6 +500,7 @@ export interface components {
             params: {
                 [key: string]: unknown;
             };
+            /** Format: double */
             elapsed_ms: number;
             hits: components["schemas"]["DecodeHit"][];
             rejected: components["schemas"]["DecodeHit"][];
@@ -513,7 +529,10 @@ export interface components {
             quad: components["schemas"]["Point"][];
             /** @description contour／hough */
             quad_method?: string;
-            /** @description 光斑步驟未啟用時為 -1 */
+            /**
+             * Format: double
+             * @description 光斑步驟未啟用時為 -1
+             */
             glare_ratio: number;
             warnings: string[];
             steps: components["schemas"]["Step"][];
@@ -522,6 +541,7 @@ export interface components {
             image: components["schemas"]["ImageOutput"];
             /** Format: int64 */
             num_bytes: number;
+            /** Format: double */
             scale: number;
         };
         FoodResult: {

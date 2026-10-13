@@ -624,6 +624,7 @@ components:
         default:
           oneOf:
             - type: number
+              format: double
             - type: boolean
         label:
           type: string
@@ -634,10 +635,13 @@ components:
           type: string
         min:
           type: number
+          format: double
         max:
           type: number
+          format: double
         step:
           type: number
+          format: double
         calibrate:
           type: boolean
           description: true 表示數值待校準
@@ -724,6 +728,7 @@ components:
           type: string
         elapsed_ms:
           type: number
+          format: double
         params:
           type: object
           additionalProperties: true
@@ -733,8 +738,10 @@ components:
       properties:
         x:
           type: number
+          format: double
         y:
           type: number
+          format: double
     Box:
       type: object
       required: [x, y, w, h]
@@ -753,14 +760,19 @@ components:
       properties:
         cx:
           type: number
+          format: double
         cy:
           type: number
+          format: double
         major:
           type: number
+          format: double
         minor:
           type: number
+          format: double
         angle:
           type: number
+          format: double
     ImageOutput:
       type: object
       required: [artifact_id, width, height]
@@ -791,12 +803,16 @@ components:
           type: boolean
         blur_score:
           type: number
+          format: double
         mean_brightness:
           type: number
+          format: double
         dark_ratio:
           type: number
+          format: double
         bright_ratio:
           type: number
+          format: double
         resolution_ok:
           type: boolean
         warnings:
@@ -838,6 +854,7 @@ components:
           additionalProperties: true
         elapsed_ms:
           type: number
+          format: double
         hits:
           type: array
           items:
@@ -911,6 +928,7 @@ components:
           description: contour／hough
         glare_ratio:
           type: number
+          format: double
           description: 光斑步驟未啟用時為 -1
         warnings:
           type: array
@@ -931,6 +949,7 @@ components:
           format: int64
         scale:
           type: number
+          format: double
     FoodResult:
       type: object
       required:

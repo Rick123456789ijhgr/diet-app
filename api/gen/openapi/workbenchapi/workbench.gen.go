@@ -176,15 +176,15 @@ type ConfigField struct {
 	// Label 中文名稱
 	Label   string          `json:"label"`
 	LabelEn string          `json:"label_en"`
-	Max     *float32        `json:"max,omitempty"`
-	Min     *float32        `json:"min,omitempty"`
+	Max     *float64        `json:"max,omitempty"`
+	Min     *float64        `json:"min,omitempty"`
 	Name    string          `json:"name"`
-	Step    *float32        `json:"step,omitempty"`
+	Step    *float64        `json:"step,omitempty"`
 	Type    ConfigFieldType `json:"type"`
 }
 
 // ConfigFieldDefault0 defines model for ConfigField.Default.0.
-type ConfigFieldDefault0 = float32
+type ConfigFieldDefault0 = float64
 
 // ConfigFieldDefault1 defines model for ConfigField.Default.1.
 type ConfigFieldDefault1 = bool
@@ -235,11 +235,11 @@ type DegradeRequest struct {
 
 // Ellipse defines model for Ellipse.
 type Ellipse struct {
-	Angle float32 `json:"angle"`
-	Cx    float32 `json:"cx"`
-	Cy    float32 `json:"cy"`
-	Major float32 `json:"major"`
-	Minor float32 `json:"minor"`
+	Angle float64 `json:"angle"`
+	Cx    float64 `json:"cx"`
+	Cy    float64 `json:"cy"`
+	Major float64 `json:"major"`
+	Minor float64 `json:"minor"`
 }
 
 // Error defines model for Error.
@@ -300,7 +300,7 @@ type InvoiceQrResult struct {
 // LabelResult defines model for LabelResult.
 type LabelResult struct {
 	// GlareRatio 光斑步驟未啟用時為 -1
-	GlareRatio float32     `json:"glare_ratio"`
+	GlareRatio float64     `json:"glare_ratio"`
 	Image      ImageOutput `json:"image"`
 
 	// Quad 原圖上的表格四角（左上起順時針）；找不到則為空
@@ -331,16 +331,16 @@ type LoginRequest struct {
 
 // Point defines model for Point.
 type Point struct {
-	X float32 `json:"x"`
-	Y float32 `json:"y"`
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 // QualityResult defines model for QualityResult.
 type QualityResult struct {
-	BlurScore      float32 `json:"blur_score"`
-	BrightRatio    float32 `json:"bright_ratio"`
-	DarkRatio      float32 `json:"dark_ratio"`
-	MeanBrightness float32 `json:"mean_brightness"`
+	BlurScore      float64 `json:"blur_score"`
+	BrightRatio    float64 `json:"bright_ratio"`
+	DarkRatio      float64 `json:"dark_ratio"`
+	MeanBrightness float64 `json:"mean_brightness"`
 	Passed         bool    `json:"passed"`
 	ResolutionOk   bool    `json:"resolution_ok"`
 	Steps          []Step  `json:"steps"`
@@ -369,7 +369,7 @@ type RenderViewResult struct {
 
 // RungAttempt defines model for RungAttempt.
 type RungAttempt struct {
-	ElapsedMs float32                `json:"elapsed_ms"`
+	ElapsedMs float64                `json:"elapsed_ms"`
 	Hits      []DecodeHit            `json:"hits"`
 	Params    map[string]interface{} `json:"params"`
 	Rejected  []DecodeHit            `json:"rejected"`
@@ -388,7 +388,7 @@ type StartE1RunRequest struct {
 
 // Step defines model for Step.
 type Step struct {
-	ElapsedMs float32                `json:"elapsed_ms"`
+	ElapsedMs float64                `json:"elapsed_ms"`
 	Name      string                 `json:"name"`
 	Params    map[string]interface{} `json:"params"`
 }
@@ -423,7 +423,7 @@ type User struct {
 type VlmImage struct {
 	Image    ImageOutput `json:"image"`
 	NumBytes int64       `json:"num_bytes"`
-	Scale    float32     `json:"scale"`
+	Scale    float64     `json:"scale"`
 }
 
 // E1Root defines model for E1Root.
