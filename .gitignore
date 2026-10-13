@@ -19,7 +19,7 @@ research/data/
 mlruns/
 # 實驗執行結果與合成資料（可由設定檔與種子重現；正式結論寫進各實驗 README）
 research/experiments/*/runs/
-research/experiments/*/synthetic/
+research/experiments/*/synthetic*/
 .ipynb_checkpoints/
 # LLM 回應快取
 .cache/

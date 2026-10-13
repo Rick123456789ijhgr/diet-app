@@ -271,6 +271,9 @@ def run_experiment(
                                     "hits": len(a.hits),
                                     "texts": "|".join(h.text for h in a.hits),
                                     "rejected": len(a.rejected),
+                                    "rejected_texts": "|".join(
+                                        f"{h.format.value}:{h.text}" for h in a.rejected
+                                    ),
                                     "skipped": int(a.skipped),
                                 }
                             )
@@ -318,6 +321,7 @@ RESULT_COLUMNS = (
     "attempts",
     "elapsed_ms",
     "decoded",
+    "formats",
     "rejected",
     "error",
 )
@@ -331,6 +335,7 @@ ATTEMPT_COLUMNS = (
     "hits",
     "texts",
     "rejected",
+    "rejected_texts",
     "skipped",
 )
 
@@ -343,6 +348,7 @@ def _result_fields(outcome: Outcome, res: LadderResult) -> dict[str, Any]:
         "attempts": len(res.attempts),
         "elapsed_ms": f"{sum(a.elapsed_ms for a in res.attempts):.3f}",
         "decoded": "|".join(h.text for h in res.hits),
+        "formats": "|".join(h.format.value for h in res.hits),
         "rejected": sum(len(a.rejected) for a in res.attempts),
         "error": "",
     }

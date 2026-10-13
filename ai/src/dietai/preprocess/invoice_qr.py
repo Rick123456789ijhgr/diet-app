@@ -6,13 +6,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from dietai.preprocess import ops
 from dietai.preprocess.barcode import RungAttempt, attempts_to_steps, iter_attempts
 from dietai.preprocess.config import InvoiceQrConfig
-from dietai.preprocess.decoders import CodeFormat, DecodeHit, Decoder
-from dietai.preprocess.types import Image, PreprocessWarning, StepRecord
+from dietai.preprocess.decoders import DecodeHit, Decoder
+from dietai.preprocess.types import CodeFormat, Image, PreprocessWarning, StepRecord
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,9 @@ def locate_invoice_qrs(
     ops.validate_image(img)
     found: dict[bytes, DecodeHit] = {}
     attempts: list[RungAttempt] = []
-    for _, attempt in iter_attempts(img, decoder, cfg.ladder):
+    # 格式限制是給商品條碼的；發票只取 QR（下方過濾），不受共用設定影響
+    ladder = replace(cfg.ladder, accept_formats=())
+    for _, attempt in iter_attempts(img, decoder, ladder):
         attempts.append(attempt)
         for hit in attempt.hits:
             if hit.format is CodeFormat.QR_CODE:

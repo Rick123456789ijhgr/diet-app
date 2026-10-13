@@ -1,0 +1,22 @@
+{
+  "name": "z2_default_v2",
+  "description": "目前的程式預設（2026-10-12 起）：sharpen 移到最後＋只收 EAN-13／EAN-8／UPC-A，zxing-cpp 內建嘗試全開",
+  "decoder": "zxing",
+  "zxing": {},
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "denoise",
+      "deskew",
+      "multiscale",
+      "sharpen"
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

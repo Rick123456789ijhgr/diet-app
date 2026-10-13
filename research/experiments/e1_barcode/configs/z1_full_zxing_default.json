@@ -1,7 +1,18 @@
 {
   "name": "z1_full_zxing_default",
-  "description": "對照：完整階梯＋zxing-cpp 內建嘗試全開（目前的上線預設）",
+  "description": "對照：完整階梯（Phase 2 順序）＋zxing-cpp 內建嘗試全開、不限格式（2026-10-12 前的程式預設）",
   "decoder": "zxing",
   "zxing": {},
-  "ladder": {}
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "multiscale"
+    ],
+    "accept_formats": []
+  }
 }

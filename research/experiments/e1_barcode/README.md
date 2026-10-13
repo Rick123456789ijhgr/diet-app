@@ -49,6 +49,8 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 每個 JSON 檔是一個實驗組：`decoder`（`zxing`／`pyzbar`）、`zxing`（`ZxingConfig` 欄位）、
 `ladder`（`LadderConfig` 欄位），省略的欄位用預設值。也接受工作台匯出的 `{"class": ..., "values": ...}`。
 **改參數就新增檔案，不覆寫舊的**（research/CLAUDE.md）。
+每個檔案都必須明寫 `ladder.rungs` 與 `ladder.accept_formats`（測試會檢查），程式預設改變時舊實驗組的意義才不會跟著變。
+`a0`～`a6`、`z0`、`z1`、`p*` 都釘在 Phase 2 的階梯順序、不限格式。
 
 | 設定 | 階梯 | zxing-cpp 內建嘗試 | 用途 |
 | --- | --- | --- | --- |
@@ -63,6 +65,13 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 | `z1_full_zxing_default` | 完整階梯 | 開 | 對照：目前的上線預設 |
 | `p0_raw_pyzbar` | raw | — | 解碼器對照 |
 | `p1_full_pyzbar` | 完整階梯 | — | 解碼器對照 |
+| `m0_sharpen_last` | 完整階梯，sharpen 移到最後 | 關 | 誤讀對策 |
+| `m1_agree2` | 完整階梯，`min_agree=2`（兩次嘗試一致才採用） | 關 | 誤讀對策 |
+| `m2_agree2_zxing_default` | 同 z1，加 `min_agree=2` | 開 | 誤讀對策 |
+| `m3_retail_formats` | 完整階梯，`accept_formats` 只收 EAN-13／EAN-8／UPC-A | 關 | 誤讀對策 |
+| `m4_retail_sharpen_last` | m3＋sharpen 移到最後 | 關 | 誤讀對策 |
+| `m5_retail_zxing_default` | 同 z1，加格式限制 | 開 | 誤讀對策 |
+| `z2_default_v2` | sharpen 最後＋只收零售格式 | 開 | 目前的程式預設（2026-10-12 起） |
 
 消融組關閉 zxing-cpp 內建的旋轉／縮小／反色，才量得到階梯本身的貢獻（模組一 Phase 2 決議）。
 
@@ -90,6 +99,25 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 `a6_full` 87.5%；`a1_gray` 與 `a0_raw` 完全相同（zxing-cpp 內部本來就轉灰階）。
 另觀察到一次**檢查碼正確的誤讀**：縮小到 0.35 倍的條碼經 `sharpen` 後解成另一個合法的 EAN-13，
 所有含 sharpen 的實驗組都繼承了這個誤讀。真實照片中是否發生、頻率多高，是 E1 要回答的問題之一。
+
+### 誤讀對策比較（8 個條碼，128 張正樣本；仍是合成資料）
+
+| 實驗組 | 成功率 | 誤讀 | 耗時中位數 |
+| --- | ---: | ---: | ---: |
+| `a6_full`（目前預設階梯） | 84.4% | 6 | 9.5 ms |
+| `m0_sharpen_last` | 85.2% | 5 | 9.6 ms |
+| `m1_agree2` | 56.2% | 4 | 25.2 ms |
+| `m3_retail_formats` | **87.5%** | **2** | 10.1 ms |
+| `m4_retail_sharpen_last` | **88.3%** | **1** | 9.9 ms |
+
+- 誤讀有兩類：① 斜拍 30°／45° 的 EAN-13 被斜向掃描線部分讀成**合法的 UPC-E**（連 `a0_raw` 與上線預設 `z1` 都會），
+  `verify_ean13` 只檢查 EAN-13 所以擋不住；② `sharpen` 把縮小的條碼讀成另一個檢查碼正確的 EAN-13。
+- **格式限制**（`accept_formats`）完全擋下第 ① 類且沒有代價：UPC-E 被拒後階梯繼續，`deskew` 解出正確的 EAN-13，成功率反而上升。
+- **兩次一致**（`min_agree=2`）代價過高：raw 與 gray 對 zxing-cpp 幾乎是同一張圖，會「一致地」誤讀，擋不住第 ① 類；
+  而旋轉、暗光、梯度只有單一階救得回，成功率掉 28 個百分點。
+- 第 ② 類仍剩 1 次（該影像只有 sharpen 讀得出來）。
+- 2026-10-12 決定：程式預設改為 `m4` 的設定（sharpen 最後＋只收零售格式），`min_agree` 維持 1；對應實驗組為
+  `z2_default_v2`（合成資料 88.3%、誤讀 1，舊預設 `z1` 為 84.4%、誤讀 6）。真實照片結果出來後複核。
 
 ## 結論
 

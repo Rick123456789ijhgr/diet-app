@@ -6,6 +6,7 @@
   "ladder": {
     "rungs": [
       "raw"
-    ]
+    ],
+    "accept_formats": []
   }
 }

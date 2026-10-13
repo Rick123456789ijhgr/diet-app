@@ -1,0 +1,26 @@
+{
+  "name": "m3_retail_formats",
+  "description": "誤讀對策：完整階梯，只採用台灣零售常見格式 EAN-13／EAN-8／UPC-A（擋下斜拍 EAN-13 被部分掃描成的 UPC-E；zxing-cpp 內建嘗試關閉，與 a6_full 比較）",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "multiscale"
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

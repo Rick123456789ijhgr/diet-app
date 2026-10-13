@@ -5,8 +5,16 @@ import streamlit as st
 from dietai.preprocess import FoodConfig, detect_plate_ellipse, dish_foreground, preprocess_food
 from wb import viz
 from wb.images import decode_image
-from wb.st_config import config_sidebar
-from wb.st_layout import empty_state, page_header, section
+from wb.st_config import config_editor, config_io
+from wb.st_layout import (
+    card,
+    empty_state,
+    metric_row,
+    page_header,
+    panel_tabs,
+    status_line,
+    workspace,
+)
 from wb.st_source import image_source
 from wb.text import warning_label
 
@@ -17,28 +25,34 @@ VIEWS = {
     "plates": ":material/radio_button_unchecked: 盤緣",
     "crops": ":material/grid_view: 各道菜",
     "vlm": ":material/compress: VLM 輸入",
+    "steps": ":material/list_alt: 步驟",
 }
 
 page_header(
     "食物照片",
-    "Food photo",
-    "切出各道菜、偵測盤緣，並把整張與各裁切縮放壓縮成送給 VLM 的大小。左側欄可調門檻與 VLM 尺寸。",
+    "切出各道菜、偵測盤緣，並把整張與各裁切縮放壓縮成送給 VLM 的大小。",
     ":material/restaurant:",
+    phase=4,
 )
-cfg = config_sidebar(FoodConfig, "food")
+panel, results = workspace()
 
-inputs, results = st.columns([2, 3], gap="large")
-
-with inputs, st.container(border=True):
-    section("輸入影像", "Input", ":material/input:")
-    source = image_source("food", scene="food")
+with panel:
+    tab_img, tab_cfg, tab_io = panel_tabs(
+        ":material/image: 影像", ":material/tune: 參數", ":material/swap_vert: 匯出入"
+    )
+    with tab_img:
+        source = image_source("food", scene="food")
+    with tab_cfg:
+        cfg = config_editor(FoodConfig, "food")
+    with tab_io:
+        config_io(cfg, FoodConfig, "food")
 
 with results:
     if cfg is None:
-        empty_state("左側參數不合法，請修正後再試。", ":material/error:")
+        empty_state("參數不合法，請在左側「參數」修正後再試。", ":material/error:")
         st.stop()
     if source is None:
-        empty_state("在左側選擇影像來源。", ":material/image:")
+        empty_state("在左側「影像」選擇影像來源。", ":material/image:")
         st.stop()
 
     img = source.image
@@ -49,26 +63,23 @@ with results:
     vh, vw = result.whole.image.shape[:2]
     truth = source.truth_plates
 
-    with st.container(border=True):
-        with st.container(horizontal=True, vertical_alignment="center"):
-            if not result.warnings:
-                st.markdown("#### :green[:material/check_circle:] 處理完成 · Done")
-            else:
-                st.markdown("#### :orange[:material/warning:] 有警告 · Warnings")
-            st.space("stretch")
-            for code in result.warnings:
-                st.badge(warning_label(code), color="orange", icon=":material/report:")
-        st.caption(
-            f"{source.description}　·　輸入 {w}×{h} px → VLM {vw}×{vh} px"
-            f"　·　處理耗時 {elapsed_ms:.1f} ms"
-        )
+    slot = status_line(
+        not result.warnings,
+        "處理完成" if not result.warnings else "有警告",
+        f"{source.description}　·　輸入 {w}×{h} px → VLM {vw}×{vh} px"
+        f"　·　處理耗時 {elapsed_ms:.1f} ms",
+        warn=True,
+    )
+    with slot:
+        for code in result.warnings:
+            st.badge(warning_label(code), color="orange", icon=":material/report:")
 
-    col_dish, col_plate, col_bytes = st.columns(3, gap="small")
+    metrics = metric_row()
     if result.dishes is None:
-        col_dish.metric("菜數 · Dishes", "未啟用", border=True)
+        metrics.metric("菜數", "未啟用", border=True)
     else:
-        col_dish.metric(
-            "菜數 · Dishes",
+        metrics.metric(
+            "菜數",
             len(result.dishes),
             delta=f"{len(result.dishes) - len(truth):+d} 相對真值" if truth is not None else None,
             delta_color="off",
@@ -76,17 +87,17 @@ with results:
             help="切出的框數；合成影像會與真實盤數比較。相鄰或接觸的盤子會併成一個框。",
         )
     if result.plates is None:
-        col_plate.metric(
-            "盤緣 · Plates",
+        metrics.metric(
+            "盤緣",
             "未啟用",
             border=True,
-            help="在左側欄「步驟開關」開啟盤緣橢圓（選做）。",
+            help="在左側「參數 → 步驟開關」開啟盤緣橢圓（選做）。",
         )
     else:
-        col_plate.metric("盤緣 · Plates", len(result.plates), border=True)
+        metrics.metric("盤緣", len(result.plates), border=True)
     total = result.whole.num_bytes + sum(c.num_bytes for c in result.crops)
-    col_bytes.metric(
-        "VLM 大小 · Payload",
+    metrics.metric(
+        "VLM 大小",
         f"{total / 1024:.0f} KB",
         border=True,
         help=f"整張與 {len(result.crops)} 張裁切的 JPEG 總大小"
@@ -94,7 +105,7 @@ with results:
     )
 
     view = st.segmented_control(
-        "檢視 · View",
+        "檢視",
         list(VIEWS),
         format_func=VIEWS.__getitem__,
         default="boxes",
@@ -102,8 +113,10 @@ with results:
         label_visibility="collapsed",
         width="stretch",
     )
-    with st.container(border=True):
-        if view == "mask":
+    with card():
+        if view == "steps":
+            st.dataframe(viz.step_rows(result.steps), hide_index=True, alt="各步驟的耗時與參數")
+        elif view == "mask":
             mask = dish_foreground(img, cfg)
             st.image(viz.mask_on_small(img, mask), channels="BGR", alt="切菜用的前景遮罩")
             st.caption(
@@ -118,7 +131,7 @@ with results:
             ellipses += [(e, viz.FOUND_COLOR) for e in plates]
             st.image(viz.draw_ellipses(img, ellipses), channels="BGR", alt="盤緣橢圓")
             note = "" if cfg.enable_plate else "（步驟未啟用，此處僅試算）"
-            st.caption(f":green[■] 找到 {len(plates)} 個　:blue[■] 真實盤緣（合成影像）{note}")
+            st.caption(f":violet[■] 找到 {len(plates)} 個　:blue[■] 真實盤緣（合成影像）{note}")
             if plates:
                 st.dataframe(
                     [
@@ -154,7 +167,7 @@ with results:
                 f"解碼後的 JPEG：{vw}×{vh} px、{result.whole.num_bytes / 1024:.0f} KB"
                 f"（縮放 ×{result.whole.scale:.3f}）。"
             )
-            st.markdown("**尺寸試算 · Size preview**")
+            st.markdown("**尺寸試算**")
             st.dataframe(
                 viz.vlm_size_rows(img, VLM_SIDES, cfg.vlm_jpeg_quality),
                 hide_index=True,
@@ -165,7 +178,4 @@ with results:
             boxes = [(e.bbox(), viz.TRUTH_COLOR, "") for e in truth or ()]
             boxes += [(b, viz.FOUND_COLOR, f"#{i + 1}") for i, b in enumerate(result.dishes or ())]
             st.image(viz.draw_boxes(img, boxes), channels="BGR", alt="切出的各道菜")
-            st.caption(":green[■] 切出的框（已外擴）　:blue[■] 真實盤子的外接框（合成影像）")
-
-    with st.expander("步驟紀錄 · Steps", icon=":material/list_alt:"):
-        st.dataframe(viz.step_rows(result.steps), hide_index=True, alt="各步驟的耗時與參數")
+            st.caption(":violet[■] 切出的框（已外擴）　:blue[■] 真實盤子的外接框（合成影像）")

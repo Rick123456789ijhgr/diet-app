@@ -1,0 +1,19 @@
+{
+  "name": "m2_agree2_zxing_default",
+  "description": "誤讀對策：上線預設（z1）加上兩次一致才採用",
+  "decoder": "zxing",
+  "zxing": {},
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "multiscale"
+    ],
+    "accept_formats": [],
+    "min_agree": 2
+  }
+}

@@ -9,7 +9,7 @@ pytest.importorskip("streamlit")
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
-from dietai.preprocess import Rung  # noqa: E402
+from dietai.preprocess import DEFAULT_RUNGS, RETAIL_FORMATS, Rung  # noqa: E402
 from dietai.synthetic import label_scene  # noqa: E402
 from wb.images import encode_png  # noqa: E402
 
@@ -51,7 +51,7 @@ def test_every_page_renders(page):
 def test_home_lists_thresholds():
     at = _app()
     assert len(at.dataframe) == 1
-    assert len(at.button) >= 4  # 快速開始卡片
+    assert not at.exception
 
 
 def test_quality_page_with_synthetic_image():
@@ -160,8 +160,9 @@ def test_ladder_reset_restores_rungs_and_scales():
     at.multiselect(key="barcode.scales").set_value([3.0]).run()
     at.button(key="cfg.ladder.reset").click().run()
     assert not at.exception, at.exception
-    assert at.multiselect(key="barcode.rungs").value == list(Rung)
+    assert at.multiselect(key="barcode.rungs").value == list(DEFAULT_RUNGS)
     assert at.multiselect(key="barcode.scales").value == [2.0, 0.5]
+    assert at.multiselect(key="barcode.formats").value == list(RETAIL_FORMATS)
 
 
 def test_ladder_json_import_restores_rungs_and_scales():
