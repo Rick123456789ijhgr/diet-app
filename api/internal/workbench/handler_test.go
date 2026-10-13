@@ -27,6 +27,10 @@ type fakeAI struct {
 	degrade     func(*dietaiv1.DegradeRequest) (*dietaiv1.DegradeResponse, error)
 	renderView  func(*dietaiv1.RenderViewRequest) (*dietaiv1.RenderViewResponse, error)
 	artifact    func(*dietaiv1.GetArtifactRequest) (*dietaiv1.GetArtifactResponse, error)
+	barcode     func(*dietaiv1.DecodeBarcodeRequest) (*dietaiv1.DecodeBarcodeResponse, error)
+	invoice     func(*dietaiv1.LocateInvoiceQrRequest) (*dietaiv1.LocateInvoiceQrResponse, error)
+	label       func(*dietaiv1.PreprocessLabelRequest) (*dietaiv1.PreprocessLabelResponse, error)
+	food        func(*dietaiv1.PreprocessFoodRequest) (*dietaiv1.PreprocessFoodResponse, error)
 	schemasJSON string
 }
 
@@ -48,6 +52,22 @@ func (f *fakeAI) RenderView(_ context.Context, r *dietaiv1.RenderViewRequest, _ 
 
 func (f *fakeAI) GetArtifact(_ context.Context, r *dietaiv1.GetArtifactRequest, _ ...grpc.CallOption) (*dietaiv1.GetArtifactResponse, error) {
 	return f.artifact(r)
+}
+
+func (f *fakeAI) DecodeBarcode(_ context.Context, r *dietaiv1.DecodeBarcodeRequest, _ ...grpc.CallOption) (*dietaiv1.DecodeBarcodeResponse, error) {
+	return f.barcode(r)
+}
+
+func (f *fakeAI) LocateInvoiceQr(_ context.Context, r *dietaiv1.LocateInvoiceQrRequest, _ ...grpc.CallOption) (*dietaiv1.LocateInvoiceQrResponse, error) {
+	return f.invoice(r)
+}
+
+func (f *fakeAI) PreprocessLabel(_ context.Context, r *dietaiv1.PreprocessLabelRequest, _ ...grpc.CallOption) (*dietaiv1.PreprocessLabelResponse, error) {
+	return f.label(r)
+}
+
+func (f *fakeAI) PreprocessFood(_ context.Context, r *dietaiv1.PreprocessFoodRequest, _ ...grpc.CallOption) (*dietaiv1.PreprocessFoodResponse, error) {
+	return f.food(r)
 }
 
 func (f *fakeAI) GetConfigSchemas(context.Context, *dietaiv1.GetConfigSchemasRequest, ...grpc.CallOption) (*dietaiv1.GetConfigSchemasResponse, error) {
@@ -186,7 +206,7 @@ func TestUnknownPathIsJSON404(t *testing.T) {
 }
 
 func TestLaterStageRoutesAre501(t *testing.T) {
-	resp := postJSON(t, newServer(t, &fakeAI{}, true).URL+"/workbench/v1/dev/barcode", `{"image_id":"x"}`)
+	resp := postJSON(t, newServer(t, &fakeAI{}, true).URL+"/workbench/v1/dev/sweeps", `{"target":"quality"}`)
 	if resp.StatusCode != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", resp.StatusCode)
 	}
@@ -332,5 +352,107 @@ func TestConfigSchemas(t *testing.T) {
 	field := raw["classes"].([]any)[0].(map[string]any)["fields"].([]any)[0].(map[string]any)
 	if field["default"] != 100.0 || field["label"] != "模糊下限" || field["step"] != 5.0 {
 		t.Errorf("field = %v", field)
+	}
+}
+
+func corners() []*dietaiv1.Point {
+	return []*dietaiv1.Point{{X: 1, Y: 2}, {X: 3, Y: 2}, {X: 3, Y: 4}, {X: 1, Y: 4}}
+}
+
+func TestDecodeBarcode(t *testing.T) {
+	var got *dietaiv1.DecodeBarcodeRequest
+	ai := &fakeAI{barcode: func(r *dietaiv1.DecodeBarcodeRequest) (*dietaiv1.DecodeBarcodeResponse, error) {
+		got = r
+		if r.GetLadder().GetJson() == `{"rungs":["raw"]}` {
+			return &dietaiv1.DecodeBarcodeResponse{SuccessIndex: -1, Warnings: []string{"BARCODE_NOT_FOUND"},
+				Attempts: []*dietaiv1.RungAttempt{{Rung: "raw", ParamsJson: "{}"}}}, nil
+		}
+		h := &dietaiv1.DecodeHit{Format: "EAN13", Text: "4710088410108", Raw: []byte("4710088410108"), Corners: corners()}
+		return &dietaiv1.DecodeBarcodeResponse{
+			Success: true, SuccessRung: "gray", SuccessIndex: 1, Hits: []*dietaiv1.DecodeHit{h},
+			Attempts: []*dietaiv1.RungAttempt{
+				{Rung: "raw", ParamsJson: "{}"},
+				{Rung: "gray", ParamsJson: `{"scale":1}`, Hits: []*dietaiv1.DecodeHit{h}},
+			},
+		}, nil
+	}}
+	srv := newServer(t, ai, true)
+
+	ok := decode[api.BarcodeResult](t, postJSON(t, srv.URL+"/workbench/v1/dev/barcode",
+		`{"image_id":"x","zxing":{"try_rotate":false}}`))
+	if !ok.Success || *ok.SuccessRung != "gray" || ok.SuccessIndex != 1 || ok.Hits[0].Text != "4710088410108" {
+		t.Errorf("result = %+v", ok)
+	}
+	if string(ok.Hits[0].Raw) != "4710088410108" || len(ok.Hits[0].Corners) != 4 || ok.Attempts[1].Params["scale"] != 1.0 {
+		t.Errorf("hit = %+v attempts = %+v", ok.Hits[0], ok.Attempts)
+	}
+	if got.GetZxing().GetJson() != `{"try_rotate":false}` || got.GetLadder().GetJson() != "" {
+		t.Errorf("request = %v", got)
+	}
+
+	failed := decode[api.BarcodeResult](t, postJSON(t, srv.URL+"/workbench/v1/dev/barcode",
+		`{"image_id":"x","ladder":{"rungs":["raw"]}}`))
+	if failed.Success || failed.SuccessRung != nil || failed.SuccessIndex != -1 || failed.Hits == nil {
+		t.Errorf("failed = %+v", failed)
+	}
+}
+
+func TestInvoiceRawBytesAreBase64(t *testing.T) {
+	big5 := []byte{0xAF, 0xF9, 0xB8, 0xA6} // 「茶葉」的 Big5
+	ai := &fakeAI{invoice: func(*dietaiv1.LocateInvoiceQrRequest) (*dietaiv1.LocateInvoiceQrResponse, error) {
+		return &dietaiv1.LocateInvoiceQrResponse{
+			Left:     &dietaiv1.DecodeHit{Format: "QR_CODE", Raw: big5, Corners: corners()},
+			Warnings: []string{"INVOICE_QR_PARTIAL"},
+		}, nil
+	}}
+	resp := postJSON(t, newServer(t, ai, true).URL+"/workbench/v1/dev/invoice-qr", `{"image_id":"x"}`)
+	var raw map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		t.Fatal(err)
+	}
+	left := raw["left"].(map[string]any)
+	if left["raw"] != "r/m4pg==" || raw["right"] != nil {
+		t.Errorf("left = %v right = %v", left, raw["right"])
+	}
+}
+
+func TestPreprocessLabel(t *testing.T) {
+	ai := &fakeAI{label: func(r *dietaiv1.PreprocessLabelRequest) (*dietaiv1.PreprocessLabelResponse, error) {
+		out := &dietaiv1.ImageOutput{Data: &dietaiv1.ImageOutput_ArtifactId{ArtifactId: "a1"}, Width: 600, Height: 900}
+		if r.GetConfig().GetJson() != "" {
+			// Python 沒開開發模式時直接附上檔案
+			out = &dietaiv1.ImageOutput{Data: &dietaiv1.ImageOutput_Encoded{Encoded: []byte("png")}}
+		}
+		return &dietaiv1.PreprocessLabelResponse{Image: out, Quad: corners(), QuadMethod: "contour", GlareRatio: -1}, nil
+	}}
+	srv := newServer(t, ai, true)
+	got := decode[api.LabelResult](t, postJSON(t, srv.URL+"/workbench/v1/dev/label", `{"image_id":"x"}`))
+	if got.Image.ArtifactId != "a1" || got.Image.Width != 600 || len(got.Quad) != 4 || *got.QuadMethod != "contour" || got.GlareRatio != -1 {
+		t.Errorf("label = %+v", got)
+	}
+	resp := postJSON(t, srv.URL+"/workbench/v1/dev/label", `{"image_id":"x","config":{"enable_glare":false}}`)
+	if resp.StatusCode != http.StatusBadGateway || decode[api.Error](t, resp).Code != "AI_NOT_DEV_MODE" {
+		t.Errorf("status = %d", resp.StatusCode)
+	}
+}
+
+func TestPreprocessFood(t *testing.T) {
+	img := func(id string) *dietaiv1.VlmImage {
+		return &dietaiv1.VlmImage{
+			Image:    &dietaiv1.ImageOutput{Data: &dietaiv1.ImageOutput_ArtifactId{ArtifactId: id}, Width: 10, Height: 8},
+			NumBytes: 1234, Scale: 0.5,
+		}
+	}
+	ai := &fakeAI{food: func(*dietaiv1.PreprocessFoodRequest) (*dietaiv1.PreprocessFoodResponse, error) {
+		return &dietaiv1.PreprocessFoodResponse{
+			Whole: img("w"), DishesEnabled: true,
+			Dishes: []*dietaiv1.Box{{X: 1, Y: 2, W: 3, H: 4}}, Crops: []*dietaiv1.VlmImage{img("c0")},
+			PlatesEnabled: false,
+		}, nil
+	}}
+	got := decode[api.FoodResult](t, postJSON(t, newServer(t, ai, true).URL+"/workbench/v1/dev/food", `{"image_id":"x"}`))
+	if got.Whole.Image.ArtifactId != "w" || got.Whole.NumBytes != 1234 || got.Dishes[0].W != 3 ||
+		got.Crops[0].Image.ArtifactId != "c0" || got.PlatesEnabled || got.Plates == nil {
+		t.Errorf("food = %+v", got)
 	}
 }

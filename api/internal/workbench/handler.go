@@ -134,6 +134,38 @@ func (h *handler) CheckQuality(ctx context.Context, req api.CheckQualityRequestO
 	return api.CheckQuality200JSONResponse(out), nil
 }
 
+func (h *handler) DecodeBarcode(ctx context.Context, req api.DecodeBarcodeRequestObject) (api.DecodeBarcodeResponseObject, error) {
+	out, err := h.svc.DecodeBarcode(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return api.DecodeBarcode200JSONResponse(out), nil
+}
+
+func (h *handler) LocateInvoiceQr(ctx context.Context, req api.LocateInvoiceQrRequestObject) (api.LocateInvoiceQrResponseObject, error) {
+	out, err := h.svc.LocateInvoiceQr(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return api.LocateInvoiceQr200JSONResponse(out), nil
+}
+
+func (h *handler) PreprocessLabel(ctx context.Context, req api.PreprocessLabelRequestObject) (api.PreprocessLabelResponseObject, error) {
+	out, err := h.svc.PreprocessLabel(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return api.PreprocessLabel200JSONResponse(out), nil
+}
+
+func (h *handler) PreprocessFood(ctx context.Context, req api.PreprocessFoodRequestObject) (api.PreprocessFoodResponseObject, error) {
+	out, err := h.svc.PreprocessFood(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return api.PreprocessFood200JSONResponse(out), nil
+}
+
 // 以下於之後的階段實作（任務書第 4 節）。
 
 func (h *handler) Login(context.Context, api.LoginRequestObject) (api.LoginResponseObject, error) {
@@ -145,22 +177,6 @@ func (h *handler) Logout(context.Context, api.LogoutRequestObject) (api.LogoutRe
 }
 
 func (h *handler) GetMe(context.Context, api.GetMeRequestObject) (api.GetMeResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (h *handler) DecodeBarcode(context.Context, api.DecodeBarcodeRequestObject) (api.DecodeBarcodeResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (h *handler) LocateInvoiceQr(context.Context, api.LocateInvoiceQrRequestObject) (api.LocateInvoiceQrResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (h *handler) PreprocessLabel(context.Context, api.PreprocessLabelRequestObject) (api.PreprocessLabelResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (h *handler) PreprocessFood(context.Context, api.PreprocessFoodRequestObject) (api.PreprocessFoodResponseObject, error) {
 	return nil, errNotImplemented
 }
 
