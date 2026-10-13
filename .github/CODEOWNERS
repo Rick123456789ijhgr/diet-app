@@ -5,6 +5,7 @@
 /api/        @member-b @member-c
 /ai/         @member-c @member-d
 /research/   @member-c @member-d
+/workbench/  @member-a @member-b
 
 # 規格與 migration 變更影響多個服務，需跨服務審查
 /proto/      @member-b @member-c

@@ -25,6 +25,7 @@ jobs:
       proto: ${{ steps.filter.outputs.proto }}
       openapi: ${{ steps.filter.outputs.openapi }}
       gen: ${{ steps.filter.outputs.gen }}
+      workbench: ${{ steps.filter.outputs.workbench }}
       app_exists: ${{ steps.app.outputs.exists }}
     steps:
       - uses: actions/checkout@v5
@@ -54,6 +55,9 @@ jobs:
               - 'proto/**'
             openapi:
               - 'openapi/**'
+            workbench:
+              - 'workbench/**'
+              - 'openapi/workbench.yaml'
             # 規格或產生碼有變更時，檢查產生碼與規格一致
             gen:
               - 'proto/**'
@@ -153,6 +157,28 @@ jobs:
         with:
           node-version: "22"
       - run: npx --yes @redocly/cli@latest lint openapi/openapi.yaml openapi/workbench.yaml
+
+  # 工作台前端：lint、型別、單元與元件測試（MSW 假後端）、建置。
+  # 接真實 Go 與 Python 的 Playwright 冒煙測試只在本機執行（npm run test:e2e）
+  workbench:
+    needs: changes
+    if: needs.changes.outputs.workbench == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workbench
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: workbench/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
 
   # 產生碼提交進 git；重新產生後不得有差異（忘了 make gen 或手改了 gen/ 都會失敗）
   gen:

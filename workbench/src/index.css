@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+
+/* 深色模式以 <html class="dark"> 切換（見 index.html 與 ThemeToggle） */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 色系：靛藍主色、紫輔色；狀態色只用靛藍（正常）與紅（異常），不使用綠與橘 */
+:root {
+  --canvas: #f1f3f7;
+  --card: #ffffff;
+  --card-border: #e7eaf0;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --hover: #f3f4f8;
+  --primary: #4f46e5;
+  --primary-soft: #eef0ff;
+  --accent: #8b5cf6;
+  --danger: #dc2626;
+  --danger-soft: #fdecec;
+  --shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 14px -6px rgb(15 23 42 / 0.08);
+}
+
+.dark {
+  --canvas: #0b0d12;
+  --card: #151922;
+  --card-border: #232838;
+  --ink: #e6e9f2;
+  --muted: #94a3b8;
+  --hover: #1e2330;
+  --primary: #818cf8;
+  --primary-soft: #23264a;
+  --accent: #a78bfa;
+  --danger: #f87171;
+  --danger-soft: #3a1d22;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-hover: var(--hover);
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --shadow-card: var(--shadow);
+  --font-sans: 'Noto Sans TC', ui-sans-serif, system-ui, 'Microsoft JhengHei', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 數字對齊，方便比較 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

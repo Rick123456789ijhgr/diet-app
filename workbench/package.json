@@ -1,0 +1,53 @@
+{
+  "name": "diet-workbench",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "開發工作台前端（ADR 0003）：React → Go（/workbench/v1）→ Python gRPC",
+  "scripts": {
+    "dev": "vite",
+    "dev:all": "node scripts/dev.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.104.2",
+    "clsx": "2.1.1",
+    "lucide-react": "1.56.0",
+    "openapi-fetch": "0.17.0",
+    "radix-ui": "1.8.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "7.18.4",
+    "tailwind-merge": "3.7.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "eslint": "10.12.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "jsdom": "26.1.0",
+    "msw": "2.15.0",
+    "prettier": "3.9.10",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.2",
+    "vite": "7.3.7",
+    "vitest": "3.2.7"
+  }
+}
