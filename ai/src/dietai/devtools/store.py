@@ -16,7 +16,7 @@ from typing import Any
 from dietai.devtools.images import encode_jpeg
 from dietai.preprocess.types import Image
 
-DEFAULT_MAX_ITEMS = 64
+DEFAULT_MAX_ITEMS = 256  # 主要由位元組上限控制；診斷影像與裁切多半很小
 DEFAULT_MAX_BYTES = 1 << 30  # 1 GiB
 
 
@@ -37,8 +37,9 @@ class StoredImage:
     image: Image
     description: str
     truth: dict[str, Any] | None = None
-    # 第一次被取用時才編碼，之後重複使用
+    # 編碼後的檔案：可預先給（例如送給 VLM 的 JPEG 原檔），否則第一次取用時才編碼
     _encoded: bytes | None = field(default=None, repr=False)
+    _content_type: str = "image/jpeg"
 
     @property
     def width(self) -> int:
@@ -68,9 +69,16 @@ class ImageStore:
         self._lock = threading.Lock()
 
     def put(
-        self, image: Image, description: str, truth: dict[str, Any] | None = None
+        self,
+        image: Image,
+        description: str,
+        truth: dict[str, Any] | None = None,
+        encoded: tuple[bytes, str] | None = None,
     ) -> StoredImage:
+        """存入影像；``encoded`` 為（檔案位元組, content type），取用時原樣回傳。"""
         item = StoredImage(secrets.token_hex(8), image, description, truth)
+        if encoded is not None:
+            item._encoded, item._content_type = encoded
         with self._lock:
             self._items[item.image_id] = item
             self._bytes += item.nbytes
@@ -102,18 +110,19 @@ class ImageStore:
         image: Image,
         description: str,
         truth: dict[str, Any] | None = None,
+        encoded: tuple[bytes, str] | None = None,
     ) -> StoredImage:
-        item = self.put(image, description, truth)
+        item = self.put(image, description, truth, encoded)
         with self._lock:
             self._derived[(source_id, key)] = item.image_id
         return item
 
     def encoded(self, image_id: str) -> tuple[bytes, str]:
-        """取得編碼後的影像（JPEG）與 content type。"""
+        """取得編碼後的影像與 content type（預設 JPEG）。"""
         item = self.get(image_id)
         if item._encoded is None:
             item._encoded = encode_jpeg(item.image)
-        return item._encoded, "image/jpeg"
+        return item._encoded, item._content_type
 
     def __len__(self) -> int:
         with self._lock:

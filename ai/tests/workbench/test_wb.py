@@ -223,7 +223,7 @@ def test_draw_quads_and_mask_overlay_keep_input():
     assert (img == 200).all()
     mask = np.zeros((100, 120), dtype=bool)
     mask[:10] = True
-    overlay = viz.mask_overlay(img, mask)
+    overlay = views.mask_overlay(img, mask)
     assert overlay[0, 0, 2] > overlay[0, 0, 0] and (overlay[50, 50] == 200).all()
 
 
@@ -240,7 +240,7 @@ def test_mask_on_small_resizes_to_mask():
     img = np.full((200, 300, 3), 100, dtype=np.uint8)
     mask = np.zeros((100, 150), dtype=bool)
     mask[:10] = True
-    out = viz.mask_on_small(img, mask)
+    out = views.mask_on_small(img, mask)
     assert out.shape == (100, 150, 3) and out[0, 0, 2] > out[0, 0, 0]
 
 

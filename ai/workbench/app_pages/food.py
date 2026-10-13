@@ -2,6 +2,7 @@ import time
 
 import streamlit as st
 
+from dietai.devtools import views
 from dietai.devtools.images import decode_image
 from dietai.preprocess import FoodConfig, detect_plate_ellipse, dish_foreground, preprocess_food
 from wb import viz
@@ -118,7 +119,7 @@ with results:
             st.dataframe(viz.step_rows(result.steps), hide_index=True, alt="各步驟的耗時與參數")
         elif view == "mask":
             mask = dish_foreground(img, cfg)
-            st.image(viz.mask_on_small(img, mask), channels="BGR", alt="切菜用的前景遮罩")
+            st.image(views.mask_on_small(img, mask), channels="BGR", alt="切菜用的前景遮罩")
             st.caption(
                 f":red[■] 與背景色（四周 {cfg.bg_border_ratio:.1%} 邊框的中位數）ΔE > "
                 f"{cfg.bg_distance:g} 的前景，形態學半徑 {cfg.morph_px} px，"

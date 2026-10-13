@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 
 from dietai.preprocess import QualityConfig
 from dietai.preprocess.ops import to_gray
@@ -16,6 +17,7 @@ from dietai.preprocess.types import Image
 # BGR
 DARK_COLOR = (255, 80, 0)
 BRIGHT_COLOR = (0, 0, 255)
+MASK_COLOR = (0, 0, 255)  # 紅：光斑、前景等遮罩
 
 
 def laplacian_heatmap(img: Image, cfg: QualityConfig) -> Image:
@@ -39,3 +41,20 @@ def exposure_overlay(img: Image, cfg: QualityConfig, alpha: float = 0.6) -> Imag
 def gray_histogram_counts(img: Image) -> list[int]:
     """灰階直方圖：0–255 每一階的像素數（長度 256）。"""
     return [int(c) for c in np.bincount(to_gray(img).ravel(), minlength=256)]
+
+
+def mask_overlay(img: Image, mask: npt.NDArray[np.bool_], alpha: float = 0.6) -> Image:
+    """以紅色標出遮罩區域（BGR），例如光斑遮罩。"""
+    base = img if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    out = base.astype(np.float32)
+    out[mask] = out[mask] * (1 - alpha) + np.array(MASK_COLOR, dtype=np.float32) * alpha
+    return out.astype(np.uint8)
+
+
+def mask_on_small(img: Image, mask: npt.NDArray[np.bool_]) -> Image:
+    """把縮小後算出的遮罩（如 ``food.dish_foreground``）疊在同尺寸的縮圖上（BGR）。"""
+    h, w = mask.shape
+    small = (
+        img if img.shape[:2] == (h, w) else cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
+    )
+    return mask_overlay(np.asarray(small, dtype=np.uint8), mask)
