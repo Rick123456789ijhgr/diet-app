@@ -1,14 +1,19 @@
 version: v2
+# 外掛版本固定，須與執行期套件相容：Go 對應 api/go.mod 的 protobuf／grpc，
+# Python 對應 ai/pyproject.toml 的 protobuf／grpcio。升級時一併調整並重新產生（make gen）。
 plugins:
   # Go：產生到 api/gen/proto
-  - remote: buf.build/protocolbuffers/go
+  - remote: buf.build/protocolbuffers/go:v1.36.12
     out: ../api/gen/proto
     opt: paths=source_relative
-  - remote: buf.build/grpc/go
+  - remote: buf.build/grpc/go:v1.6.2
     out: ../api/gen/proto
     opt: paths=source_relative
-  # Python：產生到 ai/src/dietai/gen
-  - remote: buf.build/protocolbuffers/python
-    out: ../ai/src/dietai/gen
-  - remote: buf.build/grpc/python
-    out: ../ai/src/dietai/gen
+  # Python：產生到 ai/src/dietai/v1（產生的程式以 from dietai.v1 import … 互相引用，
+  # 只能放在套件路徑下）。此資料夾視同 gen/：不手改，ruff／mypy 排除。
+  - remote: buf.build/protocolbuffers/python:v36.2
+    out: ../ai/src
+  - remote: buf.build/protocolbuffers/pyi:v36.2
+    out: ../ai/src
+  - remote: buf.build/grpc/python:v1.84.0
+    out: ../ai/src

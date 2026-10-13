@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package dietai.v1;
+
+option go_package = "github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1";
+
+// 正式前處理服務（Go → Python）：品質檢查、條碼逐步升級、發票雙 QR、營養標示、食物照片。
+// 工作台、APP 流程與冷啟動工具共用。設定以 JSON 傳遞，只含與預設值不同的欄位（見 ADR 0003）。
+service PreprocessService {
+  rpc CheckQuality(CheckQualityRequest) returns (CheckQualityResponse);
+  rpc DecodeBarcode(DecodeBarcodeRequest) returns (DecodeBarcodeResponse);
+  rpc LocateInvoiceQr(LocateInvoiceQrRequest) returns (LocateInvoiceQrResponse);
+  rpc PreprocessLabel(PreprocessLabelRequest) returns (PreprocessLabelResponse);
+  rpc PreprocessFood(PreprocessFoodRequest) returns (PreprocessFoodResponse);
+}
+
+// 影像來源：直接附上編碼後的影像（JPEG／PNG），或工作台暫存的影像 ID
+message ImageInput {
+  oneof source {
+    bytes encoded = 1;
+    string image_id = 2;
+  }
+}
+
+// 只含與預設值不同的設定欄位，例如 {"blur_min": 150}；空字串表示全部用預設值
+message ConfigOverride {
+  string json = 1;
+}
+
+// 前處理的一個步驟（對應 dietai 的 StepRecord）
+message Step {
+  string name = 1;
+  double elapsed_ms = 2;
+  string params_json = 3;
+}
+
+message Point {
+  double x = 1;
+  double y = 2;
+}
+
+message Box {
+  int32 x = 1;
+  int32 y = 2;
+  int32 w = 3;
+  int32 h = 4;
+}
+
+message Ellipse {
+  double cx = 1;
+  double cy = 2;
+  double major = 3;
+  double minor = 4;
+  double angle = 5;
+}
+
+// 影像型結果：開發模式回傳 artifact_id（由 WorkbenchService.GetArtifact 取得），否則直接附上
+message ImageOutput {
+  oneof data {
+    bytes encoded = 1;
+    string artifact_id = 2;
+  }
+  int32 width = 3;
+  int32 height = 4;
+}
+
+message CheckQualityRequest {
+  ImageInput image = 1;
+  ConfigOverride config = 2; // QualityConfig
+}
+
+message CheckQualityResponse {
+  bool passed = 1;
+  double blur_score = 2;
+  double mean_brightness = 3;
+  double dark_ratio = 4;
+  double bright_ratio = 5;
+  bool resolution_ok = 6;
+  repeated string warnings = 7; // PreprocessWarning 代碼，例如 TOO_BLURRY
+  repeated Step steps = 8;
+}
+
+message DecodeHit {
+  string format = 1; // CodeFormat，例如 EAN13
+  string text = 2;
+  bytes raw = 3; // 原始位元組；發票中文由 Go 解碼
+  repeated Point corners = 4;
+}
+
+message RungAttempt {
+  string rung = 1; // Rung，例如 deskew
+  string params_json = 2;
+  double elapsed_ms = 3;
+  repeated DecodeHit hits = 4;
+  repeated DecodeHit rejected = 5;
+  bool skipped = 6;
+}
+
+message DecodeBarcodeRequest {
+  ImageInput image = 1;
+  ConfigOverride ladder = 2; // LadderConfig
+  ConfigOverride zxing = 3; // ZxingConfig
+}
+
+message DecodeBarcodeResponse {
+  bool success = 1;
+  string success_rung = 2;
+  int32 success_index = 3; // -1 表示失敗
+  repeated DecodeHit hits = 4;
+  repeated RungAttempt attempts = 5;
+  repeated string warnings = 6;
+  repeated Step steps = 7;
+}
+
+message LocateInvoiceQrRequest {
+  ImageInput image = 1;
+  ConfigOverride ladder = 2; // LadderConfig
+  ConfigOverride zxing = 3; // ZxingConfig
+}
+
+message LocateInvoiceQrResponse {
+  DecodeHit left = 1; // 未找到則不填
+  DecodeHit right = 2;
+  repeated RungAttempt attempts = 3;
+  repeated string warnings = 4;
+  repeated Step steps = 5;
+}
+
+message PreprocessLabelRequest {
+  ImageInput image = 1;
+  ConfigOverride config = 2; // LabelConfig
+}
+
+message PreprocessLabelResponse {
+  ImageOutput image = 1; // 校正、修補、增強後的標示
+  repeated Point quad = 2; // 原圖上的表格四角（左上起順時針）；找不到則為空
+  string quad_method = 3; // contour／hough
+  double glare_ratio = 4; // 光斑步驟未啟用時為 -1
+  repeated string warnings = 5;
+  repeated Step steps = 6;
+}
+
+message VlmImage {
+  ImageOutput image = 1;
+  int64 num_bytes = 2;
+  double scale = 3;
+}
+
+message PreprocessFoodRequest {
+  ImageInput image = 1;
+  ConfigOverride config = 2; // FoodConfig
+}
+
+message PreprocessFoodResponse {
+  VlmImage whole = 1;
+  bool dishes_enabled = 2;
+  repeated Box dishes = 3;
+  repeated VlmImage crops = 4;
+  bool plates_enabled = 5;
+  repeated Ellipse plates = 6;
+  repeated string warnings = 7;
+  repeated Step steps = 8;
+}

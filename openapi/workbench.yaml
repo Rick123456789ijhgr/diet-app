@@ -1,0 +1,1010 @@
+openapi: 3.1.0
+info:
+  title: 開發工作台 API
+  version: 0.1.0
+  description: |
+    工作台 React 前端 ↔ Go 的 REST API 規格（ADR 0003）。先改本檔，再以 make gen 產生程式碼。
+
+    - `/workbench/v1/dev/*`：開發工具，只在 `WORKBENCH_DEV_TOOLS=1` 時存在，未開啟時一律 404；Go 以 gRPC 轉給 Python。
+    - `/workbench/v1/auth/*`：登入（階段 5 實作）。
+    - 冷啟動上傳（`/workbench/v1/coldstart/*`）待資料表（任務書 2.4 節）審核後於階段 5 補上。
+
+    設定參數（`config`、`ladder` 等）只帶與預設值不同的欄位，結構見 `GET /dev/config-schemas`。
+    錯誤一律回傳 `Error`，`code` 為英文代碼，由前端對應中文。
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: http://localhost:8080
+security: []
+tags:
+  - name: auth
+    description: 登入與工作階段
+  - name: dev
+    description: 開發工具（只在本機開發模式啟用）
+paths:
+  /workbench/v1/auth/login:
+    post:
+      operationId: login
+      summary: 帳號密碼登入，成功時設定 HttpOnly Cookie
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: 登入成功
+          headers:
+            Set-Cookie:
+              description: 工作階段 Cookie（HttpOnly、SameSite=Lax；線上部署加 Secure）
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /workbench/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: 登出並刪除工作階段
+      tags: [auth]
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: 已登出
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /workbench/v1/auth/me:
+    get:
+      operationId: getMe
+      summary: 目前登入者
+      tags: [auth]
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: 目前登入者
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /workbench/v1/dev/config-schemas:
+    get:
+      operationId: getConfigSchemas
+      summary: 參數表單結構（由 Python 的 param() 宣告產生）
+      tags: [dev]
+      responses:
+        "200":
+          description: 各設定類別的欄位資訊
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigSchemas"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/images:
+    post:
+      operationId: putImage
+      summary: 上傳並暫存影像
+      description: 暫存在 Python 記憶體（約 64 張，最久未用的先移除）；重啟後清空，前端遇到 IMAGE_NOT_FOUND 時重新上傳。
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG／PNG 等影像檔
+                name:
+                  type: string
+                  description: 顯示用名稱（例如原檔名）
+      responses:
+        "201":
+          description: 已暫存
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageRef"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/images/synthesize:
+    post:
+      operationId: synthesizeImage
+      summary: 產生合成影像並暫存（附真值）
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SynthesizeRequest"
+      responses:
+        "201":
+          description: 已暫存
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageRef"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/images/{image_id}/degrade:
+    post:
+      operationId: degradeImage
+      summary: 套用模擬退化，產生新的暫存影像
+      description: 同一張影像以相同參數退化時，Python 直接回傳快取的結果。
+      tags: [dev]
+      parameters:
+        - $ref: "#/components/parameters/ImageId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DegradeRequest"
+      responses:
+        "201":
+          description: 已暫存
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageRef"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/views:
+    post:
+      operationId: renderView
+      summary: 產生診斷影像或圖表資料
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderViewRequest"
+      responses:
+        "200":
+          description: 影像型檢視填 image，資料型檢視填 data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderViewResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/artifacts/{artifact_id}:
+    get:
+      operationId: getArtifact
+      summary: 取得暫存影像或診斷影像
+      tags: [dev]
+      parameters:
+        - name: artifact_id
+          in: path
+          required: true
+          description: 暫存影像的 image_id 或診斷影像的 ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 影像檔
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/quality:
+    post:
+      operationId: checkQuality
+      summary: 品質檢查（模糊、曝光、解析度）
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigRequest"
+      responses:
+        "200":
+          description: 檢查結果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/barcode:
+    post:
+      operationId: decodeBarcode
+      summary: 條碼逐步升級
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LadderRequest"
+      responses:
+        "200":
+          description: 解碼結果與各階嘗試
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BarcodeResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/invoice-qr:
+    post:
+      operationId: locateInvoiceQr
+      summary: 電子發票雙 QR 定位
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LadderRequest"
+      responses:
+        "200":
+          description: 左右 QR 與各階嘗試
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvoiceQrResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/label:
+    post:
+      operationId: preprocessLabel
+      summary: 營養標示前處理（定位、校正、光斑、對比）
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigRequest"
+      responses:
+        "200":
+          description: 校正後影像與表格四角
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabelResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/food:
+    post:
+      operationId: preprocessFood
+      summary: 食物照片前處理（VLM 輸入、切菜、盤緣）
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfigRequest"
+      responses:
+        "200":
+          description: VLM 輸入影像、菜色框與盤緣
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FoodResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/sweeps:
+    post:
+      operationId: runSweep
+      summary: 參數掃描
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SweepRequest"
+      responses:
+        "200":
+          description: 掃描結果（結構隨研究需求調整，由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/batches:
+    post:
+      operationId: runBatch
+      summary: 資料夾批次（以 SSE 逐張回報）
+      description: 每個事件的 data 為一張影像的結果 JSON；拒絕 test split 下的路徑（SPLIT_LOCKED）。
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchRequest"
+      responses:
+        "200":
+          description: Server-Sent Events 串流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/e1/runs:
+    get:
+      operationId: listE1Runs
+      summary: 列出 E1 執行結果
+      tags: [dev]
+      parameters:
+        - $ref: "#/components/parameters/E1Root"
+      responses:
+        "200":
+          description: 執行清單（結構由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      operationId: startE1Run
+      summary: E1 快速執行（以 SSE 回報進度，最後一個事件為結果）
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartE1RunRequest"
+      responses:
+        "200":
+          description: Server-Sent Events 串流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/e1/runs/{run_id}:
+    get:
+      operationId: getE1Run
+      summary: 取得一次 E1 執行的結果
+      tags: [dev]
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          description: 執行資料夾名稱（位於 root 之下）
+          schema:
+            type: string
+        - $ref: "#/components/parameters/E1Root"
+      responses:
+        "200":
+          description: 執行結果（結構由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: wb_session
+      description: 登入後由 Go 設定的工作階段 Cookie
+  parameters:
+    ImageId:
+      name: image_id
+      in: path
+      required: true
+      description: 暫存影像的 ID
+      schema:
+        type: string
+    E1Root:
+      name: root
+      in: query
+      required: false
+      description: E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: 參數不合法（例如 INVALID_CONFIG，field 為欄位名稱）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: 未登入或帳號密碼錯誤
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: 找不到資源（例如 IMAGE_NOT_FOUND）；開發工具未啟用時也回 404
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    SplitLocked:
+      description: 路徑屬於 test split，已鎖定（SPLIT_LOCKED）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    TooLarge:
+      description: 上傳檔案超過 32 MB（IMAGE_TOO_LARGE）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unavailable:
+      description: Python 服務無法連線（AI_UNAVAILABLE）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: 英文錯誤代碼，例如 IMAGE_NOT_FOUND、INVALID_CONFIG、SPLIT_LOCKED、AI_UNAVAILABLE
+        message:
+          type: string
+          description: 給開發者看的說明
+        field:
+          type: string
+          description: 出錯的欄位名稱（設定驗證失敗時）
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    User:
+      type: object
+      required: [id, username, display_name]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+
+    ConfigOverride:
+      type: object
+      description: '只含與預設值不同的設定欄位，例如 {"blur_min": 150}；省略或空物件表示全部用預設值'
+      additionalProperties: true
+    FreeJson:
+      type: object
+      description: 結構由 Python 定義的 JSON 物件（只有工作台會讀）
+      additionalProperties: true
+    ConfigSchemas:
+      type: object
+      required: [classes, enums]
+      properties:
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConfigClass"
+        enums:
+          type: object
+          description: 列舉的可用值，例如 Rung、CodeFormat、PreprocessWarning
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    ConfigClass:
+      type: object
+      required: [name, doc, fields, defaults]
+      properties:
+        name:
+          type: string
+          description: 設定類別名稱，例如 QualityConfig、Degradation
+        doc:
+          type: string
+        fields:
+          type: array
+          description: 以 param() 宣告、可自動產生表單的欄位（依宣告順序）
+          items:
+            $ref: "#/components/schemas/ConfigField"
+        defaults:
+          type: object
+          description: 全部欄位的預設值（含未以 param() 宣告的序列欄位，例如 rungs）
+          additionalProperties: true
+    ConfigField:
+      type: object
+      required: [name, type, default, label, label_en, help, calibrate, group]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [int, float, bool]
+        default:
+          oneOf:
+            - type: number
+            - type: boolean
+        label:
+          type: string
+          description: 中文名稱
+        label_en:
+          type: string
+        help:
+          type: string
+        min:
+          type: number
+        max:
+          type: number
+        step:
+          type: number
+        calibrate:
+          type: boolean
+          description: true 表示數值待校準
+        group:
+          type: string
+          description: 介面分組代碼，例如 blur、exposure
+
+    ImageRef:
+      type: object
+      required: [image_id, width, height, description]
+      properties:
+        image_id:
+          type: string
+        width:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+        description:
+          type: string
+        truth:
+          $ref: "#/components/schemas/FreeJson"
+          description: 合成影像的真值（四角、盤緣等）；沒有則省略
+    SynthesizeRequest:
+      type: object
+      required: [scene]
+      properties:
+        scene:
+          type: string
+          enum: [label, ean13, invoice, nutrition, food]
+        params:
+          type: object
+          description: '場景參數，例如 {"seed": 0}'
+          additionalProperties: true
+    DegradeRequest:
+      type: object
+      required: [degradation]
+      properties:
+        degradation:
+          $ref: "#/components/schemas/ConfigOverride"
+    RenderViewRequest:
+      type: object
+      required: [image_id, view]
+      properties:
+        image_id:
+          type: string
+        view:
+          type: string
+          enum: [laplacian, exposure, histogram, label_edges, glare_mask, food_mask, ladder_variant]
+        config:
+          $ref: "#/components/schemas/ConfigOverride"
+    RenderViewResult:
+      type: object
+      properties:
+        image:
+          $ref: "#/components/schemas/ImageRef"
+        data:
+          $ref: "#/components/schemas/FreeJson"
+
+    ConfigRequest:
+      type: object
+      required: [image_id]
+      properties:
+        image_id:
+          type: string
+        config:
+          $ref: "#/components/schemas/ConfigOverride"
+    LadderRequest:
+      type: object
+      required: [image_id]
+      properties:
+        image_id:
+          type: string
+        ladder:
+          $ref: "#/components/schemas/ConfigOverride"
+        zxing:
+          $ref: "#/components/schemas/ConfigOverride"
+    Step:
+      type: object
+      required: [name, elapsed_ms, params]
+      properties:
+        name:
+          type: string
+        elapsed_ms:
+          type: number
+        params:
+          type: object
+          additionalProperties: true
+    Point:
+      type: object
+      required: [x, y]
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+    Box:
+      type: object
+      required: [x, y, w, h]
+      properties:
+        x:
+          type: integer
+        y:
+          type: integer
+        w:
+          type: integer
+        h:
+          type: integer
+    Ellipse:
+      type: object
+      required: [cx, cy, major, minor, angle]
+      properties:
+        cx:
+          type: number
+        cy:
+          type: number
+        major:
+          type: number
+        minor:
+          type: number
+        angle:
+          type: number
+    ImageOutput:
+      type: object
+      required: [artifact_id, width, height]
+      properties:
+        artifact_id:
+          type: string
+          description: 以 GET /dev/artifacts/{artifact_id} 取得
+        width:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+
+    QualityResult:
+      type: object
+      required:
+        - passed
+        - blur_score
+        - mean_brightness
+        - dark_ratio
+        - bright_ratio
+        - resolution_ok
+        - warnings
+        - steps
+      properties:
+        passed:
+          type: boolean
+        blur_score:
+          type: number
+        mean_brightness:
+          type: number
+        dark_ratio:
+          type: number
+        bright_ratio:
+          type: number
+        resolution_ok:
+          type: boolean
+        warnings:
+          type: array
+          description: PreprocessWarning 代碼，例如 TOO_BLURRY
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/Step"
+
+    DecodeHit:
+      type: object
+      required: [format, text, raw, corners]
+      properties:
+        format:
+          type: string
+          description: CodeFormat，例如 EAN13
+        text:
+          type: string
+        raw:
+          type: string
+          format: byte
+          description: 原始位元組（base64）
+        corners:
+          type: array
+          items:
+            $ref: "#/components/schemas/Point"
+    RungAttempt:
+      type: object
+      required: [rung, params, elapsed_ms, hits, rejected, skipped]
+      properties:
+        rung:
+          type: string
+          description: Rung，例如 deskew
+        params:
+          type: object
+          additionalProperties: true
+        elapsed_ms:
+          type: number
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecodeHit"
+        rejected:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecodeHit"
+        skipped:
+          type: boolean
+    BarcodeResult:
+      type: object
+      required: [success, success_index, hits, attempts, warnings, steps]
+      properties:
+        success:
+          type: boolean
+        success_rung:
+          type: string
+        success_index:
+          type: integer
+          description: -1 表示失敗
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecodeHit"
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/RungAttempt"
+        warnings:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/Step"
+    InvoiceQrResult:
+      type: object
+      required: [attempts, warnings, steps]
+      properties:
+        left:
+          $ref: "#/components/schemas/DecodeHit"
+        right:
+          $ref: "#/components/schemas/DecodeHit"
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/RungAttempt"
+        warnings:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/Step"
+    LabelResult:
+      type: object
+      required: [image, quad, glare_ratio, warnings, steps]
+      properties:
+        image:
+          $ref: "#/components/schemas/ImageOutput"
+        quad:
+          type: array
+          description: 原圖上的表格四角（左上起順時針）；找不到則為空
+          items:
+            $ref: "#/components/schemas/Point"
+        quad_method:
+          type: string
+          description: contour／hough
+        glare_ratio:
+          type: number
+          description: 光斑步驟未啟用時為 -1
+        warnings:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/Step"
+    VlmImage:
+      type: object
+      required: [image, num_bytes, scale]
+      properties:
+        image:
+          $ref: "#/components/schemas/ImageOutput"
+        num_bytes:
+          type: integer
+          format: int64
+        scale:
+          type: number
+    FoodResult:
+      type: object
+      required:
+        - whole
+        - dishes_enabled
+        - dishes
+        - crops
+        - plates_enabled
+        - plates
+        - warnings
+        - steps
+      properties:
+        whole:
+          $ref: "#/components/schemas/VlmImage"
+        dishes_enabled:
+          type: boolean
+        dishes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Box"
+        crops:
+          type: array
+          items:
+            $ref: "#/components/schemas/VlmImage"
+        plates_enabled:
+          type: boolean
+        plates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Ellipse"
+        warnings:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/Step"
+
+    SweepRequest:
+      type: object
+      required: [target]
+      properties:
+        target:
+          type: string
+          enum: [quality, barcode]
+        params:
+          type: object
+          additionalProperties: true
+    BatchRequest:
+      type: object
+      required: [folder]
+      properties:
+        folder:
+          type: string
+          description: 本機資料夾路徑；test split 已鎖定
+        recursive:
+          type: boolean
+          default: false
+        limit:
+          type: integer
+          minimum: 1
+        config:
+          $ref: "#/components/schemas/ConfigOverride"
+    StartE1RunRequest:
+      type: object
+      required: [arms]
+      properties:
+        arms:
+          type: array
+          items:
+            type: string
+        n_codes:
+          type: integer
+          minimum: 1
+        root:
+          type: string

@@ -1,3 +1,7 @@
 # Windows 批次檔必須是 CRLF，否則 cmd 可能解析錯誤
 *.bat text eol=crlf
 *.cmd text eol=crlf
+# 產生的程式碼（make gen）：GitHub 的 PR 差異預設摺疊
+api/gen/** linguist-generated=true
+ai/src/dietai/v1/** linguist-generated=true
+workbench/src/api/gen/** linguist-generated=true
