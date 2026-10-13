@@ -4,9 +4,10 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from dietai.devtools import views
+from dietai.devtools.images import encode_png
 from dietai.preprocess import QualityConfig, check_quality
 from wb import viz
-from wb.images import encode_png
 from wb.st_config import config_editor, config_io
 from wb.st_layout import (
     card,
@@ -114,13 +115,13 @@ with results:
     )
     with card():
         if view == "laplacian":
-            st.image(viz.laplacian_heatmap(img, cfg), channels="BGR", alt="拉普拉斯響應熱度圖")
+            st.image(views.laplacian_heatmap(img, cfg), channels="BGR", alt="拉普拉斯響應熱度圖")
             st.caption(
                 f"縮放到短邊 {cfg.blur_short_side} px 後的拉普拉斯響應強度，越亮代表邊緣越銳利；"
                 "模糊分數就是這張圖的變異數。"
             )
         elif view == "exposure":
-            st.image(viz.exposure_overlay(img, cfg), channels="BGR", alt="過暗與過亮像素遮罩")
+            st.image(views.exposure_overlay(img, cfg), channels="BGR", alt="過暗與過亮像素遮罩")
             st.caption(
                 f":blue[■] 過暗（灰階 < {cfg.dark_level}）　"
                 f":red[■] 過亮（灰階 > {cfg.bright_level}）"

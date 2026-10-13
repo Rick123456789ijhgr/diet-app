@@ -5,6 +5,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from dietai.devtools.images import SplitLockedError, load_image
 from dietai.evaluation import (
     Outcome,
     list_runs,
@@ -18,7 +19,6 @@ from dietai.evaluation import (
 )
 from dietai.preprocess import Rung
 from dietai.synthetic import write_barcode_dataset
-from wb.images import SplitLockedError, load_image
 from wb.st_layout import card, empty_state, metric_row, page_header, panel_tabs, workspace
 from wb.text import OUTCOME_TEXT, outcome_label
 

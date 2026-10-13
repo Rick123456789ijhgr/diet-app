@@ -71,11 +71,18 @@ def add_glare(img: Image, radius_ratio: float, seed: int = 0) -> Image:
     rng = np.random.default_rng(seed)
     r = radius_ratio * min(h, w)
     cx, cy = rng.uniform(r, max(r, w - r)), rng.uniform(r, max(r, h - r))
-    yy, xx = np.mgrid[0:h, 0:w]
+    # 距中心 1.2r 以外 alpha 為 0、像素不變，只計算光斑的外接框（結果與整張計算逐像素相同）
+    reach = 1.2 * r
+    x0, x1 = max(0, int(np.floor(cx - reach))), min(w, int(np.ceil(cx + reach)) + 1)
+    y0, y1 = max(0, int(np.floor(cy - reach))), min(h, int(np.ceil(cy + reach)) + 1)
+    result: Image = img.copy()
+    if x0 >= x1 or y0 >= y1:
+        return result
+    yy, xx = np.mgrid[y0:y1, x0:x1]
     dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
     alpha = np.clip((r - dist) / (0.2 * r) + 1, 0, 1).astype(np.float32)
     if img.ndim == 3:
         alpha = alpha[..., None]
-    out = img.astype(np.float32) * (1 - alpha) + 255 * alpha
-    result: Image = np.clip(out, 0, 255).astype(np.uint8)
+    patch = img[y0:y1, x0:x1].astype(np.float32) * (1 - alpha) + 255 * alpha
+    result[y0:y1, x0:x1] = np.clip(patch, 0, 255).astype(np.uint8)
     return result

@@ -6,6 +6,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from dietai.devtools import configs, degradations, views
+from dietai.devtools.images import (
+    SplitLockedError,
+    decode_image,
+    encode_png,
+    guard_path,
+    is_test_split,
+    list_images,
+    load_image,
+)
 from dietai.preprocess import (
     Box,
     CodeFormat,
@@ -19,16 +29,7 @@ from dietai.preprocess import (
     check_quality,
 )
 from dietai.synthetic import label_scene
-from wb import checks, configs, degradations, ladder_eval, viz
-from wb.images import (
-    SplitLockedError,
-    decode_image,
-    encode_png,
-    guard_path,
-    is_test_split,
-    list_images,
-    load_image,
-)
+from wb import checks, ladder_eval, viz
 
 
 @pytest.mark.parametrize(
@@ -202,15 +203,15 @@ def test_sweep_levels():
 def test_viz_shapes():
     img = label_scene(120, 160)
     cfg = QualityConfig(blur_short_side=60)
-    assert viz.laplacian_heatmap(img, cfg).shape == (60, 80, 3)
-    assert viz.exposure_overlay(img, cfg).shape == img.shape
+    assert views.laplacian_heatmap(img, cfg).shape == (60, 80, 3)
+    assert views.exposure_overlay(img, cfg).shape == img.shape
     hist = viz.gray_histogram(img)
     assert len(hist) == 256 and sum(r["像素數"] for r in hist) == 120 * 160
 
 
 def test_exposure_overlay_marks_dark_pixels():
     img = np.zeros((4, 4, 3), dtype=np.uint8)
-    out = viz.exposure_overlay(img, QualityConfig())
+    out = views.exposure_overlay(img, QualityConfig())
     assert out[0, 0, 0] > 0 and out[0, 0, 2] == 0
 
 

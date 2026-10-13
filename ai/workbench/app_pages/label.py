@@ -4,9 +4,9 @@ from dataclasses import replace
 import numpy as np
 import streamlit as st
 
+from dietai.devtools.images import encode_png
 from dietai.preprocess import LabelConfig, label_edges, preprocess_label
 from wb import viz
-from wb.images import encode_png
 from wb.st_config import config_editor, config_io
 from wb.st_layout import (
     card,

@@ -20,8 +20,23 @@ workbench = ["streamlit==1.65.0", "pandas==3.0.6", "altair==6.3.0"]
 ocr = ["paddleocr"]
 llm = ["litellm"]
 analytics = ["pandas>=2.2", "scipy", "pulp"]
-server = ["grpcio>=1.84", "grpcio-health-checking>=1.84", "protobuf>=7.36.2", "psycopg[binary]>=3.1", "pgvector", "minio"]
-dev = ["pytest==9.1.1", "ruff==0.16.10", "mypy==2.4.0"]
+# gRPC 服務（dietai.server）；protobuf 版本須與 proto/buf.gen.yaml 的外掛相容
+grpc = [
+  "grpcio>=1.84",
+  "grpcio-health-checking>=1.84",
+  "grpcio-status>=1.84",
+  "protobuf>=7.36.2",
+]
+server = ["dietai[grpc]", "psycopg[binary]>=3.1", "pgvector", "minio"]
+dev = [
+  "pytest==9.1.1",
+  "ruff==0.16.10",
+  "mypy==2.4.0",
+  "types-grpcio==1.84.0.20260928",
+  "types-protobuf==7.35.1.20260906",
+  "types-grpcio-status==1.0.0.20260408",
+  "types-grpcio-health-checking==1.0.0.20260518",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dietai"]
@@ -60,12 +75,26 @@ files = [
   "src/dietai/preprocess",
   "src/dietai/synthetic",
   "src/dietai/evaluation",
+  "src/dietai/devtools",
+  "src/dietai/server",
   "workbench",
   "../research/experiments/e1_barcode",
 ]
 mypy_path = ["src", "workbench"]
 explicit_package_bases = true
 strict = true
+# 呼叫產生的 add_XxxServicer_to_server 等未標註函式
+untyped_calls_exclude = ["dietai.v1"]
+
+[[tool.mypy.overrides]]
+# buf 產生的 proto 程式碼（*_pb2_grpc.py 沒有型別標註）
+module = ["dietai.v1.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# googleapis-common-protos（google.rpc 的錯誤細節）沒有型別資訊；只在 server/rpc.py 使用
+module = ["google.rpc", "google.rpc.*"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # pandas 無內建型別；只在工作台介面使用，不另裝 pandas-stubs

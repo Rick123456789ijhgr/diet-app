@@ -7,4 +7,5 @@ COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir ".[vision,llm,analytics,server]"
 EXPOSE 50051
+ENV AI_GRPC_LISTEN=0.0.0.0:50051
 CMD ["python", "-m", "dietai.server"]

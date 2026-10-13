@@ -16,14 +16,14 @@ from typing import Any, TypeVar
 
 import streamlit as st
 
-from dietai.preprocess.config import ParamInfo, param_info
-from wb.configs import (
+from dietai.devtools.configs import (
     changed_fields,
     config_from_json,
     config_python,
     config_to_dict,
     config_to_json,
 )
+from dietai.preprocess.config import ParamInfo, param_info
 from wb.text import group_label
 
 C = TypeVar("C")

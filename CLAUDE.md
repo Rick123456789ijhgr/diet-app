@@ -5,7 +5,7 @@
 ## 專案概要
 
 飲食紀錄 APP：以包裝標示、條碼、電子發票建立有真值的產品資料庫，用來評測、約束、校正外部 LLM／VLM 的飲食辨識結果。
-三個服務：Flutter APP（`app/`）、Go 主伺服器（`api/`）、Python 外掛服務（`ai/`）。
+三個服務：Flutter APP（`app/`）、Go 主伺服器（`api/`）、Python 外掛服務（`ai/`）。另有開發工作台前端（`workbench/`，React，經 Go 存取，見 ADR 0003）。
 
 ## 不可違反的規則
 
@@ -37,7 +37,8 @@ make up        # 啟動所有服務
 make test      # 全部測試
 make lint      # 全部 lint
 make gen       # 依規格重新產生程式碼（OpenAPI、proto、sqlc）
-make workbench # 開發工作台：以合成影像或開發照片測試各模組、調整參數
+make workbench # 開發工作台（Streamlit 版）：以合成影像或開發照片測試各模組、調整參數
+make workbench-react # 開發工作台（React 版）：一次啟動 Python gRPC、Go、Vite（遷移中，見 workbench/README.md）
 make e1-synthetic # E1 條碼消融：以合成資料端到端跑一次（research/experiments/e1_barcode）
 ```
 

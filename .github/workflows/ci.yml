@@ -25,6 +25,7 @@ jobs:
       proto: ${{ steps.filter.outputs.proto }}
       openapi: ${{ steps.filter.outputs.openapi }}
       gen: ${{ steps.filter.outputs.gen }}
+      workbench: ${{ steps.filter.outputs.workbench }}
       app_exists: ${{ steps.app.outputs.exists }}
     steps:
       - uses: actions/checkout@v5
@@ -54,6 +55,9 @@ jobs:
               - 'proto/**'
             openapi:
               - 'openapi/**'
+            workbench:
+              - 'workbench/**'
+              - 'openapi/workbench.yaml'
             # 規格或產生碼有變更時，檢查產生碼與規格一致
             gen:
               - 'proto/**'
@@ -96,8 +100,9 @@ jobs:
           cache-dependency-path: ai/pyproject.toml
       # pyzbar（條碼解碼對照組）需要系統的 zbar 函式庫；Windows wheel 已內含
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libzbar0
-      # preprocess 測試需要 OpenCV（vision），工作台測試需要 Streamlit（workbench）
-      - run: pip install -e ".[dev,vision,workbench]"
+      # preprocess 測試需要 OpenCV（vision），工作台測試需要 Streamlit（workbench），
+      # gRPC 服務測試需要 grpc
+      - run: pip install -e ".[dev,vision,workbench,grpc]"
       # research/ 只呼叫 dietai，一併檢查（設定沿用 ai/pyproject.toml，見 research/ruff.toml）
       - run: ruff check . ../research
       - run: ruff format --check . ../research
@@ -152,6 +157,28 @@ jobs:
         with:
           node-version: "22"
       - run: npx --yes @redocly/cli@latest lint openapi/openapi.yaml openapi/workbench.yaml
+
+  # 工作台前端：lint、型別、單元與元件測試（MSW 假後端）、建置。
+  # 接真實 Go 與 Python 的 Playwright 冒煙測試只在本機執行（npm run test:e2e）
+  workbench:
+    needs: changes
+    if: needs.changes.outputs.workbench == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workbench
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: workbench/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
 
   # 產生碼提交進 git；重新產生後不得有差異（忘了 make gen 或手改了 gen/ 都會失敗）
   gen:

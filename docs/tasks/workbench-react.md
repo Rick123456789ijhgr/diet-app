@@ -197,7 +197,7 @@ message JsonResponse { string json = 1; }
 
 **審核重點**
 - 讀取本機路徑的 RPC（`RunBatch`、E1）一律經 `dietai.evaluation`／`guard_path` 的測試集鎖定，拒絕 `splits/test`。
-- 暫存影像放在 Python 記憶體（LRU，上限約 64 張）；重啟就會清空，前端遇到「找不到 image_id」時自動重新上傳。
+- 暫存影像放在 Python 記憶體（LRU，上限 64 張且合計 1 GiB；1200 萬像素的照片解碼後約 36 MB）；重啟就會清空，前端遇到「找不到 image_id」時自動重新上傳。
 
 ### 2.3 `openapi/workbench.yaml`（React → Go）
 
@@ -272,12 +272,12 @@ message JsonResponse { string json = 1; }
 
 ## 3. 共通約定
 
-- **前端**：Vite＋React＋TypeScript（strict）、Tailwind、shadcn/ui、TanStack Query、React Router；圖表用 Vega-Lite（react-vega）。型別以 openapi-typescript 由 `openapi/workbench.yaml` 產生到 `workbench/src/api/gen/`。
+- **前端**：Vite＋React＋TypeScript（strict）、Tailwind、shadcn/ui 風格元件（以 Radix 撰寫於 `components/ui/`，不使用 CLI）、TanStack Query、React Router、openapi-fetch。圖表：階段 1 的直方圖以 SVG 自繪；參數掃描等需要互動圖表時（階段 3）再引入 Vega-Lite。型別以 openapi-typescript 由 `openapi/workbench.yaml` 產生到 `workbench/src/api/gen/`。
 - **版面**：左側直欄＝模組（總覽、模組一到五、冷啟動），頂部膠囊＝模組內頁面；工具頁為左控制面板（影像／參數／匯出入分頁）＋右結果，兩欄固定一個畫面高、各自捲動。模組與頁面註冊表在 `workbench/src/nav.ts`。介面只寫中文（警告代碼等維持英文代碼，由前端對應中文）。色系：靛藍主色、紫輔色，不使用綠與橘。
 - **即時調參**：滑桿停止約 150 ms 後送出請求，並取消尚未回來的舊請求；結果區保留舊結果並淡化，直到新結果回來。
 - **Go**：`internal/workbench`（handler → service，service 依賴 `AIClient` 介面）；`internal/platform/aiclient` 實作 gRPC 連線；handler 不寫業務邏輯，日誌帶 `request_id` 並透傳給 Python（gRPC metadata）。
 - **Python**：`server/` 只做 proto ↔ dietai 轉換；設定 JSON 經 `dietai.devtools.configs` 建成 dataclass 並驗證，錯誤回 `INVALID_ARGUMENT`（附欄位名稱）。
-- **測試**：Go 用 `httptest`＋假的 AIClient；Python 以程序內 gRPC server 測 servicer；前端用 Vitest＋Testing Library＋MSW；每頁一個 Playwright 冒煙測試（接真的 Go 與 Python）。
+- **測試**：Go 用 `httptest`＋假的 AIClient；Python 以程序內 gRPC server 測 servicer；前端用 Vitest＋Testing Library＋MSW；每頁一個 Playwright 冒煙測試（接真的 Go 與 Python，只在本機執行；CI 跑 lint、型別、Vitest、建置）。
 - **指令**：`make workbench` 同時啟動 Python gRPC、Go（`WORKBENCH_DEV_TOOLS=1`）、Vite；`make gen` 加入 oapi-codegen 與 openapi-typescript；`啟動工作台.bat` 改為啟動同樣三個程序。階段 1 至 3 先以 `make workbench-react` 啟動新版，`make workbench` 維持 Streamlit，到階段 4 再切換。
 
 ---
@@ -295,7 +295,35 @@ message JsonResponse { string json = 1; }
 
 ---
 
-## 5. 待決定（不影響階段 0 至 4）
+## 5. 進度
+
+### 階段 1（2026-10-14 完成，PR 待審）
+
+| PR | 內容 |
+| --- | --- |
+| #10 1a | 規格與產生碼（另修正 CI：buf-action 不在 PR 留言） |
+| 1b | Python gRPC 服務、`dietai.devtools`；`add_glare` 只算外接框（輸出逐像素不變） |
+| 1c | Go `aiclient`、`/workbench/v1/dev/*` 品質檢查路由；`*.go` 一律 LF |
+| 1d | React 外框、品質檢查頁、`make workbench-react` |
+
+驗收實測（本機，1080p 合成影像）：
+- 拖動「模糊 σ」到結果更新：約 104 ms（Playwright，扣除 150 ms 防抖）。Python 端：品質檢查約 14 ms、取影像約 9 ms。
+- 退化本身的耗時依項目而異：模糊約 2–5 ms，雜訊約 90 ms、光斑約 60 ms（最佳化後）、梯度約 35 ms；同時開啟雜訊與光斑時可能超過 200 ms（見第 6 節）。
+- 三端測試：Go（aiclient、httpmw、workbench）、Python（devtools 30 項、server 14 項）、前端（Vitest 21 項、Playwright 2 項）皆通過。
+
+實作時的決定：
+- 依賴版本固定；TypeScript 5.9、Vite 7、React Router 7（較新的主版號與 typescript-eslint 等工具尚未相容）。
+- 參數不合法時保留上一次成功的結果（淡化）並標出欄位；Python 重啟後前端自動重新建立原圖。
+- 尚未遷移的頁面顯示「預計在階段 N 完成」，期間使用 Streamlit 版。
+
+## 6. 後續改善（不阻擋階段 2）
+
+- **退化效能**：`gaussian_noise` 以 float64 產生 600 萬個亂數（約 90 ms）；改用 float32 或預先產生雜訊會改變輸出，影響 E1 合成資料的可重現性，須另開 PR 並重跑 E1。工作台也可只對調整中的退化快取前段結果。
+- **網址保存參數**：把參數覆寫與影像來源寫進網址，方便分享與重新整理後還原（Streamlit 版有此功能）。
+- **本機照片**：階段 3 與資料夾批次一起加入（經 `guard_path` 測試集鎖定）。
+- **CI 冒煙測試**：在 CI 啟動 Python 與 Go 跑 Playwright，需安裝 OpenCV 與瀏覽器，約增加 3–4 分鐘。
+
+## 7. 待決定（不影響階段 0 至 4）
 
 - 線上部署位置與 HTTPS。
 - 產品資料表與規劃書 6.1、9.2 的對齊。
