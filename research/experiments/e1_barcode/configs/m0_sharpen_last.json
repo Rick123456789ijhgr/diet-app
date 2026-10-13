@@ -1,0 +1,22 @@
+{
+  "name": "m0_sharpen_last",
+  "description": "誤讀對策：完整階梯但把反銳化遮罩移到最後（zxing-cpp 內建嘗試關閉，與 a6_full 比較）",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "denoise",
+      "deskew",
+      "multiscale",
+      "sharpen"
+    ],
+    "accept_formats": []
+  }
+}

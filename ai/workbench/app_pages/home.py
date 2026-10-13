@@ -1,106 +1,86 @@
+from datetime import datetime
+
 import streamlit as st
 
 from wb.configs import calibration_rows
-from wb.st_layout import page_header, section
+from wb.nav import MODULES
+from wb.st_layout import card, metric_row, page_header, section
 
+hour = datetime.now().hour
+greeting = "早安" if 5 <= hour < 11 else "午安" if 11 <= hour < 18 else "晚安"
 page_header(
-    "開發工作台",
-    "Workbench",
+    f"{greeting}，歡迎回到開發工作台",
     "用合成影像或開發用照片測試各模組、調整參數、執行測試。數字全部來自 dietai。",
-    ":material/biotech:",
+    ":material/space_dashboard:",
 )
 
-TOOLS = [
-    (
-        "app_pages/quality.py",
-        ":material/image_search:",
-        "品質檢查",
-        "Quality check",
-        "單張影像：模擬退化、看分數與警告、檢視拉普拉斯響應與曝光遮罩。",
-    ),
-    (
-        "app_pages/barcode.py",
-        ":material/barcode_reader:",
-        "條碼",
-        "Barcode",
-        "逐步升級解碼商品條碼與電子發票雙 QR，逐階檢視影像與耗時。",
-    ),
-    (
-        "app_pages/label.py",
-        ":material/receipt_long:",
-        "營養標示",
-        "Nutrition label",
-        "定位表格、透視校正、光斑修補與對比增強，與真實四角比較誤差。",
-    ),
-    (
-        "app_pages/food.py",
-        ":material/restaurant:",
-        "食物照片",
-        "Food photo",
-        "切出各道菜、偵測盤緣橢圓，試算送給 VLM 的尺寸與檔案大小。",
-    ),
-    (
-        "app_pages/sweep.py",
-        ":material/ssid_chart:",
-        "參數掃描",
-        "Sweep",
-        "讓一種退化由弱到強，找出指標越過門檻的位置。",
-    ),
-    (
-        "app_pages/batch.py",
-        ":material/photo_library:",
-        "資料夾批次",
-        "Batch",
-        "整個資料夾的通過率與分數分布，點選列即可檢視單張。",
-    ),
-    (
-        "app_pages/dev_checks.py",
-        ":material/fact_check:",
-        "測試與檢查",
-        "Checks",
-        "修改程式後在這裡跑 pytest、ruff、mypy。",
-    ),
-]
-
-section("快速開始", "Quick start", ":material/rocket_launch:")
-PER_ROW = 3
-for row in range(0, len(TOOLS), PER_ROW):
-    cols = st.columns(PER_ROW)
-    for col, (path, icon, zh, en, desc) in zip(cols, TOOLS[row : row + PER_ROW], strict=False):
-        with col, st.container(border=True, height=170):
-            st.markdown(f"#### {icon} {zh}")
-            st.caption(f"**{en}**　{desc}")
-            st.space("stretch")
-            if st.button("開啟 · Open", key=f"home.open.{path}", icon=":material/arrow_forward:"):
-                st.switch_page(path)
-
-left, right = st.columns([3, 2], gap="large")
-with left:
-    section("模組進度", "Module status", ":material/timeline:")
-    with st.container(border=True):
-        for phase, name, status, color in [
-            ("Phase 1", "共通品質檢查 · Quality check", "完成", "green"),
-            ("Phase 2", "條碼與電子發票 QR · Barcode & invoice QR", "完成", "green"),
-            ("Phase 3", "營養標示 · Nutrition label", "完成", "green"),
-            ("Phase 4", "食物照片 · Food photo", "完成", "green"),
-            ("Phase 5", "E1 實驗骨架 · E1 experiment", "完成", "green"),
-        ]:
-            with st.container(horizontal=True, vertical_alignment="center"):
-                st.badge(status, color=color, width=72)  # type: ignore[arg-type]
-                st.markdown(f"**{phase}**　{name}")
-        st.caption("模組一 影像前處理 · 對照 docs/tasks/m1-preprocess.md")
-
-with right:
-    section("使用規則", "Ground rules", ":material/gavel:")
-    with st.container(border=True):
-        st.markdown(
-            ":material/lock: **測試集鎖定**　拒絕讀取 `splits/test`；調門檻只用 train／dev。\n\n"
-            ":material/science: **門檻待校準**　這裡調出的數值僅供觀察，"
-            "改預設值請匯出 JSON、附校準依據後在 PR 修改 `config.py`。\n\n"
-            ":material/calculate: **數字由程式決定**　分數全部來自 `dietai` 的確定性程式。"
-        )
-
 rows = calibration_rows()
-with st.expander(f"待校準門檻 · Thresholds to calibrate（{len(rows)}）", icon=":material/science:"):
-    st.caption("由各設定類別中標記 `calibrate=True` 的欄位自動列出。")
-    st.dataframe(rows, hide_index=True, alt="所有待校準的設定欄位與預設值")
+phases = [p for m in MODULES for p in m.phases]
+done = sum(p.done for p in phases)
+active = [m for m in MODULES if m.ready]
+
+with metric_row():
+    with st.container(key="wb-hero"):
+        st.metric(
+            "Phase 完成",
+            f"{done} / {len(phases)}",
+            delta="、".join(m.short for m in active) or "尚未開始",
+            delta_color="off",
+            delta_arrow="off",
+            border=True,
+        )
+    st.metric(
+        "研究模組",
+        f"{len(active)} / {len(MODULES)}",
+        delta="已有工作台頁面",
+        delta_color="off",
+        delta_arrow="off",
+        border=True,
+    )
+    st.metric(
+        "待校準門檻",
+        str(len(rows)),
+        delta="只用 train／dev 校準",
+        delta_color="off",
+        delta_arrow="off",
+        border=True,
+    )
+    st.metric(
+        "測試集", "鎖定", delta="splits/test", delta_color="off", delta_arrow="off", border=True
+    )
+
+left, right = st.columns([2, 1], gap="medium")
+
+with left, card():
+    section("研究模組", ":material/view_module:")
+    for m in MODULES:
+        with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+            st.markdown(f"{m.icon} **{m.short}**　{m.name}", width="content")
+            if m.ready:
+                n_done = sum(p.done for p in m.phases)
+                st.badge(
+                    f"Phase {n_done} / {len(m.phases)}",
+                    color="green" if n_done == len(m.phases) else "blue",
+                )
+            else:
+                st.badge("規劃中", color="gray")
+            st.caption(m.scope)
+        if m.tools:
+            with st.container(horizontal=True, gap="small"):
+                for t in m.tools:
+                    label = t.title if t.phase is None else f"P{t.phase} {t.title}"
+                    st.page_link(t.path, label=label, icon=t.icon, help=t.desc)
+        if m.task_doc:
+            st.caption(f"任務書：`{m.task_doc}`")
+
+with right, card():
+    section("使用規則", ":material/gavel:")
+    st.markdown(
+        ":material/lock: **測試集鎖定**　拒絕讀取 `splits/test`；調門檻只用 train／dev。\n\n"
+        ":material/science: **門檻待校準**　這裡調出的數值僅供觀察，"
+        "改預設值請匯出 JSON、附校準依據後在 PR 修改 `config.py`。\n\n"
+        ":material/calculate: **數字由程式決定**　分數全部來自 `dietai` 的確定性程式。"
+    )
+    with st.popover(f"待校準門檻（{len(rows)}）", icon=":material/science:", width="stretch"):
+        st.caption("由各設定類別中標記 `calibrate=True` 的欄位自動列出。")
+        st.dataframe(rows, hide_index=True, alt="所有待校準的設定欄位與預設值")

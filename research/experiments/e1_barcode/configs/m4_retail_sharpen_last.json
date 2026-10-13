@@ -1,0 +1,26 @@
+{
+  "name": "m4_retail_sharpen_last",
+  "description": "誤讀對策：m3 的格式限制＋反銳化遮罩移到最後",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "denoise",
+      "deskew",
+      "multiscale",
+      "sharpen"
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

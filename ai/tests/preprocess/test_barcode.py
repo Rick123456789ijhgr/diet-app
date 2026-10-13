@@ -165,7 +165,8 @@ def test_checksum_verification_can_be_disabled(fake_decoder):
 
 def test_checksum_not_applied_to_other_formats(fake_decoder):
     decoder = fake_decoder([[_hit("hello", CodeFormat.QR_CODE)]])
-    assert decode_with_ladder(_blank(), decoder, RAW_ONLY).success
+    cfg = LadderConfig(rungs=(Rung.RAW,), accept_formats=())
+    assert decode_with_ladder(_blank(), decoder, cfg).success
 
 
 def test_rung_order_follows_config(fake_decoder):
@@ -228,3 +229,109 @@ def test_ladder_config_round_trips_through_json():
     cfg = LadderConfig(rungs=(Rung.DESKEW, Rung.RAW), scales=(3.0,))
     loaded = LadderConfig(**json.loads(json.dumps(asdict(cfg))))
     assert loaded == cfg and isinstance(loaded.rungs[0], Rung)
+
+
+# ---- 多階一致（min_agree）----
+
+AGREE2 = (Rung.RAW, Rung.GRAY, Rung.BINARIZE, Rung.SHARPEN)
+
+
+def test_min_agree_1_matches_first_hit(fake_decoder):
+    decoder = fake_decoder([[], [_hit("4712612300015")]])
+    result = decode_with_ladder(_blank(), decoder, LadderConfig(rungs=AGREE2))
+    assert result.success_rung is Rung.GRAY and result.hits[0].text == "4712612300015"
+
+
+def test_min_agree_2_waits_for_second_attempt(fake_decoder):
+    decoder = fake_decoder([[_hit("4710088410108")], [], [_hit("4710088410108")]])
+    result = decode_with_ladder(_blank(), decoder, LadderConfig(rungs=AGREE2, min_agree=2))
+    assert result.success and result.success_rung is Rung.BINARIZE
+    assert result.success_index == 2 and len(result.attempts) == 3
+    assert [h.text for h in result.hits] == ["4710088410108"]
+
+
+def test_min_agree_2_blocks_single_rung_misread(fake_decoder):
+    """單一階的誤讀（另一個檢查碼正確的號碼）不會被採用，等到兩階一致的真值。"""
+    decoder = fake_decoder(
+        [[], [_hit("4712612300015")], [_hit("4718652300015")], [_hit("4718652300015")]]
+    )
+    result = decode_with_ladder(_blank(), decoder, LadderConfig(rungs=AGREE2, min_agree=2))
+    assert result.success_rung is Rung.SHARPEN
+    assert [h.text for h in result.hits] == ["4718652300015"]
+
+
+def test_min_agree_unconfirmed_warning(fake_decoder):
+    decoder = fake_decoder([[_hit("4712612300015")], [_hit("4718652300015")]])
+    cfg = LadderConfig(rungs=(Rung.RAW, Rung.GRAY), min_agree=2)
+    result = decode_with_ladder(_blank(), decoder, cfg)
+    assert not result.success and result.hits == ()
+    assert result.warnings == (PreprocessWarning.BARCODE_UNCONFIRMED,)
+
+
+def test_min_agree_counts_one_vote_per_attempt(fake_decoder):
+    """同一次嘗試中重複解出同一碼只算一票。"""
+    hit = _hit("4710088410108")
+    decoder = fake_decoder([[hit, hit]])
+    cfg = LadderConfig(rungs=(Rung.RAW,), min_agree=2)
+    assert not decode_with_ladder(_blank(), decoder, cfg).success
+
+
+def test_min_agree_rejected_checksums_do_not_vote(fake_decoder):
+    decoder = fake_decoder([[_hit("4710088410109")]])
+    cfg = LadderConfig(rungs=(Rung.RAW,), min_agree=2)
+    assert decode_with_ladder(_blank(), decoder, cfg).warnings == (
+        PreprocessWarning.BARCODE_NOT_FOUND,
+    )
+
+
+def test_min_agree_must_be_positive():
+    with pytest.raises(ValueError, match="min_agree"):
+        LadderConfig(min_agree=0)
+
+
+def test_min_agree_2_on_real_image(zxing, ean13_img):
+    result = decode_with_ladder(ean13_img, zxing, LadderConfig(min_agree=2))
+    assert result.success and result.success_index == 1  # 原圖與灰階一致
+
+
+# ---- 採用格式（accept_formats）----
+
+RETAIL = (CodeFormat.EAN13, CodeFormat.EAN8, CodeFormat.UPCA)
+
+
+def test_accept_formats_rejects_other_symbologies(fake_decoder):
+    """斜拍 EAN-13 被部分掃描成合法的 UPC-E：限制格式後不採用、繼續下一階。"""
+    decoder = fake_decoder([[_hit("0171381000054", CodeFormat.UPCE)], [_hit("4710088410108")]])
+    cfg = LadderConfig(rungs=(Rung.RAW, Rung.GRAY), accept_formats=RETAIL)
+    result = decode_with_ladder(_blank(), decoder, cfg)
+    assert result.success_rung is Rung.GRAY
+    assert result.attempts[0].rejected[0].format is CodeFormat.UPCE
+
+
+def test_accept_formats_empty_accepts_all(fake_decoder):
+    decoder = fake_decoder([[_hit("0171381000054", CodeFormat.UPCE)]])
+    cfg = LadderConfig(rungs=(Rung.RAW,), accept_formats=())
+    assert decode_with_ladder(_blank(), decoder, cfg).success
+
+
+def test_defaults_reject_upce_and_put_sharpen_last(fake_decoder):
+    """2026-10-12 決定的預設：只收零售格式、sharpen 為最後一階。"""
+    assert LadderConfig().accept_formats == RETAIL
+    assert LadderConfig().rungs[-1] is Rung.SHARPEN
+    decoder = fake_decoder([[_hit("0171381000054", CodeFormat.UPCE)]])
+    assert not decode_with_ladder(_blank(), decoder, RAW_ONLY).success
+
+
+def test_accept_formats_from_json_strings():
+    cfg = LadderConfig(accept_formats=["EAN13", "UPCA"])  # type: ignore[arg-type]
+    assert cfg.accept_formats == (CodeFormat.EAN13, CodeFormat.UPCA)
+    with pytest.raises(ValueError):
+        LadderConfig(accept_formats=("EAN13", "EAN13"))  # type: ignore[arg-type]
+    with pytest.raises(ValueError):
+        LadderConfig(accept_formats=("EAN-13",))  # type: ignore[arg-type]
+
+
+def test_code_format_old_import_path_still_works():
+    from dietai.preprocess import decoders, types
+
+    assert decoders.CodeFormat is types.CodeFormat

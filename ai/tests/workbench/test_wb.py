@@ -162,7 +162,7 @@ def test_every_outcome_has_text():
     from wb.text import OUTCOME_TEXT, outcome_label
 
     assert set(OUTCOME_TEXT) == set(Outcome)
-    assert outcome_label("misread") == "誤讀 · Misread"
+    assert outcome_label("misread") == "誤讀"
     assert outcome_label("unknown") == "unknown"
 
 

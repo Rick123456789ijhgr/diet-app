@@ -1,0 +1,22 @@
+{
+  "name": "m5_retail_zxing_default",
+  "description": "誤讀對策：上線預設（z1）加上格式限制",
+  "decoder": "zxing",
+  "zxing": {},
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "multiscale"
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

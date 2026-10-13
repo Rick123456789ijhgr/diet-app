@@ -15,60 +15,67 @@ gatherUsageStats = false
 toolbarMode = "minimal"
 
 # ── 主題 ───────────────────────────────────────────────
+# 科技簡約風：中性灰底＋白色卡片，靛藍為主色、紫為輔色，不使用綠／橘。
 # 共用：字型、圓角、字級。顏色分淺色／深色兩組，右上角開關切換（wb/st_theme.py）。
+# 卡片、頂部導覽列等版面外觀見 wb/st_style.py。
+# 語意色：成功用青色（greenColor）、警告用黃色（orangeColor）、錯誤用玫瑰紅，避免綠與橘。
 [theme]
-font = "'Noto Sans TC', 'Microsoft JhengHei', sans-serif:https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap"
+font = "Inter, 'Noto Sans TC', 'Microsoft JhengHei', sans-serif:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 codeFont = "'JetBrains Mono', Consolas, monospace:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
-baseFontSize = 15
+baseFontSize = 14
 codeFontSize = "13px"
-headingFontSizes = ["28px", "21px", "17px", "15px", "14px", "12px"]
-headingFontWeights = [700, 700, 600, 600, 600, 600]
+headingFontSizes = ["20px", "16px", "14px", "14px", "13px", "12px"]
+headingFontWeights = [600, 600, 600, 600, 600, 600]
 baseRadius = "10px"
-buttonRadius = "8px"
-showWidgetBorder = true
+buttonRadius = "full"
+showWidgetBorder = false
 showSidebarBorder = true
 linkUnderline = false
 
 [theme.light]
-primaryColor = "#0F766E"
+primaryColor = "#4F46E5"
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F2F5F7"
-textColor = "#1D2733"
-borderColor = "#DDE3E9"
-linkColor = "#0F766E"
-codeBackgroundColor = "#F2F5F7"
-greenColor = "#15803D"
-redColor = "#C2410C"
-orangeColor = "#B45309"
-blueColor = "#1D4ED8"
-violetColor = "#6D28D9"
-dataframeHeaderBackgroundColor = "#EEF2F5"
-chartCategoricalColors = ["#0F766E", "#C2410C", "#1D4ED8", "#B45309", "#6D28D9", "#BE185D", "#475569"]
-chartSequentialColors = ["#F0FDFA", "#CCFBF1", "#99F6E4", "#5EEAD4", "#2DD4BF", "#14B8A6", "#0D9488", "#0F766E", "#115E59", "#134E4A"]
+secondaryBackgroundColor = "#F3F4F8"
+textColor = "#0F172A"
+borderColor = "#E4E7EE"
+linkColor = "#4F46E5"
+codeBackgroundColor = "#F3F4F8"
+greenColor = "#0891B2"
+redColor = "#E11D48"
+orangeColor = "#CA8A04"
+yellowColor = "#CA8A04"
+blueColor = "#2563EB"
+violetColor = "#7C3AED"
+grayColor = "#64748B"
+dataframeHeaderBackgroundColor = "#F6F7FA"
+chartCategoricalColors = ["#4F46E5", "#06B6D4", "#A855F7", "#F43F5E", "#64748B", "#0EA5E9", "#EAB308"]
+chartSequentialColors = ["#EEF2FF", "#E0E7FF", "#C7D2FE", "#A5B4FC", "#818CF8", "#6366F1", "#4F46E5", "#4338CA", "#3730A3", "#312E81"]
 
 [theme.light.sidebar]
-backgroundColor = "#F7F9FA"
-secondaryBackgroundColor = "#ECF0F3"
-borderColor = "#DDE3E9"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F4F8"
+borderColor = "#E4E7EE"
 
 [theme.dark]
-primaryColor = "#14A394"
-backgroundColor = "#0E1419"
-secondaryBackgroundColor = "#18212A"
-textColor = "#E3E9EE"
-borderColor = "#2A3540"
-linkColor = "#5EEAD4"
-codeBackgroundColor = "#141C23"
-greenColor = "#4ADE80"
-redColor = "#FB923C"
-orangeColor = "#FBBF24"
+primaryColor = "#6366F1"
+backgroundColor = "#151922"
+secondaryBackgroundColor = "#1E2330"
+textColor = "#E6E9F2"
+borderColor = "#2A3040"
+linkColor = "#A5B4FC"
+codeBackgroundColor = "#1A1F2B"
+greenColor = "#22D3EE"
+redColor = "#FB7185"
+orangeColor = "#FACC15"
+yellowColor = "#FACC15"
 blueColor = "#60A5FA"
 violetColor = "#A78BFA"
-dataframeHeaderBackgroundColor = "#1B252E"
-chartCategoricalColors = ["#2DD4BF", "#FB923C", "#60A5FA", "#FBBF24", "#A78BFA", "#F472B6", "#94A3B8"]
-chartSequentialColors = ["#134E4A", "#115E59", "#0F766E", "#0D9488", "#14B8A6", "#2DD4BF", "#5EEAD4", "#99F6E4", "#CCFBF1", "#F0FDFA"]
+grayColor = "#94A3B8"
+dataframeHeaderBackgroundColor = "#1A1F2A"
+chartCategoricalColors = ["#818CF8", "#22D3EE", "#C084FC", "#FB7185", "#94A3B8", "#38BDF8", "#FACC15"]
+chartSequentialColors = ["#312E81", "#3730A3", "#4338CA", "#4F46E5", "#6366F1", "#818CF8", "#A5B4FC", "#C7D2FE", "#E0E7FF", "#EEF2FF"]
 
 [theme.dark.sidebar]
-backgroundColor = "#11181E"
-secondaryBackgroundColor = "#1B252E"
-borderColor = "#2A3540"
+backgroundColor = "#11141B"
+secondaryBackgroundColor = "#1E2330"
+borderColor = "#232838"

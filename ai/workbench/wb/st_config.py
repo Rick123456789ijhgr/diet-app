@@ -112,12 +112,12 @@ def _on_import(
     st.session_state.pop(f"{uploader_key}.error", None)
     _set_values(prefix, {k: v for k, v in config_to_dict(cfg).items() if k in param_info(cls)})
     _set_extras(extra_keys, cfg)
-    st.toast("已匯入設定 · Config imported", icon=":material/check_circle:")
+    st.toast("已匯入設定", icon=":material/check_circle:")
 
 
 def _field_widget(prefix: str, name: str, info: ParamInfo, default_value: Any) -> Any:
     key = _widget_key(prefix, name)
-    # 側欄較窄：標籤只放中文，英文名稱放在說明第一行
+    # 面板較窄：標籤只放中文，英文名稱放在說明第一行
     label = info.label
     if info.calibrate:
         label += " :orange[◆]"
@@ -186,7 +186,7 @@ def config_editor(
             "還原",
             icon=":material/restart_alt:",
             type="tertiary",
-            help="全部還原為預設值 · Reset to defaults",
+            help="全部還原為預設值",
             on_click=_reset,
             args=(cls, prefix, extra_keys),
             key=f"cfg.{prefix}.reset",
@@ -199,13 +199,22 @@ def config_editor(
         changed_here = sum(
             st.session_state[_widget_key(prefix, n)] != getattr(default, n) for n in names
         )
-        if changed_here:
-            title += f"　:orange-badge[已修改 {changed_here}]"
-        with st.expander(title, expanded=True, icon=icon, key=f"cfg.{prefix}.group.{group}"):
-            for name in names:
-                values[name] = _field_widget(prefix, name, infos[name], getattr(default, name))
+        with st.container(key=f"wb-group-{prefix}-{group or 'other'}", gap="small"):
+            head = f"{icon} **{title}**"
+            if changed_here:
+                head += f"　:orange-badge[已修改 {changed_here}]"
+            st.markdown(head)
+            # 逐列兩欄排列；開關類欄位放在最後，避免與數字欄位錯位
+            ordered = sorted(names, key=lambda n: isinstance(getattr(default, n), bool))
+            for i in range(0, len(ordered), 2):
+                cols = st.columns(2, gap="small", vertical_alignment="bottom")
+                for col, name in zip(cols, ordered[i : i + 2], strict=False):
+                    with col:
+                        values[name] = _field_widget(
+                            prefix, name, infos[name], getattr(default, name)
+                        )
     if any(info.calibrate for info in infos.values()):
-        st.caption(":orange[◆] 待校準的門檻 · To be calibrated")
+        st.caption(":orange[◆] 待校準的門檻")
 
     store.update(values)
     extras = {n: st.session_state[k] for n, k in extra_keys.items() if k in st.session_state}
@@ -218,12 +227,9 @@ def config_editor(
     return cfg
 
 
-def config_io(
-    cfg: Any, cls: type[Any], prefix: str, extra_keys: Mapping[str, str] | None = None
-) -> None:
-    """匯出（JSON 下載、Python 程式碼）與匯入設定。``extra_keys`` 見 ``config_editor``。"""
+def _export(cfg: Any, cls: type[Any], prefix: str) -> None:
     st.download_button(
-        "下載 JSON · Download",
+        "下載 JSON",
         data=config_to_json(cfg),
         file_name=f"{cls.__name__}.json",
         mime="application/json",
@@ -231,11 +237,25 @@ def config_io(
         key=f"cfg.{prefix}.download",
         width="stretch",
     )
-    st.caption("與預設值不同的欄位 · Changed fields")
+    st.caption("與預設值不同的欄位（可貼進 PR）")
     st.code(config_python(cfg), language="python", wrap_lines=True)
+
+
+def config_io(
+    cfg: Any, cls: type[Any], prefix: str, extra_keys: Mapping[str, str] | None = None
+) -> None:
+    """匯出（JSON 下載、Python 程式碼）與匯入設定。``extra_keys`` 見 ``config_editor``。
+
+    ``cfg`` 為 ``None``（參數不合法）時只提供匯入。
+    """
+    st.markdown(f"**{cls.__name__}**")
+    if cfg is None:
+        st.caption("參數不合法，修正後才能匯出。")
+    else:
+        _export(cfg, cls, prefix)
     uploader_key = f"cfg.{prefix}.import"
     st.file_uploader(
-        "匯入 JSON · Import",
+        "匯入 JSON",
         type=["json"],
         key=uploader_key,
         on_change=_on_import,
@@ -243,16 +263,3 @@ def config_io(
     )
     if err := st.session_state.get(f"{uploader_key}.error"):
         st.error(f"匯入失敗：{err}", icon=":material/error:")
-
-
-def config_sidebar(
-    cls: type[C], prefix: str, extra_keys: Mapping[str, str] | None = None
-) -> C | None:
-    """把參數面板與匯入匯出放進側欄；各頁面共用。``extra_keys`` 見 ``config_editor``。"""
-    with st.sidebar:
-        st.subheader("參數 · Parameters", anchor=False, icon=":material/tune:")
-        cfg = config_editor(cls, prefix, extra_keys)
-        if cfg is not None:
-            with st.expander("匯入／匯出 · Import / export", icon=":material/swap_vert:"):
-                config_io(cfg, cls, prefix, extra_keys)
-    return cfg

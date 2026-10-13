@@ -23,9 +23,9 @@ from dietai.preprocess.types import Box, Ellipse, Image, Quad
 # BGR
 DARK_COLOR = (255, 80, 0)
 BRIGHT_COLOR = (0, 0, 255)
-HIT_COLORS = ((40, 180, 40), (230, 120, 0), (0, 140, 255))
-FOUND_COLOR = (40, 180, 40)
-TRUTH_COLOR = (230, 120, 0)
+HIT_COLORS = ((211, 38, 192), (230, 120, 0), (212, 182, 6))  # 紫、藍、青
+FOUND_COLOR = (211, 38, 192)  # 紫：程式找到的結果
+TRUTH_COLOR = (230, 120, 0)  # 藍：合成影像的真值
 GLARE_COLOR = (0, 0, 255)
 
 

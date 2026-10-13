@@ -15,6 +15,7 @@
       "sharpen",
       "denoise",
       "deskew"
-    ]
+    ],
+    "accept_formats": []
   }
 }

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Any, Protocol
 
 import cv2
@@ -16,21 +15,10 @@ import numpy as np
 
 from dietai.preprocess.config import ZxingConfig
 from dietai.preprocess.ops import to_gray, validate_image
+from dietai.preprocess.types import CodeFormat as CodeFormat  # 定義在 types，此處沿用舊路徑
 from dietai.preprocess.types import Image
 
 Point = tuple[float, float]
-
-
-class CodeFormat(StrEnum):
-    """條碼格式（與解碼套件無關的代碼）。"""
-
-    EAN13 = "EAN13"
-    EAN8 = "EAN8"
-    UPCA = "UPCA"
-    UPCE = "UPCE"
-    CODE128 = "CODE128"
-    QR_CODE = "QR_CODE"
-    OTHER = "OTHER"
 
 
 @dataclass(frozen=True)
