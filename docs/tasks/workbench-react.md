@@ -210,8 +210,8 @@ message JsonResponse { string json = 1; }
 | `GET /workbench/v1/auth/me` | 目前登入者 | Go |
 | `GET /workbench/v1/dev/config-schemas` | 參數表單結構 | `GetConfigSchemas` |
 | `POST /workbench/v1/dev/images` | 上傳影像（multipart） | `PutImage` |
-| `POST /workbench/v1/dev/images:synthesize` | 合成影像 | `Synthesize` |
-| `POST /workbench/v1/dev/images/{id}:degrade` | 模擬退化 | `Degrade` |
+| `POST /workbench/v1/dev/images/synthesize` | 合成影像 | `Synthesize` |
+| `POST /workbench/v1/dev/images/{image_id}/degrade` | 模擬退化 | `Degrade` |
 | `POST /workbench/v1/dev/views` | 診斷影像 | `RenderView` |
 | `GET /workbench/v1/dev/artifacts/{id}` | 取得影像型結果（PNG／JPEG） | `GetArtifact` |
 | `POST /workbench/v1/dev/quality` | 品質檢查 | `CheckQuality` |
@@ -227,7 +227,7 @@ message JsonResponse { string json = 1; }
 | `PUT /workbench/v1/coldstart/submissions/{id}/images/{kind}` | 上傳照片，kind：front／barcode／label；Go 存 MinIO 後呼叫前處理 | Go＋`PreprocessService` |
 | `GET /workbench/v1/coldstart/submissions/{id}` | 取得上傳內容與前處理結果 | Go |
 | `PUT /workbench/v1/coldstart/submissions/{id}/draft` | 儲存人工輸入（條碼、品名、營養數值） | Go |
-| `POST /workbench/v1/coldstart/submissions/{id}:confirm` | 確認並寫入產品資料庫 | Go |
+| `POST /workbench/v1/coldstart/submissions/{id}/confirm` | 確認並寫入產品資料庫 | Go |
 | `GET /workbench/v1/coldstart/submissions?status=` | 列出上傳（草稿／已確認） | Go |
 
 錯誤回應統一為 `{"code": "IMAGE_NOT_FOUND", "message": "…"}`，`code` 用英文代碼，前端對應中文。
@@ -261,6 +261,14 @@ message JsonResponse { string json = 1; }
 - **`RenderView` 回傳**：改為 `RenderViewResponse`，直方圖等資料型檢視放 `data_json`，不轉成影像。
 - **`GetArtifact`**：暫存影像（含退化後影像）與診斷影像共用 ID，前端顯示退化後影像也用它取得。Python 以（原圖 ID, 退化參數）快取退化結果。
 - **產生碼提交進 git**（`api/gen/`、`ai/src/dietai/v1/`、`workbench/src/api/gen/`）；CI 執行 `make gen` 後 `git diff` 必須為空。
+
+**PR 1a 實作時的調整（工具限制，待 Rick 確認）**
+
+- **`WorkbenchService` 每個 RPC 有專屬的回應訊息**：buf lint（STANDARD）要求回應命名為 `<RPC>Response` 且不共用，因此 `PutImage`／`Synthesize`／`Degrade` 改回傳 `XxxResponse { ImageRef image = 1; }`，`Sweep`／`RunBatch`／`ListE1Runs`／`GetE1Run`／`StartE1Run` 改回傳各自的 `XxxResponse { string json = 1; }`。內容不變。
+- **路徑不用冒號**：Go 標準函式庫的路由萬用字元必須佔滿整段路徑，`{id}:degrade` 無法註冊。改為 `POST /dev/images/synthesize`、`POST /dev/images/{image_id}/degrade`；階段 5 的確認也改為 `POST /coldstart/submissions/{id}/confirm`。
+- **冷啟動路由延到階段 5**：請求與回應欄位取決於 2.4 節資料表，屆時與資料表一起補進 `openapi/workbench.yaml`。登入三支路由已先寫入。
+- **JSON 為主的回應一律是物件**：`FreeJson`（掃描、批次、E1、直方圖、真值）限定為 JSON 物件，Python 回傳串列時須包一層，例如 `{"rows": [...]}`。
+- **Go 升到 1.25**：grpc-go 1.84 需要 Go 1.25；`api/Dockerfile` 一併改為 `golang:1.25`。
 
 ## 3. 共通約定
 

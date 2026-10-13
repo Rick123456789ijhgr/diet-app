@@ -24,6 +24,7 @@ jobs:
       app: ${{ steps.filter.outputs.app }}
       proto: ${{ steps.filter.outputs.proto }}
       openapi: ${{ steps.filter.outputs.openapi }}
+      gen: ${{ steps.filter.outputs.gen }}
       app_exists: ${{ steps.app.outputs.exists }}
     steps:
       - uses: actions/checkout@v5
@@ -53,6 +54,14 @@ jobs:
               - 'proto/**'
             openapi:
               - 'openapi/**'
+            # 規格或產生碼有變更時，檢查產生碼與規格一致
+            gen:
+              - 'proto/**'
+              - 'openapi/**'
+              - 'api/gen/**'
+              - 'ai/src/dietai/v1/**'
+              - 'workbench/src/api/gen/**'
+              - 'Makefile'
 
   api:
     needs: changes
@@ -129,6 +138,8 @@ jobs:
           input: proto
           push: false
           breaking: ${{ github.event_name == 'pull_request' }}
+          # workflow 只有讀取權限；結果看 job 紀錄即可，不在 PR 留言
+          pr_comment: false
           breaking_against: ${{ github.event.repository.clone_url }}#format=git,commit=${{ github.event.pull_request.base.sha }},subdir=proto
 
   openapi:
@@ -140,4 +151,31 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - run: npx --yes @redocly/cli@latest lint openapi/openapi.yaml
+      - run: npx --yes @redocly/cli@latest lint openapi/openapi.yaml openapi/workbench.yaml
+
+  # 產生碼提交進 git；重新產生後不得有差異（忘了 make gen 或手改了 gen/ 都會失敗）
+  gen:
+    needs: changes
+    if: needs.changes.outputs.gen == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: bufbuild/buf-action@v1
+        with:
+          version: 1.73.0
+          setup_only: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: api/go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: make gen
+      - name: 檢查產生碼與規格一致
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain
+            git diff
+            echo "產生碼與規格不一致：請在本機執行 make gen 並提交結果"
+            exit 1
+          fi

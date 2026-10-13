@@ -1,0 +1,137 @@
+syntax = "proto3";
+
+package dietai.v1;
+
+option go_package = "github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1";
+
+// 開發工作台的輔助服務（Go → Python），只在開發模式（WORKBENCH_DEV_TOOLS=1）註冊。
+// 回傳以 JSON 為主：只有工作台會讀，結構隨研究需求調整。
+// 讀取本機路徑的 RPC（RunBatch、E1）一律經測試集鎖定，拒絕 splits/test。
+service WorkbenchService {
+  rpc GetConfigSchemas(GetConfigSchemasRequest) returns (GetConfigSchemasResponse);
+  // 上傳並暫存影像；暫存在 Python 記憶體（LRU），重啟即清空
+  rpc PutImage(PutImageRequest) returns (PutImageResponse);
+  // 合成影像（附真值）
+  rpc Synthesize(SynthesizeRequest) returns (SynthesizeResponse);
+  // 模擬退化，產生新的暫存影像
+  rpc Degrade(DegradeRequest) returns (DegradeResponse);
+  // 診斷影像或圖表資料
+  rpc RenderView(RenderViewRequest) returns (RenderViewResponse);
+  rpc GetArtifact(GetArtifactRequest) returns (GetArtifactResponse);
+  rpc Sweep(SweepRequest) returns (SweepResponse);
+  // 逐張回傳，前端顯示進度
+  rpc RunBatch(RunBatchRequest) returns (stream RunBatchResponse);
+  rpc ListE1Runs(ListE1RunsRequest) returns (ListE1RunsResponse);
+  rpc GetE1Run(GetE1RunRequest) returns (GetE1RunResponse);
+  // 進度＋最後結果
+  rpc StartE1Run(StartE1RunRequest) returns (stream StartE1RunResponse);
+}
+
+// 暫存影像。image_id 與診斷影像的 ID 共用同一個空間，皆可由 GetArtifact 取得
+message ImageRef {
+  string image_id = 1;
+  int32 width = 2;
+  int32 height = 3;
+  string description = 4;
+  string truth_json = 5; // 合成影像的真值（四角、盤緣等）；沒有則為空
+}
+
+message GetConfigSchemasRequest {}
+
+message GetConfigSchemasResponse {
+  string json = 1; // 各設定類別的 param() 欄位資訊
+}
+
+message PutImageRequest {
+  bytes encoded = 1;
+  string name = 2;
+}
+
+message PutImageResponse {
+  ImageRef image = 1;
+}
+
+message SynthesizeRequest {
+  string scene = 1; // label／ean13／invoice／nutrition／food
+  string params_json = 2;
+}
+
+message SynthesizeResponse {
+  ImageRef image = 1;
+}
+
+message DegradeRequest {
+  string image_id = 1;
+  string degradation_json = 2;
+}
+
+message DegradeResponse {
+  ImageRef image = 1;
+}
+
+message RenderViewRequest {
+  string image_id = 1;
+  // laplacian／exposure／histogram／label_edges／glare_mask／food_mask／ladder_variant
+  string view = 2;
+  string config_json = 3;
+}
+
+message RenderViewResponse {
+  ImageRef image = 1; // 影像型檢視（邊緣響應、遮罩等）
+  string data_json = 2; // 資料型檢視（例如直方圖），由前端畫圖
+}
+
+message GetArtifactRequest {
+  string id = 1; // 暫存影像的 image_id 或診斷影像的 ID
+}
+
+message GetArtifactResponse {
+  bytes encoded = 1;
+  string content_type = 2;
+}
+
+message SweepRequest {
+  string target = 1; // quality／barcode
+  string params_json = 2;
+}
+
+message SweepResponse {
+  string json = 1;
+}
+
+message RunBatchRequest {
+  string folder = 1;
+  bool recursive = 2;
+  int32 limit = 3;
+  string config_json = 4;
+}
+
+message RunBatchResponse {
+  string json = 1;
+}
+
+message ListE1RunsRequest {
+  string root = 1;
+}
+
+message ListE1RunsResponse {
+  string json = 1;
+}
+
+message GetE1RunRequest {
+  string run_dir = 1;
+}
+
+message GetE1RunResponse {
+  string json = 1;
+}
+
+message StartE1RunRequest {
+  repeated string arms = 1;
+  int32 n_codes = 2;
+  string root = 3;
+}
+
+message StartE1RunResponse {
+  string json = 1;
+}

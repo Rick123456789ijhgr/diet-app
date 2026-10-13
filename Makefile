@@ -61,6 +61,12 @@ e1-synthetic:
 	cd ai && $(AI_PY) $(E1)/run.py --manifest $(E1)/synthetic/manifest.csv --label synthetic
 	cd ai && $(AI_PY) $(E1)/analyze.py
 
+# 產生程式碼（產生結果提交進 git，CI 檢查與規格一致）。工具版本固定，升級時一併重新產生。
+# buf 需先安裝：go install github.com/bufbuild/buf/cmd/buf@v1.73.0
+OAPI_CODEGEN := github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.8.0
+OPENAPI_TS := openapi-typescript@7.13.0
 gen:
 	cd proto && buf generate
-	@echo "TODO: 加入 oapi-codegen、sqlc、openapi-generator 指令"
+	cd api && go run $(OAPI_CODEGEN) -generate types,std-http-server,strict-server -package workbenchapi -o gen/openapi/workbenchapi/workbench.gen.go ../openapi/workbench.yaml
+	npx --yes $(OPENAPI_TS) openapi/workbench.yaml -o workbench/src/api/gen/workbench.ts
+	@echo "TODO: 加入 sqlc、APP 的 openapi-generator 指令"
