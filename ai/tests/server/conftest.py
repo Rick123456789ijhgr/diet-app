@@ -25,20 +25,23 @@ class RunningServer:
         self.channel = grpc.insecure_channel(f"127.0.0.1:{self.port}")
 
     def _run(self, dev_tools: bool) -> None:
+        # 事件迴圈持續執行到 close() 明確停止，避免 stop() 尚未完成迴圈就先結束
         asyncio.set_event_loop(self._loop)
-        self._loop.run_until_complete(self._serve(dev_tools))
+        self._loop.run_until_complete(self._start(dev_tools))
+        self._ready.set()
+        self._loop.run_forever()
 
-    async def _serve(self, dev_tools: bool) -> None:
+    async def _start(self, dev_tools: bool) -> None:
         self.server = await create_server(dev_tools, self.store)
         self.port = self.server.add_insecure_port("127.0.0.1:0")
         await self.server.start()
-        self._ready.set()
-        await self.server.wait_for_termination()
 
     def close(self) -> None:
         self.channel.close()
-        asyncio.run_coroutine_threadsafe(self.server.stop(0), self._loop).result(5)
-        self._thread.join(5)
+        asyncio.run_coroutine_threadsafe(self.server.stop(None), self._loop).result(10)
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(10)
+        self._loop.close()
 
 
 @pytest.fixture(scope="module")
