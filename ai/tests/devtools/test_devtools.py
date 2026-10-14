@@ -168,3 +168,40 @@ def test_histogram_counts_every_pixel():
     counts = gray_histogram_counts(img)
     assert len(counts) == 256
     assert counts[0] == 19 and counts[255] == 1
+
+
+def test_store_encodes_lazily_and_counts_encoded_bytes():
+    store = ImageStore()
+    calls = []
+
+    def encode():
+        calls.append(1)
+        return b"x" * 1000, "image/png"
+
+    item = store.put(_img(), "x", encode=encode, meta={"k": 1})
+    assert calls == []  # 存入時不編碼
+    before = store.total_bytes
+    assert store.encoded(item.image_id) == (b"x" * 1000, "image/png")
+    assert store.encoded(item.image_id)[1] == "image/png"
+    assert calls == [1]  # 只編一次
+    assert store.total_bytes == before + 1000  # 編碼後的檔案計入記憶體上限
+    assert item.meta == {"k": 1}
+
+
+def test_glare_overlay_matches_label_pipeline():
+    from dataclasses import replace
+
+    from dietai.devtools.views import glare_overlay, mask_overlay
+    from dietai.preprocess import LabelConfig, preprocess_label
+    from dietai.synthetic import add_glare, label_perspective_scene
+
+    img, _ = label_perspective_scene(seed=2)
+    img = add_glare(img, 0.15, seed=1)
+    cfg = LabelConfig()
+    full = preprocess_label(img, cfg)
+    assert full.glare is not None
+    before = preprocess_label(img, replace(cfg, enable_glare=False, enable_contrast=False)).image
+    overlay, ratio = glare_overlay(img, cfg)
+    assert ratio == pytest.approx(full.glare.ratio)
+    np.testing.assert_array_equal(overlay, mask_overlay(before, full.glare.mask))
+    assert glare_overlay(img, replace(cfg, enable_glare=False)) is None

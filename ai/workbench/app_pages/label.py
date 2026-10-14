@@ -1,5 +1,4 @@
 import time
-from dataclasses import replace
 
 import numpy as np
 import streamlit as st
@@ -132,15 +131,12 @@ with results:
                 "輪廓與直線都在這張圖上找。"
             )
         elif view == "glare":
-            if result.glare is None:
+            # 遮罩是在校正後、修補前的影像上算的，疊回同一個版本
+            overlay = views.glare_overlay(img, cfg)
+            if overlay is None:
                 st.caption("光斑步驟未啟用。")
             else:
-                # 遮罩是在校正後、修補前的影像上算的，疊回同一個版本
-                before = replace(cfg, enable_glare=False, enable_contrast=False)
-                base = preprocess_label(img, before).image
-                st.image(
-                    views.mask_overlay(base, result.glare.mask), channels="BGR", alt="光斑遮罩"
-                )
+                st.image(overlay[0], channels="BGR", alt="光斑遮罩")
                 st.caption(
                     f":red[■] 亮度 ≥ {cfg.glare_v_min} 且飽和度 ≤ {cfg.glare_s_max}，"
                     f"再擴張 {cfg.glare_dilate_px} px。"

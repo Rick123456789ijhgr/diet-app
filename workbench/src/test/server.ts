@@ -202,6 +202,8 @@ const QUAD = [
 /** 合成影像的真值（依場景）：營養標示的四角各偏 (3, 4)，即每角誤差 5 px */
 function truthFor(scene: string): Record<string, unknown> | undefined {
   if (scene === 'nutrition') return { quad: QUAD.map((p) => ({ x: p.x + 3, y: p.y + 4 })) }
+  // 種子 1 的標示在別處：拿舊結果和它比會得到很大的誤差
+  if (scene === 'nutrition-seed1') return { quad: QUAD.map((p) => ({ x: p.x + 300, y: p.y })) }
   if (scene === 'food') {
     return {
       plates: [{ cx: 200, cy: 200, major: 180, minor: 150, angle: 0 }],
@@ -256,10 +258,12 @@ const json = async (request: Request) => {
 export const handlers = [
   http.get('*/workbench/v1/dev/config-schemas', () => HttpResponse.json(schemas)),
   http.post('*/workbench/v1/dev/images/synthesize', async ({ request }) => {
-    const body = (await json(request)) as { scene: string }
-    const truth = truthFor(body.scene)
+    const body = (await json(request)) as { scene: string; params?: { seed?: number } }
+    const seed = body.params?.seed ?? 0
+    const scene = seed ? `${body.scene}-seed${seed}` : body.scene
+    const truth = truthFor(scene)
     return HttpResponse.json(
-      { ...base, image_id: `base-${body.scene}`, ...(truth && { truth }) },
+      { ...base, image_id: `base-${scene}`, ...(truth && { truth }) },
       { status: 201 },
     )
   }),
@@ -304,7 +308,10 @@ export const handlers = [
     })
   }),
   http.post('*/workbench/v1/dev/label', async ({ request }) => {
-    const body = (await json(request)) as { config?: Record<string, unknown> }
+    const body = (await json(request)) as { image_id: string; config?: Record<string, unknown> }
+    if (body.image_id.includes('seed1')) {
+      return HttpResponse.json({ code: 'INTERNAL', message: '模擬失敗' }, { status: 500 })
+    }
     const glareOn = body.config?.enable_glare !== false
     return HttpResponse.json({
       image: artifact('label-out', 492, 832),

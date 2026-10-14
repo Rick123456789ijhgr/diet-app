@@ -8,6 +8,8 @@ import { useLastDefined } from '@/hooks/useLastDefined'
 export interface Timed<T> {
   data: T
   roundTripMs: number
+  /** 這個結果是哪一張影像算出來的（顯示時要配同一張影像） */
+  imageId: string
 }
 
 export function useAnalysis<T, C = ConfigOverride>({
@@ -34,7 +36,7 @@ export function useAnalysis<T, C = ConfigOverride>({
     queryFn: async ({ signal }): Promise<Timed<T>> => {
       const start = performance.now()
       const data = await run(imageId!, debounced, signal)
-      return { data, roundTripMs: performance.now() - start }
+      return { data, roundTripMs: performance.now() - start, imageId: imageId! }
     },
     enabled: !!imageId && enabled,
     placeholderData: keepPreviousData,

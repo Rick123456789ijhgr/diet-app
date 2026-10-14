@@ -5,11 +5,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import cv2
 import numpy as np
 import numpy.typing as npt
 
-from dietai.preprocess import QualityConfig
+from dietai.preprocess import LabelConfig, QualityConfig, detect_glare, preprocess_label
 from dietai.preprocess.ops import to_gray
 from dietai.preprocess.quality import exposure_masks, laplacian_map
 from dietai.preprocess.types import Image
@@ -58,3 +60,15 @@ def mask_on_small(img: Image, mask: npt.NDArray[np.bool_]) -> Image:
         img if img.shape[:2] == (h, w) else cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
     )
     return mask_overlay(np.asarray(small, dtype=np.uint8), mask)
+
+
+def glare_overlay(img: Image, cfg: LabelConfig) -> tuple[Image, float] | None:
+    """光斑遮罩疊在「校正後、修補前」的影像上，並回傳光斑比例；光斑步驟未啟用時回傳 ``None``。
+
+    ``preprocess_label`` 就是在這個版本上偵測光斑，因此只需跑一次不含光斑與對比的流程。
+    """
+    if not cfg.enable_glare:
+        return None
+    before = preprocess_label(img, replace(cfg, enable_glare=False, enable_contrast=False)).image
+    glare = detect_glare(before, cfg)
+    return mask_overlay(before, glare.mask), glare.ratio

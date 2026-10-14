@@ -6,8 +6,7 @@
 
 from __future__ import annotations
 
-import json
-from dataclasses import asdict
+from collections.abc import Callable
 from typing import Any
 
 import grpc
@@ -75,10 +74,10 @@ class PreprocessServicer(preprocess_pb2_grpc.PreprocessServiceServicer):
         out = preprocess_pb2.PreprocessLabelResponse(
             image=self._output(
                 request.image,
-                f"label:{_key(cfg)}",
+                f"label:{convert.config_key(cfg)}",
                 result.image,
                 "營養標示輸出",
-                (encode_png(result.image), "image/png"),
+                lambda: (encode_png(result.image), "image/png"),
             ),
             quad_method=result.quad_method or "",
             glare_ratio=result.glare.ratio if result.glare is not None else -1.0,
@@ -95,11 +94,15 @@ class PreprocessServicer(preprocess_pb2_grpc.PreprocessServiceServicer):
     ) -> preprocess_pb2.PreprocessFoodResponse:
         cfg = config_from_override(FoodConfig, request.config.json)
         result = preprocess_food(self._image(request.image), cfg)
-        key = _key(cfg)
+        key = convert.config_key(cfg)
 
         def vlm(v: Any, role: str, description: str) -> preprocess_pb2.VlmImage:
             image = self._output(
-                request.image, f"food:{role}:{key}", v.image, description, (v.jpeg, "image/jpeg")
+                request.image,
+                f"food:{role}:{key}",
+                v.image,
+                description,
+                lambda: (v.jpeg, "image/jpeg"),
             )
             return preprocess_pb2.VlmImage(image=image, num_bytes=len(v.jpeg), scale=v.scale)
 
@@ -143,17 +146,14 @@ class PreprocessServicer(preprocess_pb2_grpc.PreprocessServiceServicer):
         key: str,
         img: Image,
         description: str,
-        encoded: tuple[bytes, str],
+        encode: Callable[[], tuple[bytes, str]],
     ) -> preprocess_pb2.ImageOutput:
-        """影像型結果：開發模式存進暫存區（同一張原圖、同一組參數只存一次），否則直接附上。"""
+        """影像型結果：開發模式存進暫存區（同一張原圖、同一組參數只存一次，取用時才編碼），
+        否則直接附上編碼後的檔案。"""
         h, w = img.shape[:2]
         if self._store is None or source.WhichOneof("source") != "image_id":
-            return preprocess_pb2.ImageOutput(encoded=encoded[0], width=w, height=h)
+            return preprocess_pb2.ImageOutput(encoded=encode()[0], width=w, height=h)
         item = self._store.derived(source.image_id, key)
         if item is None:
-            item = self._store.put_derived(source.image_id, key, img, description, encoded=encoded)
+            item = self._store.put_derived(source.image_id, key, img, description, encode=encode)
         return preprocess_pb2.ImageOutput(artifact_id=item.image_id, width=w, height=h)
-
-
-def _key(cfg: Any) -> str:
-    return json.dumps(asdict(cfg), sort_keys=True, default=str)

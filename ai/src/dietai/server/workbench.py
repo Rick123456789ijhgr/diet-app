@@ -9,7 +9,6 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Callable
-from dataclasses import asdict, replace
 from itertools import islice
 from typing import Any
 
@@ -24,10 +23,10 @@ from dietai.devtools.schema import config_schemas
 from dietai.devtools.store import ImageStore, StoredImage
 from dietai.devtools.views import (
     exposure_overlay,
+    glare_overlay,
     gray_histogram_counts,
     laplacian_heatmap,
     mask_on_small,
-    mask_overlay,
 )
 from dietai.preprocess import (
     FoodConfig,
@@ -37,9 +36,8 @@ from dietai.preprocess import (
     dish_foreground,
     label_edges,
     ladder_variants,
-    preprocess_label,
 )
-from dietai.preprocess.types import Image
+from dietai.preprocess.types import Image, Rung
 from dietai.server import convert
 from dietai.server.rpc import RpcError, unary
 from dietai.v1 import workbench_pb2, workbench_pb2_grpc
@@ -92,7 +90,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         source = self._store.get(request.image_id)
         if d.is_identity():
             return workbench_pb2.DegradeResponse(image=convert.image_ref(source))
-        key = "degrade:" + _key(d)
+        key = "degrade:" + convert.config_key(d)
         item = self._store.derived(source.image_id, key)
         if item is None:
             # 只改亮度、模糊、雜訊時像素位置不變，合成影像的真值仍成立
@@ -119,7 +117,10 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
             cls, label, render = _SIMPLE_VIEWS[view]
             cfg = config_from_override(cls, request.config_json)
             item = self._derived(
-                source, f"view:{view}:{_key(cfg)}", label, lambda: render(source.image, cfg)
+                source,
+                f"view:{view}:{convert.config_key(cfg)}",
+                label,
+                lambda: render(source.image, cfg),
             )
             return workbench_pb2.RenderViewResponse(image=convert.image_ref(item))
         if view == "glare_mask":
@@ -149,22 +150,26 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     def _glare_mask(
         self, source: StoredImage, config_json: str
     ) -> workbench_pb2.RenderViewResponse:
-        """光斑遮罩疊在「校正後、修補前」的影像上（遮罩就是在這個版本上算的）。"""
+        """光斑遮罩疊在「校正後、修補前」的影像上；光斑比例一併回傳。"""
         cfg = config_from_override(LabelConfig, config_json)
         if not cfg.enable_glare:
             return workbench_pb2.RenderViewResponse(data_json=convert.dumps({"enabled": False}))
-        result = preprocess_label(source.image, cfg)
-        assert result.glare is not None
-        glare = result.glare
-
-        def render() -> Image:
-            before = replace(cfg, enable_glare=False, enable_contrast=False)
-            return mask_overlay(preprocess_label(source.image, before).image, glare.mask)
-
-        item = self._derived(source, f"view:glare_mask:{_key(cfg)}", "光斑遮罩", render)
+        key = f"view:glare_mask:{convert.config_key(cfg)}"
+        item = self._store.derived(source.image_id, key)
+        if item is None:
+            result = glare_overlay(source.image, cfg)
+            assert result is not None
+            overlay, ratio = result
+            item = self._store.put_derived(
+                source.image_id,
+                key,
+                overlay,
+                f"{source.description}・光斑遮罩",
+                meta={"ratio": ratio},
+            )
+        data = {"enabled": True, "ratio": (item.meta or {}).get("ratio")}
         return workbench_pb2.RenderViewResponse(
-            image=convert.image_ref(item),
-            data_json=convert.dumps({"enabled": True, "ratio": glare.ratio}),
+            image=convert.image_ref(item), data_json=convert.dumps(data)
         )
 
     def _ladder_variant(
@@ -178,27 +183,36 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         cfg = config_from_override(LadderConfig, options.pop("ladder", None))
         if options:
             raise SceneError(f"不認得的欄位：{sorted(options)}", next(iter(options)))
-        variant = next(islice(ladder_variants(source.image, cfg), index, None), None)
-        if variant is None:
-            raise SceneError(f"第 {index} 次嘗試不存在（共 {len(cfg.rungs)} 階）", "index")
-        data = {
-            "rung": variant.rung.value,
-            "params": dict(variant.params),
-            "skipped": variant.skipped,
-        }
-        if variant.image is None:
-            return workbench_pb2.RenderViewResponse(data_json=convert.dumps(data))
-        variant_image = variant.image
-        item = self._derived(
-            source, f"view:ladder:{index}:{_key(cfg)}", f"第 {index + 1} 階", lambda: variant_image
-        )
+        key = f"view:ladder:{index}:{convert.config_key(cfg)}"
+        item = self._store.derived(source.image_id, key)
+        if item is None:
+            variant = next(islice(ladder_variants(source.image, cfg), index, None), None)
+            if variant is None:
+                raise SceneError(
+                    f"第 {index + 1} 次嘗試不存在（共 {_attempt_count(cfg)} 次）", "index"
+                )
+            data = {
+                "rung": variant.rung.value,
+                "params": dict(variant.params),
+                "skipped": variant.skipped,
+            }
+            if variant.image is None:  # 略過的階沒有影像，不快取
+                return workbench_pb2.RenderViewResponse(data_json=convert.dumps(data))
+            item = self._store.put_derived(
+                source.image_id,
+                key,
+                variant.image,
+                f"{source.description}・第 {index + 1} 次嘗試",
+                meta=data,
+            )
         return workbench_pb2.RenderViewResponse(
-            image=convert.image_ref(item), data_json=convert.dumps(data)
+            image=convert.image_ref(item), data_json=convert.dumps(item.meta or {})
         )
 
 
-def _key(cfg: Any) -> str:
-    return json.dumps(asdict(cfg), sort_keys=True, default=str)
+def _attempt_count(cfg: LadderConfig) -> int:
+    """逐步升級的嘗試次數：多尺度階依倍率各算一次。"""
+    return sum(len(cfg.scales) if r is Rung.MULTISCALE else 1 for r in cfg.rungs)
 
 
 @functools.cache

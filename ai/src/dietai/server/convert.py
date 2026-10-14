@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
+from dataclasses import asdict
 from typing import Any
 
 from dietai.devtools.store import StoredImage
@@ -15,6 +16,11 @@ from dietai.v1 import preprocess_pb2, workbench_pb2
 def dumps(value: Any) -> str:
     """JSON 編碼：保留中文；numpy 純量等非標準型別轉成字串，避免整個請求失敗。"""
     return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def config_key(cfg: Any) -> str:
+    """設定的快取鍵：全部欄位依名稱排序的 JSON（衍生影像依原圖與這個鍵去重複）。"""
+    return json.dumps(asdict(cfg), sort_keys=True, default=str)
 
 
 def steps(records: Iterable[StepRecord]) -> list[preprocess_pb2.Step]:

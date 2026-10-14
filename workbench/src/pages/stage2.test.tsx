@@ -94,6 +94,20 @@ describe('營養標示頁', () => {
     expect(within(table).getAllByText('5.00')).toHaveLength(4)
   })
 
+  it('新影像的分析失敗時，保留舊影像與舊結果，不混用', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/label')
+    await screen.findByText('5.0 px', {}, WAIT)
+    await user.clear(screen.getByLabelText('種子'))
+    await user.type(screen.getByLabelText('種子'), '1')
+    expect(await screen.findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent(
+      '伺服器內部錯誤',
+    )
+    // 舊四角不會拿去和新影像的真值比較（否則誤差約 300 px）
+    expect(screen.getByText('5.0 px')).toBeInTheDocument()
+    expect(screen.queryByText(/超過驗收/)).not.toBeInTheDocument()
+  })
+
   it('關閉光斑步驟時顯示未啟用', async () => {
     const user = userEvent.setup()
     renderAt('/m1/label')

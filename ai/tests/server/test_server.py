@@ -314,12 +314,26 @@ def test_stage2_views(wb):
         "INVALID_PARAMS",
         "index",
     )
+    # 多尺度階依倍率各算一次：raw＋multiscale(2 個倍率) 共 3 次，index 2 存在
+    multi = {"rungs": ["raw", "multiscale"], "scales": [2.0, 0.5]}
+    third = view(ean.image_id, "ladder_variant", {"index": 2, "ladder": multi})
+    assert json.loads(third.data_json)["rung"] == "multiscale"
+    # 同樣的請求沿用快取，參數資料一併保留
+    again = view(ean.image_id, "ladder_variant", {"index": 2, "ladder": multi})
+    assert again.image.image_id == third.image.image_id
+    assert again.data_json == third.data_json
+    with pytest.raises(grpc.RpcError) as exc:
+        view(ean.image_id, "ladder_variant", {"index": 3, "ladder": multi})
+    assert "共 3 次" in exc.value.details()
 
     label = _synth(wb, "nutrition")
     assert view(label.image_id, "label_edges").image.image_id
     glare = view(label.image_id, "glare_mask")
     assert json.loads(glare.data_json)["enabled"] is True
     assert glare.image.image_id
+    cached = view(label.image_id, "glare_mask")
+    assert cached.image.image_id == glare.image.image_id
+    assert cached.data_json == glare.data_json  # 命中快取時光斑比例仍在
     off = view(label.image_id, "glare_mask", {"enable_glare": False})
     assert json.loads(off.data_json) == {"enabled": False}
     assert not off.HasField("image")

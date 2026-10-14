@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/layout/Workspace'
 import { Badge, Card } from '@/components/ui/primitives'
 import type { ImagePipeline } from '@/hooks/useImagePipeline'
 import type { Analysis, Timed } from '@/hooks/useAnalysis'
+import { useLastDefined } from '@/hooks/useLastDefined'
 import { cn } from '@/lib/cn'
 import { errorText, warningText } from '@/lib/text'
 
@@ -28,6 +29,11 @@ export function AnalysisFrame<T>({
 }) {
   const { shown, query, configError, stale } = analysis
   const image = pipeline.image
+  // 影像與結果必須來自同一張圖：換圖後新結果回來前，繼續顯示上一組（淡化），
+  // 不把舊結果（例如四角、偵測框）疊到新影像上
+  const pair = useLastDefined(
+    shown && image && shown.imageId === image.image_id ? { result: shown, image } : undefined,
+  )
   const fatal = [pipeline.base.error, pipeline.degraded.error].find(
     (e) => e && !(e instanceof ApiError && e.code === 'INVALID_CONFIG'),
   )
@@ -38,7 +44,7 @@ export function AnalysisFrame<T>({
       </EmptyState>
     )
   }
-  if (!image || !shown || !ready) {
+  if (!pair || !ready) {
     const err = fatal ?? query.error
     return err ? <ErrorBox error={err} /> : <EmptyState>載入中…</EmptyState>
   }
@@ -49,8 +55,13 @@ export function AnalysisFrame<T>({
       {configError && (
         <ErrorBox error={configError} className="mb-4" hint="請在左側參數修正標紅的欄位。" />
       )}
-      <div className={cn('transition-opacity', stale && 'opacity-60')}>
-        {children(shown, image)}
+      <div
+        className={cn(
+          'transition-opacity',
+          (stale || pair.image !== image || pair.result !== shown) && 'opacity-60',
+        )}
+      >
+        {children(pair.result, pair.image)}
       </div>
     </>
   )
