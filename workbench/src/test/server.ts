@@ -255,7 +255,196 @@ const json = async (request: Request) => {
   return body as Record<string, unknown>
 }
 
+/** 以 SSE 回應一串事件；error 不為空時最後送出 event: error。 */
+function sse(events: unknown[], error?: { code: string; message: string }) {
+  const body =
+    events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('') +
+    (error ? `event: error\ndata: ${JSON.stringify(error)}\n\n` : '')
+  return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } })
+}
+
+const batchRow = (
+  index: number,
+  file: string,
+  passed: boolean,
+  extra: Record<string, unknown> = {},
+) => ({
+  type: 'row',
+  index,
+  file,
+  path: `D:/photos/${file}`,
+  short_side: 600,
+  blur_score: passed ? 900 : 40,
+  mean_brightness: 150,
+  dark_ratio: 0.01,
+  bright_ratio: 0.02,
+  resolution_ok: true,
+  passed,
+  warnings: passed ? [] : ['TOO_BLURRY'],
+  error: null,
+  ...extra,
+})
+
+export const e1Run = {
+  name: '20261014-run',
+  path: 'D:/runs/20261014-run',
+  meta: {
+    items: 4,
+    include_test: false,
+    duration_s: 1.5,
+    git: { commit: 'abcdef1234', dirty: false },
+  },
+  arms: ['a0_raw', 'a6_full'],
+  tags: ['condition'],
+  overall: {
+    a0_raw: [
+      {
+        arm: 'a0_raw',
+        n: 4,
+        correct: 2,
+        rate: 0.5,
+        ci_low: 0.15,
+        ci_high: 0.85,
+        misread: 1,
+        missed: 1,
+        false_positive: 0,
+        errors: 0,
+        median_ms: 2,
+        mean_attempts: 1,
+        p_value: 1,
+      },
+      {
+        arm: 'a6_full',
+        n: 4,
+        correct: 4,
+        rate: 1,
+        ci_low: 0.51,
+        ci_high: 1,
+        misread: 0,
+        missed: 0,
+        false_positive: 0,
+        errors: 0,
+        median_ms: 9,
+        mean_attempts: 3,
+        p_value: 0.5,
+      },
+    ],
+    a6_full: [],
+  },
+  by_tag: {
+    condition: [
+      { arm: 'a0_raw', condition: 'blur', n: 2, correct: 1, rate: 0.5, misread: 1 },
+      { arm: 'a6_full', condition: 'blur', n: 2, correct: 2, rate: 1, misread: 0 },
+    ],
+  },
+  rescues: [
+    { arm: 'a0_raw', rung: 'raw', count: 2 },
+    { arm: 'a6_full', rung: 'gray', count: 4 },
+  ],
+  failures: [
+    {
+      id: 'img-1',
+      arm: 'a0_raw',
+      outcome: 'misread',
+      truth: '4710088410108',
+      decoded: '4710088410115',
+      success_rung: 'raw',
+      error: '',
+      image: 'D:/e1/img-1.png',
+      condition: 'blur',
+    },
+  ],
+  attempts: [{ id: 'img-1', arm: 'a0_raw', rung: 'raw', elapsed_ms: '1.2', hits: '1' }],
+}
+
 export const handlers = [
+  http.post('*/workbench/v1/dev/sweeps', async ({ request }) => {
+    const body = (await json(request)) as { target: string; params: Record<string, unknown> }
+    const thumbs = [{ level: 0, image_id: 'thumb-0', width: 200, height: 120 }]
+    if (body.target === 'barcode') {
+      return HttpResponse.json({
+        levels: [0, 45],
+        rates: [
+          { level: 0, method: 'raw', rate: 1 },
+          { level: 45, method: 'raw', rate: 0 },
+          { level: 0, method: 'ladder', rate: 1 },
+          { level: 45, method: 'ladder', rate: 1 },
+        ],
+        rung_counts: [
+          { level: 0, rung: 'raw', count: 2 },
+          { level: 45, rung: 'deskew', count: 2 },
+        ],
+        overall: { raw: 0.5, ladder: 1 },
+        first_failure: { raw: 45, ladder: null },
+        rows: [],
+        thumbs,
+      })
+    }
+    return HttpResponse.json({
+      levels: [0, 4, 8],
+      rows: [0, 4, 8].map((level) => ({
+        level,
+        blur_score: 900 - level * 100,
+        mean_brightness: 180,
+        dark_ratio: 0,
+        bright_ratio: 0,
+        resolution_ok: true,
+        passed: level < 8,
+        warnings: level < 8 ? [] : ['TOO_BLURRY'],
+      })),
+      triggers: { LOW_RESOLUTION: null, TOO_BLURRY: 8, TOO_DARK: null, TOO_BRIGHT: null },
+      thumbs,
+    })
+  }),
+  http.post('*/workbench/v1/dev/batches', async ({ request }) => {
+    const body = (await json(request)) as { folder: string }
+    if (body.folder.includes('splits/test')) {
+      return HttpResponse.json({ code: 'SPLIT_LOCKED', message: '測試集已鎖定' }, { status: 403 })
+    }
+    if (body.folder.endsWith('.png')) {
+      // 單檔模式：載入影像供檢視
+      return sse([
+        { type: 'start', total: 1 },
+        batchRow(0, 'a.png', true, { image_id: 'local-a', width: 640, height: 480 }),
+        { type: 'summary', count: 1, ok: 1, failed: 0, pass_rate: 1, warning_counts: {} },
+      ])
+    }
+    return sse([
+      { type: 'start', total: 3, folder: body.folder },
+      batchRow(0, 'a.png', true),
+      batchRow(1, 'b.png', false),
+      { type: 'row', index: 2, file: 'c.png', path: 'D:/photos/c.png', error: '無法解碼影像' },
+      {
+        type: 'summary',
+        count: 3,
+        ok: 2,
+        failed: 1,
+        pass_rate: 0.5,
+        warning_counts: { LOW_RESOLUTION: 0, TOO_BLURRY: 1, TOO_DARK: 0, TOO_BRIGHT: 0 },
+      },
+    ])
+  }),
+  http.get('*/workbench/v1/dev/e1/runs', () =>
+    HttpResponse.json({
+      root: 'D:/runs',
+      runs: [{ name: '20261014-run', path: 'D:/runs/20261014-run' }],
+      arms: ['a0_raw', 'a6_full', 'm1_agree2'],
+      default_arms: ['a0_raw', 'a6_full'],
+    }),
+  ),
+  http.get('*/workbench/v1/dev/e1/runs/:id', () => HttpResponse.json(e1Run)),
+  http.post('*/workbench/v1/dev/e1/runs', async ({ request }) => {
+    const body = (await json(request)) as { arms: string[] }
+    if (body.arms.includes('m1_agree2')) {
+      return sse([{ type: 'start', total: 4 }], { code: 'INTERNAL', message: '模擬失敗' })
+    }
+    return sse([
+      { type: 'start', total: 4 },
+      { type: 'progress', done: 2, total: 4 },
+      { type: 'progress', done: 4, total: 4 },
+      { type: 'done', name: '20261014-run', path: 'D:/runs/20261014-run' },
+    ])
+  }),
   http.get('*/workbench/v1/dev/config-schemas', () => HttpResponse.json(schemas)),
   http.post('*/workbench/v1/dev/images/synthesize', async ({ request }) => {
     const body = (await json(request)) as { scene: string; params?: { seed?: number } }

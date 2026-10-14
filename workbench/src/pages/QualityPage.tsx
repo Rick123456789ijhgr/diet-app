@@ -69,9 +69,10 @@ export function QualityPage() {
   )
 
   /** 參數目前的值（顯示門檻用） */
-  const current = (name: string) => {
+  /** 某組參數的目前值（顯示門檻與說明用）；結果區用算出該結果的那組參數 */
+  const valuesOf = (cfg: ConfigOverride) => (name: string) => {
     const f = quality.schema?.fields.find((x) => x.name === name)
-    return f ? (valueOf(f, config) as number) : NaN
+    return f ? (valueOf(f, cfg) as number) : NaN
   }
 
   const panel = (
@@ -117,7 +118,8 @@ export function QualityPage() {
         }
       />
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!quality.schema}>
-        {({ data: result, roundTripMs }, img) => {
+        {({ data: result, roundTripMs, config: used }, img) => {
+          const current = valuesOf(used as ConfigOverride)
           const short = Math.min(img.width, img.height)
           const pct = (v: number) => `${(v * 100).toFixed(1)}%`
           const signed = (v: number, f: (v: number) => string) =>

@@ -17,6 +17,7 @@ from dietai.preprocess.types import Image
 
 __all__ = [
     "IMAGE_SUFFIXES",
+    "PathNotFoundError",
     "SplitLockedError",
     "decode_image",
     "encode_jpeg",
@@ -28,6 +29,13 @@ __all__ = [
 ]
 
 IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"})
+
+
+class PathNotFoundError(FileNotFoundError):
+    """使用者指定的本機路徑不存在或不是預期的種類（回應 ``PATH_NOT_FOUND``）。
+
+    與程式內部缺檔（設定檔遺失等）區分：後者仍以 ``INTERNAL`` 回報並記錄 traceback。
+    """
 
 
 def guard_path(path: str | Path) -> Path:
@@ -50,7 +58,7 @@ def load_image(path: str | Path) -> Image:
     """讀取本機影像（支援含中文的 Windows 路徑）。"""
     resolved = guard_path(path)
     if not resolved.is_file():
-        raise FileNotFoundError(f"找不到檔案：{resolved}")
+        raise PathNotFoundError(f"找不到檔案：{resolved}")
     return decode_image(resolved.read_bytes())
 
 
@@ -60,7 +68,7 @@ def list_images(
     """列出資料夾中的影像檔（依路徑排序），自動略過 test split 下的檔案。"""
     root = guard_path(folder)
     if not root.is_dir():
-        raise NotADirectoryError(f"不是資料夾：{root}")
+        raise PathNotFoundError(f"不是資料夾：{root}")
     pattern = "**/*" if recursive else "*"
     found = sorted(
         p

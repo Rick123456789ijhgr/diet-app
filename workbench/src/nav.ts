@@ -91,7 +91,7 @@ export const MODULES: Module[] = [
         icon: TrendingUp,
         description: '退化由弱到強，找出越過門檻的位置。',
         stage: 3,
-        ready: false,
+        ready: true,
       },
       {
         slug: 'batch',
@@ -99,7 +99,7 @@ export const MODULES: Module[] = [
         icon: Images,
         description: '整個資料夾的通過率與分數分布。',
         stage: 3,
-        ready: false,
+        ready: true,
       },
       {
         slug: 'e1',
@@ -107,7 +107,7 @@ export const MODULES: Module[] = [
         icon: FlaskConical,
         description: '比較各實驗組的成功率、誤讀與失敗影像。',
         stage: 3,
-        ready: false,
+        ready: true,
       },
     ],
   },

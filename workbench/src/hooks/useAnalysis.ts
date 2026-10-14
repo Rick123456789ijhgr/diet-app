@@ -5,11 +5,13 @@ import { ApiError, type ConfigOverride } from '@/api/client'
 import { useDebounced } from '@/hooks/useDebounced'
 import { useLastDefined } from '@/hooks/useLastDefined'
 
-export interface Timed<T> {
+export interface Timed<T, C = unknown> {
   data: T
   roundTripMs: number
   /** 這個結果是哪一張影像算出來的（顯示時要配同一張影像） */
   imageId: string
+  /** 算出這個結果的參數（顯示門檻時要用它，而不是畫面上最新的參數） */
+  config: C
 }
 
 export function useAnalysis<T, C = ConfigOverride>({
@@ -33,12 +35,13 @@ export function useAnalysis<T, C = ConfigOverride>({
   const debounced = useDebounced(config)
   const query = useQuery({
     queryKey: [name, imageId, debounced, extraKey],
-    queryFn: async ({ signal }): Promise<Timed<T>> => {
+    queryFn: async ({ signal }): Promise<Timed<T, C>> => {
       const start = performance.now()
       const data = await run(imageId!, debounced, signal)
-      return { data, roundTripMs: performance.now() - start, imageId: imageId! }
+      return { data, roundTripMs: performance.now() - start, imageId: imageId!, config: debounced }
     },
-    enabled: !!imageId && enabled,
+    // 等防抖跟上目前的參數才送出（config 須為穩定的物件），避免帶著舊參數或舊 image_id 先請求一次
+    enabled: !!imageId && enabled && debounced === config,
     placeholderData: keepPreviousData,
   })
   const shown = useLastDefined(query.data)

@@ -119,3 +119,52 @@ describe('序列欄位與位元組、幾何', () => {
     expect(quadErrors([], q)).toBeNull()
   })
 })
+
+describe('SSE 解析', () => {
+  it('切出完整事件，保留未完成的部分', async () => {
+    const { parseSse } = await import('./sse')
+    const [events, rest] = parseSse(
+      'data: {"a":1}\n\nevent: error\ndata: {"code":"X"}\n\ndata: {"b"',
+    )
+    expect(events).toEqual([
+      { event: 'message', data: '{"a":1}' },
+      { event: 'error', data: '{"code":"X"}' },
+    ])
+    expect(rest).toBe('data: {"b"')
+    const [more] = parseSse(rest + ':2}\r\n\r\n')
+    expect(more).toEqual([{ event: 'message', data: '{"b":2}' }])
+  })
+})
+
+describe('useStream', () => {
+  it('新的執行取代舊的時，舊執行結束不會覆蓋新狀態', async () => {
+    const { renderHook, act, waitFor } = await import('@testing-library/react')
+    const { http, HttpResponse, delay } = await import('msw')
+    const { server } = await import('@/test/server')
+    const { useStream } = await import('@/hooks/useStream')
+    let call = 0
+    server.use(
+      http.post('*/test-stream', async () => {
+        call += 1
+        const n = call
+        if (n === 1) await delay(30)
+        return new HttpResponse(`data: {"n":${n}}\n\n`, {
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      }),
+    )
+    const { result, unmount } = renderHook(() => useStream<{ n: number }>('/test-stream'))
+    await act(async () => {
+      void result.current.run({})
+      void result.current.run({}) // 立刻再按一次：第一次被取消
+    })
+    await waitFor(() => expect(result.current.status).toBe('done'))
+    expect(result.current.events).toEqual([{ n: 2 }])
+    // 等第一次（被取消）的請求在假後端那端結束，確認它不會覆蓋新狀態
+    await waitFor(() => expect(call).toBe(2))
+    await new Promise((r) => setTimeout(r, 120))
+    expect(result.current.status).toBe('done')
+    // 卸載以清除計時器，避免測試環境拆掉後才觸發
+    unmount()
+  })
+})

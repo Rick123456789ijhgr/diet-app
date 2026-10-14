@@ -57,11 +57,17 @@ func toError(err error) *Error {
 	return &Error{http.StatusInternalServerError, "INTERNAL", err.Error(), ""}
 }
 
-func writeError(w http.ResponseWriter, e *Error) {
+// errorBody 是 HTTP 錯誤回應與 SSE 的 event: error 共用的內容。
+func errorBody(e *Error) api.Error {
 	body := api.Error{Code: e.Code, Message: e.Message}
 	if e.Field != "" {
 		body.Field = &e.Field
 	}
+	return body
+}
+
+func writeError(w http.ResponseWriter, e *Error) {
+	body := errorBody(e)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(e.Status)
 	_ = json.NewEncoder(w).Encode(body)

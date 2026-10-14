@@ -81,6 +81,14 @@ func newServer(t *testing.T, ai *fakeAI, devTools bool) *httptest.Server {
 	return srv
 }
 
+// newServerWith 以任意 AIClient 啟動開發模式的伺服器，回傳網址。
+func newServerWith(t *testing.T, ai AIClient) string {
+	t.Helper()
+	srv := httptest.NewServer(NewHTTPHandler(NewService(ai), Options{DevTools: true}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
 func postJSON(t *testing.T, url, body string) *http.Response {
 	t.Helper()
 	resp, err := http.Post(url, "application/json", strings.NewReader(body))
@@ -206,7 +214,7 @@ func TestUnknownPathIsJSON404(t *testing.T) {
 }
 
 func TestLaterStageRoutesAre501(t *testing.T) {
-	resp := postJSON(t, newServer(t, &fakeAI{}, true).URL+"/workbench/v1/dev/sweeps", `{"target":"quality"}`)
+	resp := postJSON(t, newServer(t, &fakeAI{}, true).URL+"/workbench/v1/auth/login", `{"username":"a","password":"b"}`)
 	if resp.StatusCode != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", resp.StatusCode)
 	}

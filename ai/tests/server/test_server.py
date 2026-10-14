@@ -340,3 +340,129 @@ def test_stage2_views(wb):
 
     food = _synth(wb, "food")
     assert view(food.image_id, "food_mask").image.height > 0
+
+
+def test_sweep_quality_and_barcode(wb):
+    # 自己上傳：測試伺服器的暫存區只有 16 格，共用的 uploaded 可能已被淘汰
+    fresh = wb.PutImage(workbench_pb2.PutImageRequest(encoded=encode_png(SMALL))).image
+
+    def run(target: str, params: dict) -> dict:
+        req = workbench_pb2.SweepRequest(target=target, params_json=json.dumps(params))
+        return json.loads(wb.Sweep(req).json)
+
+    q = run("quality", {"axis": "blur_sigma", "lo": 0, "hi": 6, "n": 4, "image_id": fresh.image_id})
+    assert len(q["rows"]) == 4
+    assert "TOO_BLURRY" in q["triggers"]
+    thumb = q["thumbs"][0]
+    art = wb.GetArtifact(workbench_pb2.GetArtifactRequest(id=thumb["image_id"]))
+    assert art.content_type == "image/jpeg"
+    # 只改品質參數時縮圖不變，沿用暫存區中的同一批（不新增影像）
+    again = run(
+        "quality",
+        {
+            "axis": "blur_sigma",
+            "lo": 0,
+            "hi": 6,
+            "n": 4,
+            "image_id": fresh.image_id,
+            "config": {"blur_min": 50},
+        },
+    )
+    assert [t["image_id"] for t in again["thumbs"]] == [t["image_id"] for t in q["thumbs"]]
+
+    b = run("barcode", {"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3, "samples": 1})
+    assert set(b["overall"]) == {"raw", "ladder"}
+    assert len(b["thumbs"]) == 3
+
+    _expect_error(
+        lambda: run("moon", {}), grpc.StatusCode.INVALID_ARGUMENT, "INVALID_PARAMS", "target"
+    )
+    _expect_error(
+        lambda: run("quality", {"image_id": "missing"}),
+        grpc.StatusCode.NOT_FOUND,
+        "IMAGE_NOT_FOUND",
+    )
+
+
+def test_run_batch_streams_rows(wb, tmp_path):
+    for i in range(2):
+        (tmp_path / f"p{i}.png").write_bytes(encode_png(label_scene(500, 600, seed=i)))
+    events = [
+        json.loads(m.json)
+        for m in wb.RunBatch(workbench_pb2.RunBatchRequest(folder=str(tmp_path), limit=10))
+    ]
+    assert [e["type"] for e in events] == ["start", "row", "row", "summary"]
+    assert events[-1]["pass_rate"] == 1.0
+
+    # 單一檔案：影像存進暫存區，可以取得
+    single = [
+        json.loads(m.json)
+        for m in wb.RunBatch(workbench_pb2.RunBatchRequest(folder=str(tmp_path / "p0.png")))
+    ]
+    image_id = single[1]["image_id"]
+    assert wb.GetArtifact(workbench_pb2.GetArtifactRequest(id=image_id)).encoded
+
+
+def test_run_batch_errors(wb, tmp_path):
+    locked = tmp_path / "splits" / "test"
+    locked.mkdir(parents=True)
+    _expect_error(
+        lambda: list(wb.RunBatch(workbench_pb2.RunBatchRequest(folder=str(locked)))),
+        grpc.StatusCode.PERMISSION_DENIED,
+        "SPLIT_LOCKED",
+    )
+    _expect_error(
+        lambda: list(wb.RunBatch(workbench_pb2.RunBatchRequest(folder=str(tmp_path / "nope")))),
+        grpc.StatusCode.NOT_FOUND,
+        "PATH_NOT_FOUND",
+    )
+
+
+@pytest.mark.slow
+def test_e1_stream_and_results(wb, tmp_path, monkeypatch):
+    import shutil
+
+    from dietai.devtools import e1
+
+    root = tmp_path / "e1_barcode"
+    shutil.copytree(e1.E1_DIR / "configs", root / "configs")
+    monkeypatch.setattr(e1, "E1_DIR", root)
+    monkeypatch.setattr(e1, "DEFAULT_ROOT", root / "runs")
+
+    req = workbench_pb2.StartE1RunRequest(arms=["a0_raw"], n_codes=1)
+    events = [json.loads(m.json) for m in wb.StartE1Run(req)]
+    assert events[0]["type"] == "start" and events[-1]["type"] == "done"
+
+    listed = json.loads(wb.ListE1Runs(workbench_pb2.ListE1RunsRequest()).json)
+    assert listed["runs"][0]["name"] == events[-1]["name"]
+    run = json.loads(wb.GetE1Run(workbench_pb2.GetE1RunRequest(run_dir=events[-1]["name"])).json)
+    assert run["arms"] == ["a0_raw"]
+    _expect_error(
+        lambda: wb.GetE1Run(workbench_pb2.GetE1RunRequest(run_dir="missing")),
+        grpc.StatusCode.NOT_FOUND,
+        "PATH_NOT_FOUND",
+    )
+
+
+def test_run_batch_cancel_mid_stream(wb, tmp_path, dev_server):
+    for i in range(12):
+        (tmp_path / f"p{i:02d}.png").write_bytes(encode_png(label_scene(500, 600, seed=i)))
+    call = wb.RunBatch(workbench_pb2.RunBatchRequest(folder=str(tmp_path)))
+    first = json.loads(next(call).json)
+    assert first["type"] == "start"
+    call.cancel()  # 使用者按「停止」
+    with pytest.raises(grpc.RpcError) as exc:
+        list(call)
+    assert exc.value.code() == grpc.StatusCode.CANCELLED
+    # 伺服器仍正常服務其他請求
+    assert wb.GetConfigSchemas(workbench_pb2.GetConfigSchemasRequest()).json
+
+
+def test_to_rpc_error_only_maps_user_paths_to_not_found():
+    """使用者指定的路徑不存在回 PATH_NOT_FOUND；程式內部缺檔仍是 INTERNAL（會記錄 traceback）。"""
+    from dietai.devtools.images import PathNotFoundError
+    from dietai.server.rpc import to_rpc_error
+
+    assert to_rpc_error(PathNotFoundError("x")).reason == "PATH_NOT_FOUND"
+    assert to_rpc_error(FileNotFoundError("configs")).reason == "INTERNAL"
+    assert to_rpc_error(NotADirectoryError("configs")).reason == "INTERNAL"
