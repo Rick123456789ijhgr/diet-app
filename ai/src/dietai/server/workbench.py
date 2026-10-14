@@ -1,20 +1,20 @@
 """``WorkbenchService``：開發工作台的輔助功能，只在開發模式註冊。
 
-已實作暫存、合成、退化、各頁的診斷檢視與取得影像；
-掃描、批次、E1 在階段 3 加入（目前回傳 ``UNIMPLEMENTED``）。
+暫存、合成、退化、各頁的診斷檢視、取得影像、參數掃描、資料夾批次（串流）、
+E1 的執行結果與快速執行（串流）。讀取本機路徑的功能一律經測試集鎖定。
 """
 
 from __future__ import annotations
 
 import functools
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from itertools import islice
 from typing import Any
 
 import grpc
 
-from dietai.devtools import degradations
+from dietai.devtools import batch, degradations, e1, sweep
 from dietai.devtools.configs import config_from_override
 from dietai.devtools.degradations import Degradation
 from dietai.devtools.images import decode_image
@@ -33,13 +33,14 @@ from dietai.preprocess import (
     LabelConfig,
     LadderConfig,
     QualityConfig,
+    ZxingConfig,
     dish_foreground,
     label_edges,
     ladder_variants,
 )
 from dietai.preprocess.types import Image, Rung
 from dietai.server import convert
-from dietai.server.rpc import RpcError, unary
+from dietai.server.rpc import RpcError, stream, unary
 from dietai.v1 import workbench_pb2, workbench_pb2_grpc
 
 # 只依一組設定產生一張影像的檢視：名稱 → (設定類別, 說明, 產生函式)
@@ -136,6 +137,71 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         encoded, content_type = self._store.encoded(request.id)
         return workbench_pb2.GetArtifactResponse(encoded=encoded, content_type=content_type)
 
+    @unary
+    def Sweep(self, request: workbench_pb2.SweepRequest) -> workbench_pb2.SweepResponse:
+        """參數掃描。params 共通欄位：axis、lo、hi、n。
+
+        - quality：image_id、config（QualityConfig 覆寫）
+        - barcode：samples、module_px、seed、ladder、zxing（覆寫）
+        """
+        params = _json_object(request.params_json, "params")
+        ax = sweep.parse_axis(params)
+        if request.target == "quality":
+            source = self._store.get(str(params.get("image_id", "")))
+            cfg = config_from_override(QualityConfig, params.get("config"))
+            result = sweep.quality_sweep(source.image, ax, cfg)
+        elif request.target == "barcode":
+            samples, module_px, seed = sweep.sample_params(params)
+            result = sweep.barcode_sweep(
+                ax,
+                samples=samples,
+                module_px=module_px,
+                seed=seed,
+                ladder=config_from_override(LadderConfig, params.get("ladder")),
+                zxing=config_from_override(ZxingConfig, params.get("zxing")),
+            )
+        else:
+            raise SceneError(f"未知的掃描對象 {request.target!r}（quality／barcode）", "target")
+        thumbs = []
+        for t in result.thumbs:
+            item = self._store.put(t.image, f"{ax.axis.label} = {t.level:.3g}")
+            thumbs.append({"level": t.level, **_ref(item)})
+        return workbench_pb2.SweepResponse(json=convert.dumps({**result.data, "thumbs": thumbs}))
+
+    @stream
+    def RunBatch(
+        self, request: workbench_pb2.RunBatchRequest
+    ) -> Iterator[workbench_pb2.RunBatchResponse]:
+        """資料夾批次（逐張回傳）；folder 為單一檔案時把影像存進暫存區並附上 image_id。"""
+        cfg = config_from_override(QualityConfig, request.config_json)
+        events = batch.iter_batch(
+            request.folder,
+            cfg,
+            recursive=request.recursive,
+            limit=request.limit or 500,
+            keep=lambda img, name: self._store.put(img, name).image_id,
+        )
+        for event in events:
+            yield workbench_pb2.RunBatchResponse(json=convert.dumps(event))
+
+    @unary
+    def ListE1Runs(
+        self, request: workbench_pb2.ListE1RunsRequest
+    ) -> workbench_pb2.ListE1RunsResponse:
+        return workbench_pb2.ListE1RunsResponse(json=convert.dumps(e1.list_runs_json(request.root)))
+
+    @unary
+    def GetE1Run(self, request: workbench_pb2.GetE1RunRequest) -> workbench_pb2.GetE1RunResponse:
+        return workbench_pb2.GetE1RunResponse(json=convert.dumps(e1.run_json(request.run_dir)))
+
+    @stream
+    def StartE1Run(
+        self, request: workbench_pb2.StartE1RunRequest
+    ) -> Iterator[workbench_pb2.StartE1RunResponse]:
+        events = e1.start_run(list(request.arms), request.n_codes or 2, request.root)
+        for event in events:
+            yield workbench_pb2.StartE1RunResponse(json=convert.dumps(event))
+
     def _derived(
         self, source: StoredImage, key: str, label: str, render: Callable[[], Image]
     ) -> StoredImage:
@@ -208,6 +274,10 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         return workbench_pb2.RenderViewResponse(
             image=convert.image_ref(item), data_json=convert.dumps(item.meta or {})
         )
+
+
+def _ref(item: StoredImage) -> dict[str, Any]:
+    return {"image_id": item.image_id, "width": item.width, "height": item.height}
 
 
 def _attempt_count(cfg: LadderConfig) -> int:

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dietai.devtools import configs, degradations, views
+from dietai.devtools import configs, degradations, ladder_eval, views
 from dietai.devtools.images import (
     SplitLockedError,
     decode_image,
@@ -29,7 +29,7 @@ from dietai.preprocess import (
     check_quality,
 )
 from dietai.synthetic import label_scene
-from wb import checks, ladder_eval, viz
+from wb import checks, viz
 
 
 @pytest.mark.parametrize(

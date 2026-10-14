@@ -10,7 +10,7 @@ import asyncio
 import functools
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import Any, TypeVar
 
 import grpc
@@ -57,6 +57,8 @@ def to_rpc_error(exc: Exception) -> RpcError:
         return RpcError(grpc.StatusCode.NOT_FOUND, "IMAGE_NOT_FOUND", str(exc))
     if isinstance(exc, SplitLockedError):
         return RpcError(grpc.StatusCode.PERMISSION_DENIED, "SPLIT_LOCKED", str(exc))
+    if isinstance(exc, FileNotFoundError | NotADirectoryError):
+        return RpcError(grpc.StatusCode.NOT_FOUND, "PATH_NOT_FOUND", str(exc))
     return RpcError(grpc.StatusCode.INTERNAL, "INTERNAL", f"{type(exc).__name__}: {exc}")
 
 
@@ -106,5 +108,57 @@ def unary(
             "%s request_id=%s OK %.1f ms", fn.__name__, rid, (time.perf_counter() - start) * 1000
         )
         return response
+
+    return wrapper
+
+
+_DONE = object()
+
+
+def stream(
+    fn: Callable[[S, Req], Iterator[Resp]],
+) -> Callable[[S, Req, grpc.aio.ServicerContext[Req, Resp]], AsyncIterator[Resp]]:
+    """把同步的產生器包成 gRPC aio 的 server streaming 方法。
+
+    每一步都在執行緒中執行；呼叫端取消時關閉產生器；例外依 ``to_rpc_error`` 轉成 gRPC 狀態。
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(
+        self: S, request: Req, context: grpc.aio.ServicerContext[Req, Resp]
+    ) -> AsyncIterator[Resp]:
+        rid = request_id(context)
+        start = time.perf_counter()
+        it: Iterator[Resp] | None = None
+        count = 0
+        try:
+            it = await asyncio.to_thread(fn, self, request)
+            while True:
+                item = await asyncio.to_thread(next, it, _DONE)
+                if item is _DONE:
+                    break
+                count += 1
+                yield item  # type: ignore[misc]
+        except asyncio.CancelledError:
+            logger.info("%s request_id=%s 已取消（%d 筆）", fn.__name__, rid, count)
+            raise
+        except Exception as exc:
+            err = to_rpc_error(exc)
+            if err.code == grpc.StatusCode.INTERNAL:
+                logger.exception("%s request_id=%s 失敗", fn.__name__, rid)
+            else:
+                logger.info("%s request_id=%s %s", fn.__name__, rid, err.reason)
+            status = to_status(err)
+            await context.abort(status.code, status.details, status.trailing_metadata)
+        finally:
+            if it is not None and hasattr(it, "close"):
+                await asyncio.to_thread(it.close)
+        logger.info(
+            "%s request_id=%s OK %d 筆 %.1f ms",
+            fn.__name__,
+            rid,
+            count,
+            (time.perf_counter() - start) * 1000,
+        )
 
     return wrapper

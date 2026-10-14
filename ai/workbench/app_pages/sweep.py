@@ -4,13 +4,14 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from dietai.devtools import ladder_eval
 from dietai.devtools.degradations import SWEEP_AXES, first_trigger, sweep_levels
 from dietai.preprocess import LadderConfig, QualityConfig, Rung, ZxingConfig, check_quality
 from dietai.preprocess.ops import resize_short_side
 from dietai.preprocess.quality import QUALITY_WARNINGS
 from dietai.preprocess.types import Image
 from dietai.synthetic import ean13_codes, ean13_scene
-from wb import ladder_eval, viz
+from wb import viz
 from wb.st_config import config_editor, config_io
 from wb.st_ladder import engine_control, ladder_controls, ladder_params, make_decoder
 from wb.st_layout import card, empty_state, metric_row, page_header, panel_tabs, workspace

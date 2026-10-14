@@ -87,7 +87,7 @@ workbench/
 │   ├── images.py        影像讀寫、test split 防護（純邏輯）
 │   ├── configs.py       設定匯出入、待校準清單、CONFIG_CLASSES（純邏輯）
 │   ├── degradations.py  模擬退化與掃描軸，呼叫 dietai.synthetic（純邏輯）
-│   ├── ladder_eval.py   條碼掃描：只用原圖 vs 逐步升級的成功率彙整（純邏輯）
+│   ├── （ladder_eval 已搬到 dietai.devtools）
 │   ├── viz.py           視覺化，數值取自 dietai（純邏輯）
 │   ├── checks.py        執行 pytest／ruff／mypy（純邏輯）
 │   ├── text.py          介面標籤與警告代碼文字
