@@ -166,7 +166,7 @@ func (h *handler) PreprocessFood(ctx context.Context, req api.PreprocessFoodRequ
 	return api.PreprocessFood200JSONResponse(out), nil
 }
 
-// 以下於之後的階段實作（任務書第 4 節）。
+// 登入於階段 5 實作（任務書第 4 節）。
 
 func (h *handler) Login(context.Context, api.LoginRequestObject) (api.LoginResponseObject, error) {
 	return nil, errNotImplemented
@@ -180,24 +180,44 @@ func (h *handler) GetMe(context.Context, api.GetMeRequestObject) (api.GetMeRespo
 	return nil, errNotImplemented
 }
 
-func (h *handler) RunSweep(context.Context, api.RunSweepRequestObject) (api.RunSweepResponseObject, error) {
-	return nil, errNotImplemented
+func (h *handler) RunSweep(ctx context.Context, req api.RunSweepRequestObject) (api.RunSweepResponseObject, error) {
+	out, err := h.svc.Sweep(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return api.RunSweep200JSONResponse(out), nil
 }
 
-func (h *handler) RunBatch(context.Context, api.RunBatchRequestObject) (api.RunBatchResponseObject, error) {
-	return nil, errNotImplemented
+func (h *handler) RunBatch(ctx context.Context, req api.RunBatchRequestObject) (api.RunBatchResponseObject, error) {
+	events, err := h.svc.RunBatch(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return sseResponse{events}, nil
 }
 
-func (h *handler) ListE1Runs(context.Context, api.ListE1RunsRequestObject) (api.ListE1RunsResponseObject, error) {
-	return nil, errNotImplemented
+func (h *handler) ListE1Runs(ctx context.Context, req api.ListE1RunsRequestObject) (api.ListE1RunsResponseObject, error) {
+	out, err := h.svc.ListE1Runs(ctx, deref(req.Params.Root))
+	if err != nil {
+		return nil, err
+	}
+	return api.ListE1Runs200JSONResponse(out), nil
 }
 
-func (h *handler) StartE1Run(context.Context, api.StartE1RunRequestObject) (api.StartE1RunResponseObject, error) {
-	return nil, errNotImplemented
+func (h *handler) StartE1Run(ctx context.Context, req api.StartE1RunRequestObject) (api.StartE1RunResponseObject, error) {
+	events, err := h.svc.StartE1Run(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return sseResponse{events}, nil
 }
 
-func (h *handler) GetE1Run(context.Context, api.GetE1RunRequestObject) (api.GetE1RunResponseObject, error) {
-	return nil, errNotImplemented
+func (h *handler) GetE1Run(ctx context.Context, req api.GetE1RunRequestObject) (api.GetE1RunResponseObject, error) {
+	out, err := h.svc.GetE1Run(ctx, deref(req.Params.Root), req.RunId)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetE1Run200JSONResponse(out), nil
 }
 
 // artifactResponse 依 Python 回傳的 content type 輸出影像；ID 對應的內容不會改變，可長期快取。
@@ -252,4 +272,11 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 		return "", nil, &Error{http.StatusBadRequest, "IMAGE_REQUIRED", "缺少影像檔", "file"}
 	}
 	return name, data, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
