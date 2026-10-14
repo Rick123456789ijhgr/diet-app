@@ -147,20 +147,24 @@ describe('useStream', () => {
       http.post('*/test-stream', async () => {
         call += 1
         const n = call
-        if (n === 1) await delay(50)
+        if (n === 1) await delay(30)
         return new HttpResponse(`data: {"n":${n}}\n\n`, {
           headers: { 'Content-Type': 'text/event-stream' },
         })
       }),
     )
-    const { result } = renderHook(() => useStream<{ n: number }>('/test-stream'))
+    const { result, unmount } = renderHook(() => useStream<{ n: number }>('/test-stream'))
     await act(async () => {
       void result.current.run({})
       void result.current.run({}) // 立刻再按一次：第一次被取消
     })
     await waitFor(() => expect(result.current.status).toBe('done'))
     expect(result.current.events).toEqual([{ n: 2 }])
-    await new Promise((r) => setTimeout(r, 80)) // 等第一次的請求結束
+    // 等第一次（被取消）的請求在假後端那端結束，確認它不會覆蓋新狀態
+    await waitFor(() => expect(call).toBe(2))
+    await new Promise((r) => setTimeout(r, 120))
     expect(result.current.status).toBe('done')
+    // 卸載以清除計時器，避免測試環境拆掉後才觸發
+    unmount()
   })
 })
