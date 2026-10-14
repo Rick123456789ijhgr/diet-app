@@ -43,6 +43,7 @@ interface QualityRow {
 }
 
 interface QualitySweep {
+  axis: string
   levels: number[]
   rows: QualityRow[]
   triggers: Record<string, number | null>
@@ -50,6 +51,7 @@ interface QualitySweep {
 }
 
 interface BarcodeSweep {
+  axis: string
   levels: number[]
   rates: { level: number; method: 'raw' | 'ladder'; rate: number }[]
   rung_counts: { level: number; rung: string; count: number }[]
@@ -331,7 +333,8 @@ export function SweepPage() {
           {qualityResult && quality ? (
             <QualityResultView
               r={qualityResult}
-              axisLabel={axis.label}
+              // 標籤用算出這份結果的退化種類，而不是畫面上最新選的
+              axisLabel={axisOf(qualityResult.axis).label}
               metric={metric}
               setMetric={setMetric}
               view={view}
@@ -347,7 +350,7 @@ export function SweepPage() {
           ) : barcodeResult ? (
             <BarcodeResultView
               r={barcodeResult}
-              axisLabel={axis.label}
+              axisLabel={axisOf(barcodeResult.axis).label}
               view={view}
               setView={setView}
             />
@@ -404,7 +407,7 @@ function QualityResultView({
             key={code}
             label={warningText(code)}
             value={level === null ? '未觸發' : `≥ ${Number(level.toPrecision(3))}`}
-            help={`${axisLabel}達到此等級時首次出現 ${code}。`}
+            help={`${axisLabel}達到此等級時首次出現「${warningText(code)}」。`}
           />
         ))}
       </MetricGrid>

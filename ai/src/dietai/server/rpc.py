@@ -20,6 +20,7 @@ from google.rpc import error_details_pb2, status_pb2
 from grpc_status import rpc_status
 
 from dietai.devtools.configs import ConfigError
+from dietai.devtools.images import PathNotFoundError
 from dietai.devtools.scenes import SceneError
 from dietai.devtools.store import ImageNotFoundError
 from dietai.evaluation.manifest import SplitLockedError
@@ -58,7 +59,7 @@ def to_rpc_error(exc: Exception) -> RpcError:
         return RpcError(grpc.StatusCode.NOT_FOUND, "IMAGE_NOT_FOUND", str(exc))
     if isinstance(exc, SplitLockedError):
         return RpcError(grpc.StatusCode.PERMISSION_DENIED, "SPLIT_LOCKED", str(exc))
-    if isinstance(exc, FileNotFoundError | NotADirectoryError):
+    if isinstance(exc, PathNotFoundError):
         return RpcError(grpc.StatusCode.NOT_FOUND, "PATH_NOT_FOUND", str(exc))
     return RpcError(grpc.StatusCode.INTERNAL, "INTERNAL", f"{type(exc).__name__}: {exc}")
 

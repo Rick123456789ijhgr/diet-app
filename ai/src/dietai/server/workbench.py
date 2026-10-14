@@ -148,10 +148,12 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         ax = sweep.parse_axis(params)
         if request.target == "quality":
             source = self._store.get(str(params.get("image_id", "")))
+            thumb_source = source.image_id
             cfg = config_from_override(QualityConfig, params.get("config"))
             result = sweep.quality_sweep(source.image, ax, cfg)
         elif request.target == "barcode":
             samples, module_px, seed = sweep.sample_params(params)
+            thumb_source = f"barcode-sweep:{samples}:{module_px}:{seed}"
             result = sweep.barcode_sweep(
                 ax,
                 samples=samples,
@@ -162,9 +164,14 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
             )
         else:
             raise SceneError(f"未知的掃描對象 {request.target!r}（quality／barcode）", "target")
+        # 縮圖只取決於來源、退化種類與等級；以衍生影像存放，調整其他參數時沿用，
+        # 不會每次掃描都新增三張、把其他頁面的影像擠出暫存區
         thumbs = []
         for t in result.thumbs:
-            item = self._store.put(t.image, f"{ax.axis.label} = {t.level:.3g}")
+            key = f"sweep:{ax.key}:{t.level!r}"
+            item = self._store.derived(thumb_source, key) or self._store.put_derived(
+                thumb_source, key, t.image, f"{ax.axis.label} = {t.level:.3g}"
+            )
             thumbs.append({"level": t.level, **_ref(item)})
         return workbench_pb2.SweepResponse(json=convert.dumps({**result.data, "thumbs": thumbs}))
 

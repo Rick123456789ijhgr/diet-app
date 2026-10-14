@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { ImageRef } from '@/api/client'
 import { BASE_KEY } from '@/hooks/useImagePipeline'
 import { postSse } from '@/lib/sse'
+import { RECREATE_INTERVAL_MS } from '@/queryClient'
 
 interface BatchRow {
   type: string
@@ -15,7 +16,7 @@ interface BatchRow {
 }
 
 export function useLocalImage(path: string | undefined) {
-  return useQuery({
+  const query = useQuery({
     // 放在原圖的查詢鍵下：Python 重啟或暫存影像被淘汰時，隨 IMAGE_NOT_FOUND 的處理重新載入
     queryKey: [BASE_KEY, 'local', path],
     queryFn: async ({ signal }): Promise<ImageRef> => {
@@ -39,4 +40,10 @@ export function useLocalImage(path: string | undefined) {
     enabled: !!path,
     staleTime: Infinity,
   })
+  // 影像載入失敗（暫存影像被淘汰、Python 重啟）時重新載入；
+  // 間隔不足 RECREATE_INTERVAL_MS 就不重試，避免持續失敗時無限重新上傳
+  const reload = () => {
+    if (Date.now() - query.dataUpdatedAt >= RECREATE_INTERVAL_MS) void query.refetch()
+  }
+  return { ...query, reload }
 }

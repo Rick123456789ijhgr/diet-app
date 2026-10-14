@@ -66,8 +66,9 @@ export async function postSse<T>(
       ;[events, buffer] = parseSse(buffer + value)
       for (const ev of events) {
         if (ev.event === 'error') {
-          const e = JSON.parse(ev.data) as { code: string; message: string }
-          throw new ApiError(500, e.code, e.message)
+          // 串流已開始，HTTP 狀態固定是 200；錯誤內容與 HTTP 錯誤回應相同（含 field）
+          const e = JSON.parse(ev.data) as { code: string; message: string; field?: string }
+          throw new ApiError(500, e.code, e.message, e.field)
         }
         onEvent(JSON.parse(ev.data) as T)
       }

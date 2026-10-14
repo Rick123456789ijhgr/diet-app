@@ -613,7 +613,7 @@ function FailureImage({ path, id }: { path: string; id: string }) {
       width={image.data.width}
       height={image.data.height}
       alt={`失敗影像 ${id}`}
-      onError={() => void image.refetch()}
+      onError={image.reload}
     />
   )
 }

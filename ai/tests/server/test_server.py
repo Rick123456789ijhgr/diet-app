@@ -356,6 +356,19 @@ def test_sweep_quality_and_barcode(wb):
     thumb = q["thumbs"][0]
     art = wb.GetArtifact(workbench_pb2.GetArtifactRequest(id=thumb["image_id"]))
     assert art.content_type == "image/jpeg"
+    # 只改品質參數時縮圖不變，沿用暫存區中的同一批（不新增影像）
+    again = run(
+        "quality",
+        {
+            "axis": "blur_sigma",
+            "lo": 0,
+            "hi": 6,
+            "n": 4,
+            "image_id": fresh.image_id,
+            "config": {"blur_min": 50},
+        },
+    )
+    assert [t["image_id"] for t in again["thumbs"]] == [t["image_id"] for t in q["thumbs"]]
 
     b = run("barcode", {"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3, "samples": 1})
     assert set(b["overall"]) == {"raw", "ladder"}
@@ -443,3 +456,13 @@ def test_run_batch_cancel_mid_stream(wb, tmp_path, dev_server):
     assert exc.value.code() == grpc.StatusCode.CANCELLED
     # 伺服器仍正常服務其他請求
     assert wb.GetConfigSchemas(workbench_pb2.GetConfigSchemasRequest()).json
+
+
+def test_to_rpc_error_only_maps_user_paths_to_not_found():
+    """使用者指定的路徑不存在回 PATH_NOT_FOUND；程式內部缺檔仍是 INTERNAL（會記錄 traceback）。"""
+    from dietai.devtools.images import PathNotFoundError
+    from dietai.server.rpc import to_rpc_error
+
+    assert to_rpc_error(PathNotFoundError("x")).reason == "PATH_NOT_FOUND"
+    assert to_rpc_error(FileNotFoundError("configs")).reason == "INTERNAL"
+    assert to_rpc_error(NotADirectoryError("configs")).reason == "INTERNAL"

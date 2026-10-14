@@ -436,7 +436,7 @@ function Detail({ row, config }: { row: Row; config: ConfigOverride }) {
           height={shown.height}
           alt={`${row.file}（${view}）`}
           // 暫存影像被淘汰或 Python 重啟時重新載入
-          onError={() => void image.refetch()}
+          onError={image.reload}
         />
       )}
     </div>

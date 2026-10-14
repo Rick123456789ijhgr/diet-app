@@ -14,7 +14,7 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
-from dietai.devtools.images import guard_path
+from dietai.devtools.images import PathNotFoundError, guard_path
 from dietai.devtools.scenes import SceneError
 from dietai.evaluation import (
     Outcome,
@@ -51,7 +51,7 @@ def resolve_run(run_dir: str) -> Path:
         p = DEFAULT_ROOT / p
     resolved = guard_path(p)
     if not (resolved / "run.json").is_file():
-        raise FileNotFoundError(f"不是 E1 執行資料夾：{resolved}")
+        raise PathNotFoundError(f"不是 E1 執行資料夾：{resolved}")
     return resolved
 
 
@@ -152,11 +152,25 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
     arms = [available[a] for a in arm_names]
     folder = resolve_root(root)
 
-    out = new_run_dir(folder, "workbench")
+    out = _claim_run_dir(folder)
     data_dir = E1_DIR / "synthetic" / out.name
-    manifest = read_manifest(write_barcode_dataset(data_dir, n_codes))
+
+    def discard() -> None:
+        """未完成的執行不留下結果資料夾（沒有 run.json）與它的合成資料。"""
+        shutil.rmtree(out, ignore_errors=True)
+        shutil.rmtree(data_dir, ignore_errors=True)
+
+    try:
+        manifest = read_manifest(write_barcode_dataset(data_dir, n_codes))
+    except BaseException:
+        discard()
+        raise
     total = len(manifest.items) * len(arms)
-    yield {"type": "start", "total": total}
+    try:
+        yield {"type": "start", "total": total}
+    except GeneratorExit:  # 在背景執行緒開始前就被取消
+        discard()
+        raise
 
     # run_experiment 以回呼回報進度；在另一個執行緒執行，進度經佇列轉成事件。
     # 取消時在下一次進度回呼丟出 _Cancelled 中止實驗。
@@ -173,9 +187,10 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
             run_experiment(manifest, arms, out, label="workbench", progress=progress)
             events.put(("done", None))
         except _Cancelled:
-            shutil.rmtree(out, ignore_errors=True)  # 未完成的結果（沒有 run.json）不留下
+            discard()
             events.put(("cancelled", None))
         except BaseException as exc:  # 交給產生器在呼叫端的執行緒重新丟出
+            discard()
             events.put(("error", exc))
 
     worker = threading.Thread(target=work, name="e1-quick-run", daemon=True)
@@ -195,6 +210,22 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
                 return
     finally:
         cancelled.set()
+
+
+def _claim_run_dir(folder: Path) -> Path:
+    """以 ``mkdir`` 佔用一個新的執行資料夾。
+
+    ``new_run_dir`` 只挑尚不存在的名稱；同一秒內開始的兩次執行（例如停止後立刻重跑）
+    可能拿到同一個名稱、寫進同一份合成資料，所以在這裡原子地建立，撞名就再挑一次。
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    while True:
+        out = new_run_dir(folder, "workbench")
+        try:
+            out.mkdir()
+        except FileExistsError:
+            continue
+        return out
 
 
 class _Cancelled(Exception):

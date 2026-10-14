@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -42,6 +43,7 @@ type streamAI struct {
 	sweep    func(*dietaiv1.SweepRequest) (*dietaiv1.SweepResponse, error)
 	listRuns func(*dietaiv1.ListE1RunsRequest) (*dietaiv1.ListE1RunsResponse, error)
 	getRun   func(*dietaiv1.GetE1RunRequest) (*dietaiv1.GetE1RunResponse, error)
+	sweepCtx context.Context
 }
 
 func (f *streamAI) RunBatch(_ context.Context, r *dietaiv1.RunBatchRequest, _ ...grpc.CallOption) (grpc.ServerStreamingClient[dietaiv1.RunBatchResponse], error) {
@@ -52,7 +54,8 @@ func (f *streamAI) StartE1Run(_ context.Context, r *dietaiv1.StartE1RunRequest, 
 	return f.e1(r)
 }
 
-func (f *streamAI) Sweep(_ context.Context, r *dietaiv1.SweepRequest, _ ...grpc.CallOption) (*dietaiv1.SweepResponse, error) {
+func (f *streamAI) Sweep(ctx context.Context, r *dietaiv1.SweepRequest, _ ...grpc.CallOption) (*dietaiv1.SweepResponse, error) {
+	f.sweepCtx = ctx
 	return f.sweep(r)
 }
 
@@ -131,12 +134,14 @@ func TestStreamErrorAfterStartIsErrorEvent(t *testing.T) {
 		}
 		return &fakeStream[dietaiv1.StartE1RunResponse]{
 			msgs: []*dietaiv1.StartE1RunResponse{{Json: `{"type":"start","total":4}`}},
-			end:  &aiclient.Error{Code: codes.Internal, Reason: "INTERNAL", Message: "boom"},
+			end:  &aiclient.Error{Code: codes.InvalidArgument, Reason: "INVALID_PARAMS", Message: "boom", Field: "n_codes"},
 		}, nil
 	}}
 	resp := postJSON(t, newServerWith(t, ai)+"/workbench/v1/dev/e1/runs", `{"arms":["a0_raw"],"n_codes":2}`)
 	events := sseEvents(t, resp)
-	if len(events) != 2 || events[1][0] != "error" || !strings.Contains(events[1][1], `"INTERNAL"`) {
+	// 內容與 HTTP 錯誤回應相同，包含出錯的欄位
+	if len(events) != 2 || events[1][0] != "error" ||
+		events[1][1] != `{"code":"INVALID_PARAMS","field":"n_codes","message":"boom"}` {
 		t.Errorf("events = %v", events)
 	}
 }
@@ -164,6 +169,10 @@ func TestSweepAndE1Runs(t *testing.T) {
 	sw := decode[map[string]any](t, postJSON(t, base+"/sweeps", `{"target":"barcode","params":{"axis":"rotate_deg"}}`))
 	if sw["overall"].(map[string]any)["raw"] != 0.5 {
 		t.Errorf("sweep = %v", sw)
+	}
+	// 條碼掃描可能超過 30 秒，期限要比預設的長
+	if dl, ok := ai.sweepCtx.Deadline(); !ok || time.Until(dl) <= aiclient.DefaultTimeout {
+		t.Errorf("sweep deadline = %v, %v", dl, ok)
 	}
 
 	get := func(url string) *http.Response {

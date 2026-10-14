@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 
@@ -70,12 +71,18 @@ func openStream[T any, PT jsonMessage[T]](stream grpc.ServerStreamingClient[T], 
 	return &grpcEvents[T, PT]{stream: stream, first: &first}, nil
 }
 
+// sweepTimeout 是參數掃描的期限：條碼掃描最多 30 個等級 × 30 個樣本、每個都跑完整階梯，
+// 預設的 aiclient.DefaultTimeout（30 秒）不夠。
+const sweepTimeout = 3 * time.Minute
+
 // Sweep 參數掃描（target 為 quality 或 barcode）。
 func (s *Service) Sweep(ctx context.Context, req api.SweepRequest) (api.FreeJson, error) {
 	params, err := objectJSON(req.Params)
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, sweepTimeout)
+	defer cancel()
 	resp, err := s.ai.Sweep(ctx, &dietaiv1.SweepRequest{Target: string(req.Target), ParamsJson: params})
 	if err != nil {
 		return nil, err
@@ -165,8 +172,7 @@ func (r sseResponse) write(w http.ResponseWriter) error {
 			return nil
 		}
 		if err != nil {
-			e := toError(err)
-			body, _ := json.Marshal(api.Error{Code: e.Code, Message: e.Message})
+			body, _ := json.Marshal(errorBody(toError(err)))
 			_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", body)
 			_ = rc.Flush()
 			return nil

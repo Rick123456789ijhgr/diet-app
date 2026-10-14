@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from dietai.devtools import batch, e1, sweep
-from dietai.devtools.images import SplitLockedError, encode_png
+from dietai.devtools.images import PathNotFoundError, SplitLockedError, encode_png
 from dietai.devtools.scenes import SceneError
 from dietai.preprocess import LadderConfig, QualityConfig, ZxingConfig
 from dietai.synthetic import label_scene
@@ -140,7 +140,7 @@ def test_e1_rejects_bad_requests(e1_dir):
     with pytest.raises(SceneError) as info:
         list(e1.start_run(["nope"], 1, ""))
     assert info.value.field == "arms"
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(PathNotFoundError):
         e1.run_json("no_such_run")
     assert e1.list_runs_json(str(e1_dir / "empty"))["runs"] == []
 
@@ -186,6 +186,27 @@ def test_e1_cancel_stops_run_and_removes_partial_results(e1_dir):
         time.sleep(0.05)
     assert not any(runs.iterdir())
     assert e1.list_runs_json("")["runs"] == []
+    # 未完成執行的合成資料也一併刪除
+    assert not any((e1_dir / "synthetic").iterdir())
+
+
+def test_e1_cancel_before_worker_starts_removes_data(e1_dir):
+    gen = e1.start_run(["a0_raw"], 1, "")
+    assert next(gen)["type"] == "start"
+    gen.close()
+    assert not any((e1_dir / "runs").iterdir())
+    assert not any((e1_dir / "synthetic").iterdir())
+
+
+def test_e1_claim_run_dir_never_hands_out_the_same_folder(e1_dir, monkeypatch):
+    """同一秒內開始的兩次執行：new_run_dir 給出相同名稱時，第二次要拿到別的資料夾。"""
+    root = e1_dir / "runs"
+    names = iter(["same", "same", "other"])
+    monkeypatch.setattr(e1, "new_run_dir", lambda folder, label: folder / next(names))
+    first = e1._claim_run_dir(root)
+    second = e1._claim_run_dir(root)
+    assert first.is_dir() and second.is_dir()
+    assert (first.name, second.name) == ("same", "other")
 
 
 @pytest.mark.slow
