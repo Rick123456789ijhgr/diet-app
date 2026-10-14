@@ -38,7 +38,8 @@ export function useAnalysis<T, C = ConfigOverride>({
       const data = await run(imageId!, debounced, signal)
       return { data, roundTripMs: performance.now() - start, imageId: imageId! }
     },
-    enabled: !!imageId && enabled,
+    // 等防抖跟上目前的參數才送出（config 須為穩定的物件），避免帶著舊參數或舊 image_id 先請求一次
+    enabled: !!imageId && enabled && debounced === config,
     placeholderData: keepPreviousData,
   })
   const shown = useLastDefined(query.data)

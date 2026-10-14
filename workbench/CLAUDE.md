@@ -12,6 +12,8 @@
 - **設定**：請求只帶與預設值不同的欄位（`lib/config.ts` 的 `setOverride`）；表單由 `ParamForm` 依結構自動產生，不手寫欄位。
 - **即時調參**：輸入經 `useDebounced`（150 ms）後才進查詢鍵；查詢用 `placeholderData: keepPreviousData` 保留舊結果並淡化；查詢函式要傳入 `signal`，舊請求才會被取消。
 - **影像**：影像只上傳一次，之後只帶 `image_id`；顯示用 `artifactUrl(id)`。幾何結果以 `ImageViewer` 的 `overlay`（SVG、影像座標）疊圖，不要求後端畫進影像。
+- **圖表**：用 `components/charts.tsx` 的 SVG 元件（顏色用主題變數與 `PALETTE`），不另外引入圖表套件。
+- **長時間工作**（批次、E1）以 SSE 回報：用 `useStream`，離開頁面時自動取消。
 - **測試**：每個頁面要有 Vitest＋MSW 的頁面測試與一個 Playwright 冒煙測試；純函式放 `lib/` 並寫單元測試。
 - 依賴版本固定（package.json 不用 `^`）；升級另開 PR。
 

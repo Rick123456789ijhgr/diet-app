@@ -332,6 +332,23 @@ message JsonResponse { string json = 1; }
 - **只用原圖的對照**：條碼模式另送一次 `rungs: ["raw"]` 的請求，對應 Streamlit 版的「只用原圖：成功／失敗」。
 - **與 Streamlit 版的差異**：亮度、模糊、雜訊、光斑等不移動像素的退化會保留合成真值（Streamlit 版套用任何退化都丟掉真值），因此加光斑時仍可看到四角誤差；只有旋轉、縮小才丟掉真值。
 
+### 階段 3（2026-10-15 完成，PR 待審）
+
+參數掃描、資料夾批次、E1 三頁；模組一的七個工具都已遷移。一個 PR（Python、Go、前端各一個 commit）。
+
+- Python：`WorkbenchService` 的 `Sweep`、`RunBatch`（串流）、`ListE1Runs`、`GetE1Run`、`StartE1Run`（串流）；`rpc.stream` 把同步產生器包成 aio 串流（取消時關閉產生器）。邏輯在 `dietai.devtools.sweep／batch／e1`，統計一律由 `dietai.evaluation` 計算，路徑一律經測試集鎖定。
+- Go：批次與 E1 快速執行以 SSE 回報；先收第一則再回應，一開始就失敗（例如測試集鎖定）時照常回 HTTP 錯誤，中途出錯送 `event: error`。
+- 前端：三頁；SVG 圖表元件（`components/charts.tsx`）；`useStream`（SSE、可取消）、`useLocalImage`。
+- 驗收：Python 新增 devtools 與串流測試、Go 的 SSE 測試、Vitest 40 項、Playwright 13 項皆通過；實際以 E1 合成資料快速執行並檢視結果。
+
+實作時的決定：
+- **不引入 Vega-Lite**：圖表以 SVG 元件實作（折線、含信賴區間的長條、堆疊長條、熱度圖、直方圖），體積小並直接套用深淺色主題；需要更複雜的互動時再評估。
+- **單張檢視（批次、E1 失敗影像）**：`RunBatch` 的 `folder` 也接受單一檔案，處理該張並存進暫存區、回傳 `image_id` 與寬高；不另加規格。
+- **E1 的基準組**：`GetE1Run` 一次回傳每個基準組的 McNemar 結果（實驗組數量不多），切換基準組不必重新請求。
+- **退化種類的範圍**在前端 `lib/sweepAxes.ts` 有一份副本；Python 測試會讀這個檔案核對，兩邊不一致時失敗。
+- **批次改為按「執行」才計算**（Streamlit 版是參數一改就重算）：資料夾可能很大，參數改了會提示重新執行。
+- **修正**：分析查詢在防抖跟上之前就以舊參數（缺少 image_id）送出，觸發「找不到暫存影像 → 重新上傳」的無限循環；查詢改為等防抖跟上才送出，重新上傳也加上 5 秒的頻率限制。
+
 ## 6. 後續改善（不阻擋階段 2）
 
 - **規格調整（須由人審核，可與階段 3 的規格一起提）**：

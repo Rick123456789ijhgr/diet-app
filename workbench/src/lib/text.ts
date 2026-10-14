@@ -32,6 +32,7 @@ export const ERROR_TEXT: Record<string, string> = {
   NOT_FOUND: '找不到資源（開發工具可能未啟用）',
   DEV_TOOLS_DISABLED: '開發工具未啟用',
   NETWORK: '網路連線失敗',
+  PATH_NOT_FOUND: '找不到路徑',
   INTERNAL: '伺服器內部錯誤',
 }
 
@@ -44,6 +45,16 @@ export const RUNG_TEXT: Record<string, string> = {
   denoise: '去雜訊',
   deskew: '旋轉校正',
   multiscale: '多尺度',
+}
+
+/** E1 的判定結果（evaluation.Outcome）。 */
+export const OUTCOME_TEXT: Record<string, string> = {
+  correct: '正確',
+  misread: '誤讀',
+  missed: '漏讀',
+  false_positive: '負樣本誤報',
+  true_negative: '正確拒絕',
+  error: '讀檔／處理錯誤',
 }
 
 /** 營養標示表格框的定位方法。 */
@@ -84,3 +95,4 @@ export const warningText = (code: string) => WARNING_TEXT[code] ?? code
 export const errorText = (code: string) => ERROR_TEXT[code] ?? code
 export const groupText = (group: string) => GROUP_TEXT[group] ?? group
 export const rungText = (rung: string) => RUNG_TEXT[rung] ?? rung
+export const outcomeText = (o: string) => OUTCOME_TEXT[o] ?? o

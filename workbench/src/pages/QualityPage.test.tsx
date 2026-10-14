@@ -108,16 +108,16 @@ describe('品質檢查頁', () => {
 })
 
 describe('外框', () => {
-  it('左欄列出模組，尚未完成的頁面顯示預計階段', async () => {
-    renderAt('/m1/sweep')
+  it('左欄列出模組，尚無工具的模組顯示說明', async () => {
+    renderAt('/coldstart')
     expect(await screen.findByRole('complementary', { name: '模組' })).toHaveTextContent('冷啟動')
-    expect(await screen.findByText(/預計在任務書階段 3 完成/)).toBeInTheDocument()
+    expect(await screen.findByText('冷啟動上傳尚無工具。')).toBeInTheDocument()
   })
 
   it('總覽列出各模組的工具', () => {
     renderAt('/')
     expect(screen.getByText('影像前處理')).toBeInTheDocument()
-    // 模組一已完成品質檢查、條碼、營養標示、食物照片四頁
-    expect(screen.getAllByText('可用')).toHaveLength(4)
+    // 模組一的七個工具都已遷移
+    expect(screen.getAllByText('可用')).toHaveLength(7)
   })
 })

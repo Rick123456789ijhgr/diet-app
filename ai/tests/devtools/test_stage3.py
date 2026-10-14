@@ -143,3 +143,29 @@ def test_e1_rejects_bad_requests(e1_dir):
     with pytest.raises(FileNotFoundError):
         e1.run_json("no_such_run")
     assert e1.list_runs_json(str(e1_dir / "empty"))["runs"] == []
+
+
+def test_frontend_sweep_axes_match_python():
+    """workbench/src/lib/sweepAxes.ts 是 SWEEP_AXES 的前端副本，範圍必須一致。"""
+    import re
+
+    from dietai.devtools.degradations import SWEEP_AXES
+
+    ts = (
+        Path(__file__).resolve().parents[3] / "workbench" / "src" / "lib" / "sweepAxes.ts"
+    ).read_text(encoding="utf-8")
+    found = {}
+    for m in re.finditer(r"\{([^{}]*?key: '(\w+)'[^{}]*)\}", ts, flags=re.S):
+        body, key = m.group(1), m.group(2)
+        nums = {
+            k: float(v) for k, v in re.findall(r"(lo|hi|defaultLo|defaultHi): (-?[\d.]+)", body)
+        }
+        found[key] = nums
+    assert set(found) == set(SWEEP_AXES)
+    for key, axis in SWEEP_AXES.items():
+        assert found[key] == {
+            "lo": axis.lo,
+            "hi": axis.hi,
+            "defaultLo": axis.default_lo,
+            "defaultHi": axis.default_hi,
+        }, key

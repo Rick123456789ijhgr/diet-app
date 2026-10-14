@@ -119,3 +119,19 @@ describe('序列欄位與位元組、幾何', () => {
     expect(quadErrors([], q)).toBeNull()
   })
 })
+
+describe('SSE 解析', () => {
+  it('切出完整事件，保留未完成的部分', async () => {
+    const { parseSse } = await import('./sse')
+    const [events, rest] = parseSse(
+      'data: {"a":1}\n\nevent: error\ndata: {"code":"X"}\n\ndata: {"b"',
+    )
+    expect(events).toEqual([
+      { event: 'message', data: '{"a":1}' },
+      { event: 'error', data: '{"code":"X"}' },
+    ])
+    expect(rest).toBe('data: {"b"')
+    const [more] = parseSse(rest + ':2}\r\n\r\n')
+    expect(more).toEqual([{ event: 'message', data: '{"b":2}' }])
+  })
+})
