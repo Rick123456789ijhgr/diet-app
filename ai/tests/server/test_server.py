@@ -429,3 +429,17 @@ def test_e1_stream_and_results(wb, tmp_path, monkeypatch):
         grpc.StatusCode.NOT_FOUND,
         "PATH_NOT_FOUND",
     )
+
+
+def test_run_batch_cancel_mid_stream(wb, tmp_path, dev_server):
+    for i in range(12):
+        (tmp_path / f"p{i:02d}.png").write_bytes(encode_png(label_scene(500, 600, seed=i)))
+    call = wb.RunBatch(workbench_pb2.RunBatchRequest(folder=str(tmp_path)))
+    first = json.loads(next(call).json)
+    assert first["type"] == "start"
+    call.cancel()  # 使用者按「停止」
+    with pytest.raises(grpc.RpcError) as exc:
+        list(call)
+    assert exc.value.code() == grpc.StatusCode.CANCELLED
+    # 伺服器仍正常服務其他請求
+    assert wb.GetConfigSchemas(workbench_pb2.GetConfigSchemasRequest()).json

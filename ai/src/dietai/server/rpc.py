@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
+import threading
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import Any, TypeVar
@@ -120,7 +121,9 @@ def stream(
 ) -> Callable[[S, Req, grpc.aio.ServicerContext[Req, Resp]], AsyncIterator[Resp]]:
     """把同步的產生器包成 gRPC aio 的 server streaming 方法。
 
-    每一步都在執行緒中執行；呼叫端取消時關閉產生器；例外依 ``to_rpc_error`` 轉成 gRPC 狀態。
+    產生器全程在同一個執行緒中迭代，結果經佇列交給事件迴圈；呼叫端取消時設下停止旗標，
+    該執行緒做完手上這一步後在同一個執行緒關閉產生器（不會在執行中被另一個執行緒關閉）。
+    例外依 ``to_rpc_error`` 轉成 gRPC 狀態。
     """
 
     @functools.wraps(fn)
@@ -129,30 +132,59 @@ def stream(
     ) -> AsyncIterator[Resp]:
         rid = request_id(context)
         start = time.perf_counter()
-        it: Iterator[Resp] | None = None
+        loop = asyncio.get_running_loop()
+        items: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+        stop = threading.Event()
+
+        def put(kind: str, value: Any) -> None:
+            try:
+                loop.call_soon_threadsafe(items.put_nowait, (kind, value))
+            except RuntimeError:  # 伺服器關閉、事件迴圈已結束
+                stop.set()
+
+        def work() -> None:
+            it: Iterator[Resp] | None = None
+            try:
+                it = fn(self, request)
+                for item in it:
+                    if stop.is_set():
+                        break
+                    put("item", item)
+                put("done", None)
+            except Exception as exc:
+                put("error", exc)
+            finally:
+                if it is not None and hasattr(it, "close"):
+                    it.close()  # 與迭代同一個執行緒；產生器的 finally（例如中止 E1）在此執行
+
+        thread = threading.Thread(target=work, name=f"rpc-{fn.__name__}", daemon=True)
+        thread.start()
         count = 0
         try:
-            it = await asyncio.to_thread(fn, self, request)
             while True:
-                item = await asyncio.to_thread(next, it, _DONE)
-                if item is _DONE:
+                kind, value = await items.get()
+                if kind == "item":
+                    count += 1
+                    yield value
+                elif kind == "error":
+                    err = to_rpc_error(value)
+                    if err.code == grpc.StatusCode.INTERNAL:
+                        logger.error(
+                            "%s request_id=%s 失敗",
+                            fn.__name__,
+                            rid,
+                            exc_info=(type(value), value, value.__traceback__),
+                        )
+                    else:
+                        logger.info("%s request_id=%s %s", fn.__name__, rid, err.reason)
+                    status = to_status(err)
+                    await context.abort(status.code, status.details, status.trailing_metadata)
+                else:
                     break
-                count += 1
-                yield item  # type: ignore[misc]
-        except asyncio.CancelledError:
-            logger.info("%s request_id=%s 已取消（%d 筆）", fn.__name__, rid, count)
-            raise
-        except Exception as exc:
-            err = to_rpc_error(exc)
-            if err.code == grpc.StatusCode.INTERNAL:
-                logger.exception("%s request_id=%s 失敗", fn.__name__, rid)
-            else:
-                logger.info("%s request_id=%s %s", fn.__name__, rid, err.reason)
-            status = to_status(err)
-            await context.abort(status.code, status.details, status.trailing_metadata)
         finally:
-            if it is not None and hasattr(it, "close"):
-                await asyncio.to_thread(it.close)
+            stop.set()
+            if thread.is_alive():
+                logger.info("%s request_id=%s 已取消（%d 筆）", fn.__name__, rid, count)
         logger.info(
             "%s request_id=%s OK %d 筆 %.1f ms",
             fn.__name__,

@@ -14,6 +14,7 @@ export function ImageViewer({
   alt,
   overlay,
   className,
+  onError,
 }: {
   src: string
   width: number
@@ -25,6 +26,8 @@ export function ImageViewer({
    */
   overlay?: ReactNode | ((px: number) => ReactNode)
   className?: string
+  /** 影像載入失敗（例如暫存影像已被淘汰），通常用來重新取得影像 */
+  onError?: () => void
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<View>({ scale: 1, x: 0, y: 0 })
@@ -121,6 +124,7 @@ export function ImageViewer({
             width={width}
             height={height}
             draggable={false}
+            onError={onError}
             className="block size-full max-w-none"
             style={{ imageRendering: view.scale >= 2 ? 'pixelated' : 'auto' }}
           />

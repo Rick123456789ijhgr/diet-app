@@ -135,3 +135,32 @@ describe('SSE 解析', () => {
     expect(more).toEqual([{ event: 'message', data: '{"b":2}' }])
   })
 })
+
+describe('useStream', () => {
+  it('新的執行取代舊的時，舊執行結束不會覆蓋新狀態', async () => {
+    const { renderHook, act, waitFor } = await import('@testing-library/react')
+    const { http, HttpResponse, delay } = await import('msw')
+    const { server } = await import('@/test/server')
+    const { useStream } = await import('@/hooks/useStream')
+    let call = 0
+    server.use(
+      http.post('*/test-stream', async () => {
+        call += 1
+        const n = call
+        if (n === 1) await delay(50)
+        return new HttpResponse(`data: {"n":${n}}\n\n`, {
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      }),
+    )
+    const { result } = renderHook(() => useStream<{ n: number }>('/test-stream'))
+    await act(async () => {
+      void result.current.run({})
+      void result.current.run({}) // 立刻再按一次：第一次被取消
+    })
+    await waitFor(() => expect(result.current.status).toBe('done'))
+    expect(result.current.events).toEqual([{ n: 2 }])
+    await new Promise((r) => setTimeout(r, 80)) // 等第一次的請求結束
+    expect(result.current.status).toBe('done')
+  })
+})

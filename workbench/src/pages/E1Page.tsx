@@ -299,7 +299,8 @@ export function E1Page() {
       ) : !data || !base ? (
         <EmptyState>載入中…</EmptyState>
       ) : (
-        <RunView data={data} base={base} group={group} />
+        // 換一次執行時重新建立，避免沿用前一次的選取（例如新執行沒有的實驗組）
+        <RunView key={data.name} data={data} base={base} group={group} />
       )}
     </Workspace>
   )
@@ -355,10 +356,10 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
         <Metric label="實驗組" value={String(data.arms.length)} />
         <Metric label="耗時" value={`${data.meta.duration_s.toFixed(1)} s`} />
         <Metric
-          label="commit"
+          label="版本"
           value={String(git.commit ?? '?').slice(0, 8)}
           delta={git.dirty ? '有未提交變更' : '乾淨'}
-          help="執行時的 git commit；有未提交變更表示結果可能無法由該 commit 重現。"
+          help="執行時的 git commit；有未提交變更表示結果可能無法由該版本重現。"
         />
       </MetricGrid>
       {data.meta.include_test && (
@@ -409,13 +410,13 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
                 columns={[
                   '實驗組',
                   '成功率',
-                  'CI',
+                  '信賴區間',
                   '正確／正樣本',
                   '誤讀',
                   '漏讀',
                   '耗時中位數 ms',
                   '平均嘗試',
-                  'McNemar p',
+                  'McNemar p 值',
                 ]}
                 rows={overall.map((r) => [
                   r.arm,
@@ -612,6 +613,7 @@ function FailureImage({ path, id }: { path: string; id: string }) {
       width={image.data.width}
       height={image.data.height}
       alt={`失敗影像 ${id}`}
+      onError={() => void image.refetch()}
     />
   )
 }

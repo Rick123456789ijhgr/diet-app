@@ -116,3 +116,35 @@ describe('E1 頁', () => {
     )
   })
 })
+
+describe('門檻與結果配對', () => {
+  it('參數不合法時，門檻線仍是算出曲線的那組參數', async () => {
+    const { http, HttpResponse } = await import('msw')
+    const { server } = await import('@/test/server')
+    const user = userEvent.setup()
+    server.use(
+      http.post('*/workbench/v1/dev/sweeps', async ({ request }) => {
+        const body = (await request.clone().json()) as {
+          params: { config?: { blur_min?: number } }
+        }
+        if ((body.params.config?.blur_min ?? 100) > 1000) {
+          return HttpResponse.json(
+            { code: 'INVALID_CONFIG', message: '模擬不合法', field: 'blur_min' },
+            { status: 400 },
+          )
+        }
+        return undefined
+      }),
+    )
+    renderAt('/m1/sweep')
+    await screen.findByText('blur_min（下限）= 100', {}, WAIT)
+    await user.click(screen.getByRole('tab', { name: /參數/ }))
+    const input = screen.getByLabelText('模糊下限', { selector: 'input' })
+    await user.clear(input)
+    await user.type(input, '1500')
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('參數不合法')
+    // 曲線仍是 blur_min=100 算的，門檻線不能跟著變成 1500
+    expect(screen.getByText('blur_min（下限）= 100')).toBeInTheDocument()
+    expect(screen.queryByText('blur_min（下限）= 1500')).not.toBeInTheDocument()
+  })
+})

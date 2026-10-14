@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import queue
+import shutil
 import threading
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -135,7 +136,10 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
 
     ``{"type": "start", "total": n}``、多個 ``{"type": "progress", "done", "total"}``、
     最後 ``{"type": "done", "name", "path"}``；失敗時丟例外（由呼叫端轉成錯誤）。
-    合成資料寫到 ``e1_barcode/synthetic/``，只供驗證流程與觀察趨勢，不可作為結論。
+
+    合成資料寫到 ``e1_barcode/synthetic/<執行名稱>/``（每次執行各自一份，互不覆寫，
+    失敗影像日後仍可檢視），只供驗證流程與觀察趨勢，不可作為結論。
+    產生器被關閉（使用者取消）時中止實驗並刪除未完成的結果資料夾。
     """
     if not arm_names:
         raise SceneError("至少選一個實驗組", "arms")
@@ -148,35 +152,50 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
     arms = [available[a] for a in arm_names]
     folder = resolve_root(root)
 
-    manifest = read_manifest(write_barcode_dataset(E1_DIR / "synthetic", n_codes))
     out = new_run_dir(folder, "workbench")
+    data_dir = E1_DIR / "synthetic" / out.name
+    manifest = read_manifest(write_barcode_dataset(data_dir, n_codes))
     total = len(manifest.items) * len(arms)
     yield {"type": "start", "total": total}
 
-    # run_experiment 以回呼回報進度；在另一個執行緒執行，進度經佇列轉成事件
+    # run_experiment 以回呼回報進度；在另一個執行緒執行，進度經佇列轉成事件。
+    # 取消時在下一次進度回呼丟出 _Cancelled 中止實驗。
     events: queue.Queue[tuple[str, Any]] = queue.Queue()
+    cancelled = threading.Event()
+
+    def progress(done: int, n: int) -> None:
+        if cancelled.is_set():
+            raise _Cancelled
+        events.put(("progress", (done, n)))
 
     def work() -> None:
         try:
-            run_experiment(
-                manifest,
-                arms,
-                out,
-                label="workbench",
-                progress=lambda done, n: events.put(("progress", (done, n))),
-            )
+            run_experiment(manifest, arms, out, label="workbench", progress=progress)
             events.put(("done", None))
+        except _Cancelled:
+            shutil.rmtree(out, ignore_errors=True)  # 未完成的結果（沒有 run.json）不留下
+            events.put(("cancelled", None))
         except BaseException as exc:  # 交給產生器在呼叫端的執行緒重新丟出
             events.put(("error", exc))
 
-    threading.Thread(target=work, daemon=True).start()
-    while True:
-        kind, value = events.get()
-        if kind == "progress":
-            done, n = value
-            yield {"type": "progress", "done": done, "total": n}
-        elif kind == "error":
-            raise value
-        else:
-            yield {"type": "done", "name": out.name, "path": str(out)}
-            return
+    worker = threading.Thread(target=work, name="e1-quick-run", daemon=True)
+    worker.start()
+    try:
+        while True:
+            kind, value = events.get()
+            if kind == "progress":
+                done, n = value
+                yield {"type": "progress", "done": done, "total": n}
+            elif kind == "error":
+                raise value
+            elif kind == "cancelled":
+                return
+            else:
+                yield {"type": "done", "name": out.name, "path": str(out)}
+                return
+    finally:
+        cancelled.set()
+
+
+class _Cancelled(Exception):
+    """使用者取消快速執行。"""

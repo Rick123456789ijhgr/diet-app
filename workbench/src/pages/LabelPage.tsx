@@ -75,9 +75,10 @@ export function LabelPage() {
     view === 'edges' || view === 'glare',
   )
 
-  const current = (name: string) => {
+  /** 某組參數的目前值（顯示門檻與說明用）；結果區用算出該結果的那組參數 */
+  const valuesOf = (cfg: ConfigOverride) => (name: string) => {
     const f = label.schema?.fields.find((x) => x.name === name)
-    return f ? valueOf(f, config) : undefined
+    return f ? valueOf(f, cfg) : undefined
   }
 
   const panel = (
@@ -123,7 +124,8 @@ export function LabelPage() {
         }
       />
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!label.schema}>
-        {({ data: r, roundTripMs }, img) => {
+        {({ data: r, roundTripMs, config: used }, img) => {
+          const current = valuesOf(used as ConfigOverride)
           const truth = img.truth?.quad as Point[] | undefined
           const errors = quadErrors(r.quad, truth)
           const glareMax = current('glare_max_ratio') as number

@@ -66,6 +66,19 @@ type DistKey = keyof typeof DIST
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 
+/** 表格最多顯示的列數（幾千張時逐列繪製會拖慢畫面；完整結果在 CSV） */
+const MAX_TABLE_ROWS = 500
+
+/** 按下時才產生 CSV（不在每次收到新的一張時重建） */
+function downloadCsv(rows: Row[]) {
+  const url = URL.createObjectURL(new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'quality_batch.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function toCsv(rows: Row[]): string {
   const head = [
     '檔案',
@@ -305,14 +318,14 @@ export function BatchPage() {
                     <>
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-muted text-xs">點選一列即可在下方檢視該影像。</span>
-                        <a
-                          href={`data:text/csv;charset=utf-8,${encodeURIComponent(toCsv(rows))}`}
-                          download="quality_batch.csv"
+                        <button
+                          type="button"
+                          onClick={() => downloadCsv(rows)}
                           className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
                         >
                           <Download className="size-3.5" aria-hidden />
                           下載 CSV
-                        </a>
+                        </button>
                       </div>
                       <div className="max-h-80 overflow-auto">
                         <table className="w-full text-sm" aria-label="每張影像的品質檢查結果">
@@ -328,7 +341,7 @@ export function BatchPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {rows.map((r) => (
+                            {rows.slice(0, MAX_TABLE_ROWS).map((r) => (
                               <tr
                                 key={r.index}
                                 onClick={() => r.error === null && setSelected(r)}
@@ -369,6 +382,11 @@ export function BatchPage() {
                           </tbody>
                         </table>
                       </div>
+                      {rows.length > MAX_TABLE_ROWS && (
+                        <p className="text-muted mt-2 text-xs">
+                          只顯示前 {MAX_TABLE_ROWS} 張；完整結果請下載 CSV。
+                        </p>
+                      )}
                       {selected && <Detail row={selected} config={ranWith ?? config} />}
                     </>
                   )}
@@ -417,6 +435,8 @@ function Detail({ row, config }: { row: Row; config: ConfigOverride }) {
           width={shown.width}
           height={shown.height}
           alt={`${row.file}（${view}）`}
+          // 暫存影像被淘汰或 Python 重啟時重新載入
+          onError={() => void image.refetch()}
         />
       )}
     </div>

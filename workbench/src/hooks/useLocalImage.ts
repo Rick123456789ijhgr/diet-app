@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import type { ImageRef } from '@/api/client'
+import { BASE_KEY } from '@/hooks/useImagePipeline'
 import { postSse } from '@/lib/sse'
 
 interface BatchRow {
@@ -15,7 +16,8 @@ interface BatchRow {
 
 export function useLocalImage(path: string | undefined) {
   return useQuery({
-    queryKey: ['local-image', path],
+    // 放在原圖的查詢鍵下：Python 重啟或暫存影像被淘汰時，隨 IMAGE_NOT_FOUND 的處理重新載入
+    queryKey: [BASE_KEY, 'local', path],
     queryFn: async ({ signal }): Promise<ImageRef> => {
       let row: BatchRow | undefined
       await postSse<BatchRow>(

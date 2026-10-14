@@ -337,9 +337,10 @@ export function SweepPage() {
               view={view}
               setView={setView}
               threshold={(name) =>
+                // 門檻用算出這條曲線的那組參數，而不是畫面上最新的參數
                 valueOf(
                   quality.fields.find((f) => f.name === name)!,
-                  config,
+                  (analysis.shown?.config as { config?: ConfigOverride } | undefined)?.config ?? {},
                 ) as number
               }
             />

@@ -110,9 +110,10 @@ export function FoodPage() {
     })),
   })
 
-  const current = (name: string) => {
+  /** 某組參數的目前值（顯示門檻與說明用）；結果區用算出該結果的那組參數 */
+  const valuesOf = (cfg: ConfigOverride) => (name: string) => {
     const f = food.schema?.fields.find((x) => x.name === name)
-    return f ? valueOf(f, config) : undefined
+    return f ? valueOf(f, cfg) : undefined
   }
 
   const panel = (
@@ -152,7 +153,8 @@ export function FoodPage() {
         }
       />
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!food.schema}>
-        {({ data: r, roundTripMs }, img) => {
+        {({ data: r, roundTripMs, config: used }, img) => {
+          const current = valuesOf(used as ConfigOverride)
           const truthPlates = img.truth?.plates as Ellipse[] | undefined
           const truthBoxes = img.truth?.plate_boxes as Box[] | undefined
           const total = r.whole.num_bytes + r.crops.reduce((a, c) => a + c.num_bytes, 0)

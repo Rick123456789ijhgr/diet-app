@@ -169,3 +169,32 @@ def test_frontend_sweep_axes_match_python():
             "defaultLo": axis.default_lo,
             "defaultHi": axis.default_hi,
         }, key
+
+
+@pytest.mark.slow
+def test_e1_cancel_stops_run_and_removes_partial_results(e1_dir):
+    import time
+
+    gen = e1.start_run(["a0_raw"], 3, "")
+    assert next(gen)["type"] == "start"
+    assert next(gen)["type"] == "progress"
+    gen.close()  # 使用者取消
+    runs = e1_dir / "runs"
+    for _ in range(100):  # 工作執行緒在下一次進度回呼時中止並清掉資料夾
+        if not any(runs.iterdir()):
+            break
+        time.sleep(0.05)
+    assert not any(runs.iterdir())
+    assert e1.list_runs_json("")["runs"] == []
+
+
+@pytest.mark.slow
+def test_e1_quick_runs_keep_their_own_data(e1_dir):
+    first = list(e1.start_run(["a0_raw"], 1, ""))[-1]
+    second = list(e1.start_run(["a0_raw"], 2, ""))[-1]
+    data = e1_dir / "synthetic"
+    assert (data / first["name"] / "manifest.csv").is_file()
+    assert (data / second["name"] / "manifest.csv").is_file()
+    # 失敗影像的路徑指向該次執行自己的資料
+    run = e1.run_json(first["name"])
+    assert all(first["name"] in f["image"] for f in run["failures"])

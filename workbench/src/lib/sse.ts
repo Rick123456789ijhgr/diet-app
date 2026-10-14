@@ -58,17 +58,22 @@ export async function postSse<T>(
   }
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) break
-    let events: SseEvent[]
-    ;[events, buffer] = parseSse(buffer + value)
-    for (const ev of events) {
-      if (ev.event === 'error') {
-        const e = JSON.parse(ev.data) as { code: string; message: string }
-        throw new ApiError(500, e.code, e.message)
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      let events: SseEvent[]
+      ;[events, buffer] = parseSse(buffer + value)
+      for (const ev of events) {
+        if (ev.event === 'error') {
+          const e = JSON.parse(ev.data) as { code: string; message: string }
+          throw new ApiError(500, e.code, e.message)
+        }
+        onEvent(JSON.parse(ev.data) as T)
       }
-      onEvent(JSON.parse(ev.data) as T)
     }
+  } finally {
+    // 任何原因提早結束（錯誤、例外、取消）都關閉連線，後端隨之停止
+    await reader.cancel().catch(() => {})
   }
 }
