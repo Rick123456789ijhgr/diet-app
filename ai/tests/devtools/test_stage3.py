@@ -88,6 +88,7 @@ def test_batch_single_file_keeps_image(photos):
     )
     row = next(e for e in events if e["type"] == "row")
     assert row["image_id"] == "id-1"
+    assert (row["width"], row["height"]) == (320, 240)
     assert kept == [((240, 320, 3), "p1.png")]
 
 

@@ -73,6 +73,7 @@ def _check(path: Path, cfg: QualityConfig, keep: Keep | None) -> dict[str, Any]:
     }
     if keep is not None:
         row["image_id"] = keep(img, path.name)
+        row["width"], row["height"] = int(img.shape[1]), int(img.shape[0])
     return row
 
 
