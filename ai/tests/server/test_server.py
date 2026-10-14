@@ -13,7 +13,7 @@ from grpc_status import rpc_status
 
 from dietai.devtools.images import encode_png
 from dietai.preprocess import QualityConfig, check_quality
-from dietai.synthetic import label_scene
+from dietai.synthetic import label_perspective_scene, label_scene
 from dietai.v1 import preprocess_pb2, preprocess_pb2_grpc, workbench_pb2, workbench_pb2_grpc
 
 SMALL = label_scene(240, 320, seed=1)
@@ -123,12 +123,6 @@ def test_check_quality_errors(pre, uploaded):
     )
 
 
-def test_unimplemented_preprocess_rpc(pre):
-    with pytest.raises(grpc.RpcError) as exc:
-        pre.DecodeBarcode(preprocess_pb2.DecodeBarcodeRequest())
-    assert exc.value.code() == grpc.StatusCode.UNIMPLEMENTED
-
-
 def test_config_schemas(wb):
     data = json.loads(wb.GetConfigSchemas(workbench_pb2.GetConfigSchemasRequest()).json)
     names = [c["name"] for c in data["classes"]]
@@ -185,9 +179,6 @@ def test_render_views_and_artifact(wb, uploaded):
         "INVALID_PARAMS",
         "view",
     )
-    with pytest.raises(grpc.RpcError) as exc:
-        _view(wb, uploaded.image_id, "glare_mask")
-    assert exc.value.code() == grpc.StatusCode.UNIMPLEMENTED
 
 
 def test_prod_mode_has_no_workbench(prod_server):
@@ -217,3 +208,135 @@ def test_tuning_round_trip_is_fast(wb, pre):
         _quality(pre, ref.image_id)
         timings.append((time.perf_counter() - start) * 1000)
     assert sorted(timings)[len(timings) // 2] < 150, timings
+
+
+def _synth(wb, scene: str, params: dict | None = None) -> workbench_pb2.ImageRef:
+    req = workbench_pb2.SynthesizeRequest(scene=scene, params_json=json.dumps(params or {}))
+    return wb.Synthesize(req).image
+
+
+def _by_id(image_id: str) -> preprocess_pb2.ImageInput:
+    return preprocess_pb2.ImageInput(image_id=image_id)
+
+
+def test_decode_barcode_ladder(wb, pre):
+    ref = _synth(wb, "ean13", {"code": "4710088410108"})
+    resp = pre.DecodeBarcode(preprocess_pb2.DecodeBarcodeRequest(image=_by_id(ref.image_id)))
+    assert resp.success
+    assert resp.success_index >= 0
+    assert resp.hits[0].text == "4710088410108"
+    assert resp.hits[0].format == "EAN13"
+    assert len(resp.hits[0].corners) == 4
+    assert resp.attempts[resp.success_index].rung == resp.success_rung
+
+    # 只用原圖（E1 的對照組）：rungs 由覆寫指定
+    only_raw = preprocess_pb2.DecodeBarcodeRequest(
+        image=_by_id(ref.image_id), ladder=preprocess_pb2.ConfigOverride(json='{"rungs": ["raw"]}')
+    )
+    assert [a.rung for a in pre.DecodeBarcode(only_raw).attempts] == ["raw"]
+
+
+def test_decode_barcode_failure_keeps_index_negative(wb, pre):
+    ref = _synth(wb, "label", {"height": 120, "width": 160})
+    resp = pre.DecodeBarcode(preprocess_pb2.DecodeBarcodeRequest(image=_by_id(ref.image_id)))
+    assert not resp.success
+    assert resp.success_index == -1
+    assert "BARCODE_NOT_FOUND" in resp.warnings
+
+
+def test_locate_invoice_qr_keeps_raw_bytes(wb, pre):
+    ref = _synth(wb, "invoice")
+    truth = json.loads(ref.truth_json)
+    resp = pre.LocateInvoiceQr(preprocess_pb2.LocateInvoiceQrRequest(image=_by_id(ref.image_id)))
+    assert resp.HasField("left") and resp.HasField("right")
+    # 中文以 Big5 位元組原樣傳回，由 Go 解碼
+    assert resp.left.raw == truth["left"].encode("big5")
+    assert resp.right.raw == truth["right"].encode("big5")
+
+
+def test_preprocess_label_outputs_artifact_once(wb, pre):
+    ref = _synth(wb, "nutrition", {"seed": 3})
+    req = preprocess_pb2.PreprocessLabelRequest(image=_by_id(ref.image_id))
+    first = pre.PreprocessLabel(req)
+    assert len(first.quad) == 4
+    assert first.quad_method in ("contour", "hough")
+    assert first.image.WhichOneof("data") == "artifact_id"
+    art = wb.GetArtifact(workbench_pb2.GetArtifactRequest(id=first.image.artifact_id))
+    assert art.content_type == "image/png"
+    # 同一組參數重跑時沿用同一個暫存結果
+    assert pre.PreprocessLabel(req).image.artifact_id == first.image.artifact_id
+    # 關閉光斑步驟時 glare_ratio 為 -1
+    off = preprocess_pb2.PreprocessLabelRequest(
+        image=_by_id(ref.image_id),
+        config=preprocess_pb2.ConfigOverride(json='{"enable_glare": false}'),
+    )
+    assert pre.PreprocessLabel(off).glare_ratio == -1
+
+
+def test_preprocess_food_vlm_bytes_are_exact(wb, pre):
+    ref = _synth(wb, "food", {"n_dishes": 2})
+    resp = pre.PreprocessFood(preprocess_pb2.PreprocessFoodRequest(image=_by_id(ref.image_id)))
+    assert resp.dishes_enabled
+    assert len(resp.dishes) == len(resp.crops) >= 1
+    whole = wb.GetArtifact(workbench_pb2.GetArtifactRequest(id=resp.whole.image.artifact_id))
+    # 前端看到的就是送給 VLM 的 JPEG 原檔
+    assert len(whole.encoded) == resp.whole.num_bytes
+    assert whole.content_type == "image/jpeg"
+    assert len(json.loads(ref.truth_json)["plate_boxes"]) == 2
+
+
+def test_prod_mode_attaches_outputs(prod_server):
+    pre = preprocess_pb2_grpc.PreprocessServiceStub(prod_server.channel)
+    img, _ = label_perspective_scene(seed=1)
+    req = preprocess_pb2.PreprocessLabelRequest(
+        image=preprocess_pb2.ImageInput(encoded=encode_png(img))
+    )
+    out = pre.PreprocessLabel(req).image
+    assert out.WhichOneof("data") == "encoded"
+    assert out.encoded[:4] == bytes([0x89]) + b"PNG"
+
+
+def test_stage2_views(wb):
+    ean = _synth(wb, "ean13")
+
+    def view(image_id: str, name: str, config: dict | None = None):
+        req = workbench_pb2.RenderViewRequest(
+            image_id=image_id, view=name, config_json=json.dumps(config) if config else ""
+        )
+        return wb.RenderView(req)
+
+    first = view(ean.image_id, "ladder_variant", {"index": 0})
+    assert json.loads(first.data_json)["rung"] == "raw"
+    assert first.image.width == ean.width
+    _expect_error(
+        lambda: view(ean.image_id, "ladder_variant", {"index": 5, "ladder": {"rungs": ["raw"]}}),
+        grpc.StatusCode.INVALID_ARGUMENT,
+        "INVALID_PARAMS",
+        "index",
+    )
+    # 多尺度階依倍率各算一次：raw＋multiscale(2 個倍率) 共 3 次，index 2 存在
+    multi = {"rungs": ["raw", "multiscale"], "scales": [2.0, 0.5]}
+    third = view(ean.image_id, "ladder_variant", {"index": 2, "ladder": multi})
+    assert json.loads(third.data_json)["rung"] == "multiscale"
+    # 同樣的請求沿用快取，參數資料一併保留
+    again = view(ean.image_id, "ladder_variant", {"index": 2, "ladder": multi})
+    assert again.image.image_id == third.image.image_id
+    assert again.data_json == third.data_json
+    with pytest.raises(grpc.RpcError) as exc:
+        view(ean.image_id, "ladder_variant", {"index": 3, "ladder": multi})
+    assert "共 3 次" in exc.value.details()
+
+    label = _synth(wb, "nutrition")
+    assert view(label.image_id, "label_edges").image.image_id
+    glare = view(label.image_id, "glare_mask")
+    assert json.loads(glare.data_json)["enabled"] is True
+    assert glare.image.image_id
+    cached = view(label.image_id, "glare_mask")
+    assert cached.image.image_id == glare.image.image_id
+    assert cached.data_json == glare.data_json  # 命中快取時光斑比例仍在
+    off = view(label.image_id, "glare_mask", {"enable_glare": False})
+    assert json.loads(off.data_json) == {"enabled": False}
+    assert not off.HasField("image")
+
+    food = _synth(wb, "food")
+    assert view(food.image_id, "food_mask").image.height > 0

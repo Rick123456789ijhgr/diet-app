@@ -34,13 +34,13 @@ describe('品質檢查頁', () => {
     expect(requests.map((r) => r.path)).toEqual(
       expect.arrayContaining([
         '/workbench/v1/dev/images/synthesize',
-        '/workbench/v1/dev/images/base/degrade',
+        '/workbench/v1/dev/images/base-label/degrade',
         '/workbench/v1/dev/quality',
       ]),
     )
     // 沒有修改參數時不帶 config
     const quality = requests.find((r) => r.path === '/workbench/v1/dev/quality')
-    expect(quality?.body).toEqual({ image_id: 'base' })
+    expect(quality?.body).toEqual({ image_id: 'base-label' })
   })
 
   it('調整退化後送出新的退化影像並顯示警告', async () => {
@@ -66,7 +66,7 @@ describe('品質檢查頁', () => {
     await user.type(blurMin, '1500')
     expect(await screen.findByText('未通過', {}, { timeout: 3000 })).toBeInTheDocument()
     const last = requests.filter((r) => r.path === '/workbench/v1/dev/quality').at(-1)
-    expect(last?.body).toEqual({ image_id: 'base', config: { blur_min: 1500 } })
+    expect(last?.body).toEqual({ image_id: 'base-label', config: { blur_min: 1500 } })
     expect(screen.getByText('已修改 1 項')).toBeInTheDocument()
   })
 
@@ -109,14 +109,15 @@ describe('品質檢查頁', () => {
 
 describe('外框', () => {
   it('左欄列出模組，尚未完成的頁面顯示預計階段', async () => {
-    renderAt('/m1/barcode')
-    expect(screen.getByRole('complementary', { name: '模組' })).toHaveTextContent('冷啟動')
-    expect(await screen.findByText(/預計在任務書階段 2 完成/)).toBeInTheDocument()
+    renderAt('/m1/sweep')
+    expect(await screen.findByRole('complementary', { name: '模組' })).toHaveTextContent('冷啟動')
+    expect(await screen.findByText(/預計在任務書階段 3 完成/)).toBeInTheDocument()
   })
 
   it('總覽列出各模組的工具', () => {
     renderAt('/')
     expect(screen.getByText('影像前處理')).toBeInTheDocument()
-    expect(screen.getByText('可用')).toBeInTheDocument()
+    // 模組一已完成品質檢查、條碼、營養標示、食物照片四頁
+    expect(screen.getAllByText('可用')).toHaveLength(4)
   })
 })

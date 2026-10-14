@@ -78,3 +78,44 @@ describe('影像檢視器的縮放', () => {
     expect(toImage(zoomed, 300, 200)).toEqual(before)
   })
 })
+
+describe('序列欄位與位元組、幾何', () => {
+  it('序列欄位與預設值相同時移除覆寫，Python 建構式輸出 tuple', async () => {
+    const { ladderSchema } = await import('@/test/server')
+    const { setSequence } = await import('./config')
+    const o = setSequence(ladderSchema, {}, 'rungs', ['gray'])
+    expect(pythonCtor(ladderSchema, o)).toBe("LadderConfig(rungs=('gray',))")
+    expect(setSequence(ladderSchema, o, 'rungs', ['raw', 'gray', 'binarize'])).toEqual({})
+    expect(pythonCtor(ladderSchema, setSequence(ladderSchema, {}, 'scales', [2]))).toBe(
+      'LadderConfig(scales=(2.0,))',
+    )
+    expect(importJson(ladderSchema, '{"rungs": ["raw"]}')).toEqual({ rungs: ['raw'] })
+    expect(() => importJson(ladderSchema, '{"rungs": "raw"}')).toThrow('rungs 必須是陣列')
+  })
+
+  it('位元組顯示', async () => {
+    const { asciiPreview, fromBase64, hexPreview } = await import('./bytes')
+    const big5 = fromBase64('r/m4pg==')
+    expect(hexPreview(big5)).toBe('AF F9 B8 A6')
+    expect(asciiPreview(Uint8Array.from([0x41, 0xaf, 0x20, 0x7e, 0x0a]))).toBe('A. ~.')
+    expect(hexPreview(new Uint8Array(50), 2)).toBe('00 00 …（共 50 bytes）')
+  })
+
+  it('四角誤差需要兩邊都是四個點', async () => {
+    const { quadErrors } = await import('./geometry')
+    const q = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+    ]
+    expect(
+      quadErrors(
+        q,
+        q.map((p) => ({ x: p.x + 3, y: p.y + 4 })),
+      ),
+    ).toEqual([5, 5, 5, 5])
+    expect(quadErrors(q, undefined)).toBeNull()
+    expect(quadErrors([], q)).toBeNull()
+  })
+})

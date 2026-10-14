@@ -1,26 +1,17 @@
 // 影像來源 → 暫存的原圖 → 套用模擬退化後的影像。
-// 影像只上傳一次，之後的請求只帶 image_id（ADR 0003）；Python 重啟後由 main.tsx 的全域處理重新上傳。
+// 影像只上傳一次，之後的請求只帶 image_id（ADR 0003）；Python 重啟後由 queryClient 的全域處理重新上傳。
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { api, overrideBody, unwrap, type ConfigOverride, type ImageRef } from '@/api/client'
 import { useDebounced } from '@/hooks/useDebounced'
-
-export interface SyntheticParams {
-  height: number
-  width: number
-  seed: number
-}
+import { SCENES, type SceneId, type SceneParams } from '@/lib/scenes'
 
 export type Source =
-  { kind: 'synthetic'; scene: 'label'; params: SyntheticParams } | { kind: 'upload'; file: File }
+  { kind: 'synthetic'; scene: SceneId; params: SceneParams } | { kind: 'upload'; file: File }
 
-export const DEFAULT_SYNTHETIC: SyntheticParams = { height: 1080, width: 1920, seed: 0 }
-
-export const DEFAULT_SOURCE: Source = {
-  kind: 'synthetic',
-  scene: 'label',
-  params: DEFAULT_SYNTHETIC,
+export function syntheticSource(scene: SceneId): Source {
+  return { kind: 'synthetic', scene, params: { ...SCENES[scene].defaults } }
 }
 
 /** 原圖的查詢鍵前綴；IMAGE_NOT_FOUND 時重新取得這組查詢。 */
@@ -55,11 +46,13 @@ async function createBase(s: Source, signal: AbortSignal): Promise<ImageRef> {
   )
 }
 
-export function useImagePipeline() {
-  const [source, setSource] = useState<Source>(DEFAULT_SOURCE)
+/** scene 為「合成」來源產生的場景；切換場景（例如條碼↔發票）時呼叫 setSource(syntheticSource(...))。 */
+export function useImagePipeline(scene: SceneId) {
+  const [source, setSource] = useState<Source>(() => syntheticSource(scene))
   const [degradation, setDegradation] = useState<ConfigOverride>({})
   const debouncedSource = useDebounced(source, 300)
   const debouncedDegradation = useDebounced(degradation)
+  const noFile = source.kind === 'upload' && source.file.size === 0
 
   const base = useQuery({
     queryKey: sourceKey(debouncedSource),
@@ -81,7 +74,7 @@ export function useImagePipeline() {
           signal,
         }),
       ),
-    enabled: !!baseId,
+    enabled: !!baseId && !noFile,
     staleTime: Infinity,
     placeholderData: keepPreviousData,
   })
@@ -93,8 +86,10 @@ export function useImagePipeline() {
     setDegradation,
     base,
     degraded,
-    /** 目前要分析的影像（退化後；沒有退化時就是原圖） */
-    image: degraded.data,
+    /** 上傳模式還沒選檔 */
+    noFile,
+    /** 目前要分析的影像（退化後；沒有退化時就是原圖）；未選檔時為 undefined */
+    image: noFile ? undefined : degraded.data,
     /** 參數已改、結果還在路上 */
     pending:
       source !== debouncedSource ||
@@ -103,3 +98,5 @@ export function useImagePipeline() {
       degraded.isFetching,
   }
 }
+
+export type ImagePipeline = ReturnType<typeof useImagePipeline>

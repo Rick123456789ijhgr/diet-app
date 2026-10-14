@@ -11,7 +11,18 @@ export type ConfigSchemas = Schemas['ConfigSchemas']
 export type QualityResult = Schemas['QualityResult']
 export type RenderViewResult = Schemas['RenderViewResult']
 export type Step = Schemas['Step']
-export type ConfigOverride = Record<string, number | boolean>
+export type DecodeHit = Schemas['DecodeHit']
+export type RungAttempt = Schemas['RungAttempt']
+export type BarcodeResult = Schemas['BarcodeResult']
+export type InvoiceQrResult = Schemas['InvoiceQrResult']
+export type LabelResult = Schemas['LabelResult']
+export type FoodResult = Schemas['FoodResult']
+export type Point = Schemas['Point']
+export type Box = Schemas['Box']
+export type Ellipse = Schemas['Ellipse']
+/** 設定覆寫的值：表單欄位為數字或布林；序列欄位（例如 LadderConfig.rungs）為陣列 */
+export type OverrideValue = number | boolean | string | (string | number)[]
+export type ConfigOverride = Record<string, OverrideValue>
 
 // 用絕對網址：瀏覽器與測試環境（jsdom）都能用；開發時由 Vite 代理轉給 Go。
 // fetch 在呼叫時才取用，測試中的 MSW 才攔截得到。
@@ -63,6 +74,6 @@ export function artifactUrl(id: string): string {
 }
 
 /** 沒有覆寫時送 undefined，後端視為全部用預設值。 */
-export function overrideBody(o: ConfigOverride): ConfigOverride | undefined {
+export function overrideBody<T extends Record<string, unknown>>(o: T): T | undefined {
   return Object.keys(o).length > 0 ? o : undefined
 }

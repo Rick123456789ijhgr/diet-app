@@ -67,7 +67,7 @@ export const MODULES: Module[] = [
         icon: Barcode,
         description: '逐步升級解碼商品條碼與電子發票雙 QR。',
         stage: 2,
-        ready: false,
+        ready: true,
       },
       {
         slug: 'label',
@@ -75,7 +75,7 @@ export const MODULES: Module[] = [
         icon: ReceiptText,
         description: '表格定位、透視校正、光斑與對比。',
         stage: 2,
-        ready: false,
+        ready: true,
       },
       {
         slug: 'food',
@@ -83,7 +83,7 @@ export const MODULES: Module[] = [
         icon: UtensilsCrossed,
         description: '切出各道菜、盤緣橢圓、VLM 輸入大小。',
         stage: 2,
-        ready: false,
+        ready: true,
       },
       {
         slug: 'sweep',

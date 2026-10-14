@@ -98,9 +98,91 @@ export const degradationSchema: ConfigClass = {
   ],
 }
 
+function boolField(name: string, label: string, group: string, def = true) {
+  return {
+    name,
+    type: 'bool' as const,
+    default: def,
+    label,
+    label_en: name,
+    help: '',
+    calibrate: false,
+    group,
+  }
+}
+
+export const ladderSchema: ConfigClass = {
+  name: 'LadderConfig',
+  doc: '條碼逐步升級的參數。',
+  defaults: {
+    rungs: ['raw', 'gray', 'binarize'],
+    scales: [2, 0.5],
+    accept_formats: ['EAN13', 'EAN8', 'UPCA'],
+    verify_ean13: true,
+  },
+  fields: [boolField('verify_ean13', '驗證 EAN-13 檢查碼', 'verify')],
+}
+
+export const zxingSchema: ConfigClass = {
+  name: 'ZxingConfig',
+  doc: '解碼器。',
+  defaults: { try_rotate: true },
+  fields: [boolField('try_rotate', '嘗試 90° 旋轉', 'zxing')],
+}
+
+export const labelSchema: ConfigClass = {
+  name: 'LabelConfig',
+  doc: '營養標示。',
+  defaults: { enable_rectify: true, enable_glare: true, glare_max_ratio: 0.1 },
+  fields: [
+    boolField('enable_rectify', '定位與透視校正', 'label_steps'),
+    boolField('enable_glare', '光斑處理', 'label_steps'),
+    {
+      name: 'glare_max_ratio',
+      type: 'float',
+      default: 0.1,
+      label: '光斑比例上限',
+      label_en: 'Glare max ratio',
+      help: '',
+      calibrate: true,
+      group: 'glare',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+  ],
+}
+
+export const foodSchema: ConfigClass = {
+  name: 'FoodConfig',
+  doc: '食物照片。',
+  defaults: { enable_crop: true, enable_plate: false, vlm_max_side: 1024, vlm_jpeg_quality: 85 },
+  fields: [
+    boolField('enable_crop', '切出各道菜', 'food_steps'),
+    boolField('enable_plate', '盤緣橢圓', 'food_steps', false),
+    {
+      name: 'vlm_jpeg_quality',
+      type: 'int',
+      default: 85,
+      label: 'VLM JPEG 品質',
+      label_en: 'VLM JPEG quality',
+      help: '',
+      calibrate: false,
+      group: 'vlm',
+      min: 10,
+      max: 100,
+      step: 1,
+    },
+  ],
+}
+
 export const schemas: ConfigSchemas = {
-  classes: [qualitySchema, degradationSchema],
-  enums: { PreprocessWarning: ['TOO_BLURRY'] },
+  classes: [qualitySchema, degradationSchema, ladderSchema, zxingSchema, labelSchema, foodSchema],
+  enums: {
+    PreprocessWarning: ['TOO_BLURRY'],
+    Rung: ['raw', 'gray', 'binarize', 'sharpen'],
+    CodeFormat: ['EAN13', 'EAN8', 'UPCA', 'UPCE', 'OTHER'],
+  },
 }
 
 const base: ImageRef = {
@@ -110,12 +192,51 @@ const base: ImageRef = {
   description: '合成標示（種子 0）',
 }
 
+const QUAD = [
+  { x: 100, y: 100 },
+  { x: 500, y: 110 },
+  { x: 510, y: 700 },
+  { x: 90, y: 690 },
+]
+
+/** 合成影像的真值（依場景）：營養標示的四角各偏 (3, 4)，即每角誤差 5 px */
+function truthFor(scene: string): Record<string, unknown> | undefined {
+  if (scene === 'nutrition') return { quad: QUAD.map((p) => ({ x: p.x + 3, y: p.y + 4 })) }
+  // 種子 1 的標示在別處：拿舊結果和它比會得到很大的誤差
+  if (scene === 'nutrition-seed1') return { quad: QUAD.map((p) => ({ x: p.x + 300, y: p.y })) }
+  if (scene === 'food') {
+    return {
+      plates: [{ cx: 200, cy: 200, major: 180, minor: 150, angle: 0 }],
+      plate_boxes: [{ x: 110, y: 125, w: 180, h: 150 }],
+    }
+  }
+  return undefined
+}
+
+const hit = (text: string, raw: string, format = 'EAN13') => ({
+  format,
+  text,
+  raw: btoa(raw),
+  corners: QUAD.slice(),
+})
+
+const attempt = (rung: string, hits: ReturnType<typeof hit>[] = []) => ({
+  rung,
+  params: {},
+  elapsed_ms: 1.5,
+  hits,
+  rejected: [],
+  skipped: false,
+})
+
+const artifact = (id: string, w = 400, h = 300) => ({ artifact_id: id, width: w, height: h })
+
 /** 依請求記錄，讓測試檢查送出的內容 */
 export const requests: { path: string; body: unknown }[] = []
 
 /** 模糊下限高於 1000 或影像經過模糊時判定為過於模糊 */
 function qualityFor(imageId: string, config: Record<string, number> | undefined): QualityResult {
-  const blurry = imageId !== 'base' || (config?.blur_min ?? 100) > 1000
+  const blurry = imageId.endsWith('-deg') || (config?.blur_min ?? 100) > 1000
   return {
     passed: !blurry,
     blur_score: blurry ? 5 : 900,
@@ -137,13 +258,89 @@ const json = async (request: Request) => {
 export const handlers = [
   http.get('*/workbench/v1/dev/config-schemas', () => HttpResponse.json(schemas)),
   http.post('*/workbench/v1/dev/images/synthesize', async ({ request }) => {
-    await json(request)
-    return HttpResponse.json(base, { status: 201 })
+    const body = (await json(request)) as { scene: string; params?: { seed?: number } }
+    const seed = body.params?.seed ?? 0
+    const scene = seed ? `${body.scene}-seed${seed}` : body.scene
+    const truth = truthFor(scene)
+    return HttpResponse.json(
+      { ...base, image_id: `base-${scene}`, ...(truth && { truth }) },
+      { status: 201 },
+    )
   }),
   http.post('*/workbench/v1/dev/images/:id/degrade', async ({ request, params }) => {
     const body = (await json(request)) as { degradation: Record<string, number> }
     const id = Object.keys(body.degradation).length ? `${String(params.id)}-deg` : String(params.id)
-    return HttpResponse.json({ ...base, image_id: id }, { status: 201 })
+    const truth = truthFor(String(params.id).replace('base-', ''))
+    return HttpResponse.json({ ...base, image_id: id, ...(truth && { truth }) }, { status: 201 })
+  }),
+  http.post('*/workbench/v1/dev/barcode', async ({ request }) => {
+    const body = (await json(request)) as { ladder?: { rungs?: string[] } }
+    const rungs = body.ladder?.rungs ?? ['raw', 'gray', 'binarize']
+    // 只用原圖解不出來；第二階成功
+    if (rungs.length === 1) {
+      return HttpResponse.json({
+        success: false,
+        success_index: -1,
+        hits: [],
+        attempts: [attempt(rungs[0]!)],
+        warnings: ['BARCODE_NOT_FOUND'],
+        steps: [],
+      })
+    }
+    const h = hit('4710088410108', '4710088410108')
+    return HttpResponse.json({
+      success: true,
+      success_rung: rungs[1],
+      success_index: 1,
+      hits: [h],
+      attempts: [attempt(rungs[0]!), attempt(rungs[1]!, [h])],
+      warnings: [],
+      steps: [],
+    })
+  }),
+  http.post('*/workbench/v1/dev/invoice-qr', async ({ request }) => {
+    await json(request)
+    return HttpResponse.json({
+      left: hit('AB12', 'AB12', 'QR_CODE'),
+      attempts: [attempt('raw')],
+      warnings: ['INVOICE_QR_PARTIAL'],
+      steps: [],
+    })
+  }),
+  http.post('*/workbench/v1/dev/label', async ({ request }) => {
+    const body = (await json(request)) as { image_id: string; config?: Record<string, unknown> }
+    if (body.image_id.includes('seed1')) {
+      return HttpResponse.json({ code: 'INTERNAL', message: '模擬失敗' }, { status: 500 })
+    }
+    const glareOn = body.config?.enable_glare !== false
+    return HttpResponse.json({
+      image: artifact('label-out', 492, 832),
+      quad: QUAD,
+      quad_method: 'contour',
+      glare_ratio: glareOn ? 0.02 : -1,
+      warnings: [],
+      steps: [],
+    })
+  }),
+  http.post('*/workbench/v1/dev/food', async ({ request }) => {
+    const body = (await json(request)) as { config?: Record<string, unknown> }
+    const plates = body.config?.enable_plate === true
+    return HttpResponse.json({
+      whole: { image: artifact('whole', 960, 720), num_bytes: 51200, scale: 1 },
+      dishes_enabled: true,
+      dishes: [
+        { x: 100, y: 120, w: 200, h: 160 },
+        { x: 400, y: 300, w: 180, h: 150 },
+      ],
+      crops: [
+        { image: artifact('crop0', 200, 160), num_bytes: 10240, scale: 1 },
+        { image: artifact('crop1', 180, 150), num_bytes: 9216, scale: 1 },
+      ],
+      plates_enabled: plates,
+      plates: plates ? [{ cx: 205, cy: 198, major: 176, minor: 148, angle: 3 }] : [],
+      warnings: [],
+      steps: [],
+    })
   }),
   http.post('*/workbench/v1/dev/quality', async ({ request }) => {
     const body = (await json(request)) as {
@@ -159,7 +356,16 @@ export const handlers = [
     return HttpResponse.json(qualityFor(body.image_id, body.config))
   }),
   http.post('*/workbench/v1/dev/views', async ({ request }) => {
-    const body = (await json(request)) as { view: string }
+    const body = (await json(request)) as { view: string; config?: Record<string, unknown> }
+    if (body.view === 'ladder_variant') {
+      return HttpResponse.json({
+        image: { ...base, image_id: `variant-${String(body.config?.index)}` },
+        data: { rung: 'gray', params: {}, skipped: false },
+      })
+    }
+    if (body.view === 'glare_mask' && body.config?.enable_glare === false) {
+      return HttpResponse.json({ data: { enabled: false } })
+    }
     if (body.view === 'histogram') {
       return HttpResponse.json({ data: { counts: Array.from({ length: 256 }, (_, i) => i) } })
     }

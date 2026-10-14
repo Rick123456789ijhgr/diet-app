@@ -2,37 +2,27 @@
 import { ImagePlus, RotateCcw, Sparkles, Upload } from 'lucide-react'
 import { useId } from 'react'
 
-import { ApiError, type ConfigClass, type ConfigOverride } from '@/api/client'
+import { ApiError, type ConfigClass } from '@/api/client'
 import { ParamForm } from '@/components/ParamForm'
-import { Badge, Button, DraftNumberInput, Segmented } from '@/components/ui/primitives'
-import {
-  DEFAULT_SOURCE,
-  DEFAULT_SYNTHETIC,
-  type Source,
-  type SyntheticParams,
-} from '@/hooks/useImagePipeline'
+import { Badge, Button, DraftNumberInput, Hint, Segmented } from '@/components/ui/primitives'
+import { syntheticSource, type ImagePipeline } from '@/hooks/useImagePipeline'
+import { SCENES, type SceneField, type SceneId, type SceneParams } from '@/lib/scenes'
 import { errorText } from '@/lib/text'
 
 export function ImageSourcePanel({
-  source,
-  onSourceChange,
+  pipeline,
+  scene,
   degradationSchema,
-  degradation,
-  onDegradationChange,
-  degradationError,
 }: {
-  source: Source
-  onSourceChange: (s: Source) => void
+  pipeline: ImagePipeline
+  /** 「合成」來源的場景 */
+  scene: SceneId
   degradationSchema?: ConfigClass
-  degradation: ConfigOverride
-  onDegradationChange: (d: ConfigOverride) => void
-  degradationError?: unknown
 }) {
   const fileId = useId()
-  const invalid =
-    degradationError instanceof ApiError && degradationError.code === 'INVALID_CONFIG'
-      ? degradationError
-      : undefined
+  const { source, setSource, degradation, setDegradation } = pipeline
+  const err = pipeline.degraded.error
+  const invalid = err instanceof ApiError && err.code === 'INVALID_CONFIG' ? err : undefined
 
   return (
     <div className="space-y-5">
@@ -41,7 +31,9 @@ export function ImageSourcePanel({
           label="影像來源"
           value={source.kind}
           onChange={(kind) =>
-            onSourceChange(kind === 'synthetic' ? DEFAULT_SOURCE : { kind: 'upload', file: EMPTY })
+            setSource(
+              kind === 'synthetic' ? syntheticSource(scene) : { kind: 'upload', file: EMPTY },
+            )
           }
           options={[
             {
@@ -66,9 +58,10 @@ export function ImageSourcePanel({
           className="w-full"
         />
         {source.kind === 'synthetic' ? (
-          <SyntheticControls
+          <SceneControls
+            scene={source.scene}
             params={source.params}
-            onChange={(params) => onSourceChange({ ...source, params })}
+            onChange={(params) => setSource({ ...source, params })}
           />
         ) : (
           <label
@@ -89,7 +82,7 @@ export function ImageSourcePanel({
               className="sr-only"
               onChange={(e) => {
                 const file = e.target.files?.[0]
-                if (file) onSourceChange({ kind: 'upload', file })
+                if (file) setSource({ kind: 'upload', file })
               }}
             />
           </label>
@@ -101,16 +94,17 @@ export function ImageSourcePanel({
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">模擬退化</h3>
             <Badge tone={Object.keys(degradation).length ? 'accent' : 'muted'}>
-              {activeCount(degradation)} 項
+              {Object.keys(degradation).filter((k) => k !== 'seed').length} 項
             </Badge>
           </div>
           <p className="text-muted mb-3 text-xs">
-            依序套用：旋轉 → 縮小 → 模糊 → 亮度 → 梯度 → 光斑 → 雜訊
+            依序套用：旋轉 → 縮小 → 模糊 → 亮度 → 梯度 → 光斑 →
+            雜訊。旋轉、縮小後合成影像的真值不再適用。
           </p>
           <ParamForm
             schema={degradationSchema}
             overrides={degradation}
-            onChange={onDegradationChange}
+            onChange={setDegradation}
             invalidField={invalid?.field}
             invalidMessage={invalid && errorText(invalid.code) + '：' + invalid.message}
           />
@@ -122,51 +116,103 @@ export function ImageSourcePanel({
 
 const EMPTY = new File([], '')
 
-/** 啟用的退化項目數（種子不算）。 */
-function activeCount(d: ConfigOverride): number {
-  return Object.keys(d).filter((k) => k !== 'seed').length
-}
-
-function SyntheticControls({
+function SceneControls({
+  scene,
   params,
   onChange,
 }: {
-  params: SyntheticParams
-  onChange: (p: SyntheticParams) => void
+  scene: SceneId
+  params: SceneParams
+  onChange: (p: SceneParams) => void
 }) {
-  const fields: { key: keyof SyntheticParams; label: string; min: number; max: number }[] = [
-    { key: 'height', label: '高', min: 16, max: 4320 },
-    { key: 'width', label: '寬', min: 16, max: 7680 },
-    { key: 'seed', label: '種子', min: 0, max: 10000 },
-  ]
+  const def = SCENES[scene]
+  const set = (key: string, value: number | string) => onChange({ ...params, [key]: value })
   return (
-    <div className="flex items-end gap-2">
-      {fields.map((f) => (
-        <div key={f.key} className="flex flex-col gap-1 text-xs">
-          <span className="text-muted" aria-hidden>
-            {f.label}
-          </span>
-          <DraftNumberInput
-            aria-label={f.label}
-            min={f.min}
-            max={f.max}
-            value={params[f.key]}
-            parse={(t) => {
-              const v = Math.round(Number(t))
-              return v >= f.min && v <= f.max ? v : undefined
-            }}
-            onCommit={(v) => onChange({ ...params, [f.key]: v })}
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-muted text-xs">{def.name}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label="還原合成參數"
+          onClick={() => onChange({ ...def.defaults })}
+        >
+          <RotateCcw className="size-3.5" />
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        {def.fields.map((f) => (
+          <SceneInput
+            key={f.key}
+            field={f}
+            value={params[f.key]!}
+            onChange={(v) => set(f.key, v)}
           />
-        </div>
-      ))}
-      <Button
-        size="sm"
-        variant="ghost"
-        aria-label="還原合成參數"
-        onClick={() => onChange(DEFAULT_SYNTHETIC)}
-      >
-        <RotateCcw className="size-3.5" />
-      </Button>
+        ))}
+      </div>
     </div>
   )
+}
+
+function SceneInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: SceneField
+  value: number | string
+  onChange: (v: number | string) => void
+}) {
+  const label = (
+    <span className="text-muted" aria-hidden>
+      {field.label}
+    </span>
+  )
+  const body =
+    field.kind === 'text' ? (
+      <input
+        aria-label={field.label}
+        value={String(value)}
+        onChange={(e) => onChange(e.target.value)}
+        className="border-card-border bg-card focus-visible:border-primary h-7 w-full rounded-md border px-2 text-sm focus-visible:outline-none"
+      />
+    ) : field.kind === 'select' ? (
+      <select
+        aria-label={field.label}
+        value={String(value)}
+        onChange={(e) => onChange(e.target.value)}
+        className="border-card-border bg-card h-7 rounded-md border px-2 text-sm"
+      >
+        {field.options!.map((o) => (
+          <option key={o}>{o}</option>
+        ))}
+      </select>
+    ) : (
+      <DraftNumberInput
+        aria-label={field.label}
+        min={field.min}
+        max={field.max}
+        step={field.step}
+        value={Number(value)}
+        format={(v) => (field.kind === 'float' ? v.toFixed(2) : String(v))}
+        parse={(t) => {
+          const raw = Number(t)
+          const v = field.kind === 'int' ? Math.round(raw) : raw
+          return (field.min === undefined || v >= field.min) &&
+            (field.max === undefined || v <= field.max)
+            ? v
+            : undefined
+        }}
+        onCommit={onChange}
+      />
+    )
+  const box = (
+    <div
+      className={field.wide ? 'flex w-full flex-col gap-1 text-xs' : 'flex flex-col gap-1 text-xs'}
+    >
+      {label}
+      {body}
+    </div>
+  )
+  return field.help ? <Hint text={field.help}>{box}</Hint> : box
 }

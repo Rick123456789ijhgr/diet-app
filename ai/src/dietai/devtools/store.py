@@ -10,13 +10,14 @@ from __future__ import annotations
 import secrets
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from dietai.devtools.images import encode_jpeg
 from dietai.preprocess.types import Image
 
-DEFAULT_MAX_ITEMS = 64
+DEFAULT_MAX_ITEMS = 256  # 主要由位元組上限控制；診斷影像與裁切多半很小
 DEFAULT_MAX_BYTES = 1 << 30  # 1 GiB
 
 
@@ -37,8 +38,12 @@ class StoredImage:
     image: Image
     description: str
     truth: dict[str, Any] | None = None
-    # 第一次被取用時才編碼，之後重複使用
+    # 不對外回傳的附註，例如診斷檢視的參數
+    meta: dict[str, Any] | None = None
+    # 編碼後的檔案：第一次取用時才產生（預設 JPEG；可指定編碼方式，例如 VLM 的 JPEG 原檔）
+    _encode: Callable[[], tuple[bytes, str]] | None = field(default=None, repr=False)
     _encoded: bytes | None = field(default=None, repr=False)
+    _content_type: str = "image/jpeg"
 
     @property
     def width(self) -> int:
@@ -50,7 +55,8 @@ class StoredImage:
 
     @property
     def nbytes(self) -> int:
-        return int(self.image.nbytes)
+        """占用的記憶體：解碼後的陣列加上已編碼的檔案。"""
+        return int(self.image.nbytes) + len(self._encoded or b"")
 
 
 class ImageStore:
@@ -68,9 +74,15 @@ class ImageStore:
         self._lock = threading.Lock()
 
     def put(
-        self, image: Image, description: str, truth: dict[str, Any] | None = None
+        self,
+        image: Image,
+        description: str,
+        truth: dict[str, Any] | None = None,
+        encode: Callable[[], tuple[bytes, str]] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> StoredImage:
-        item = StoredImage(secrets.token_hex(8), image, description, truth)
+        """存入影像；``encode`` 回傳（檔案位元組, content type），第一次取用時才呼叫。"""
+        item = StoredImage(secrets.token_hex(8), image, description, truth, meta, encode)
         with self._lock:
             self._items[item.image_id] = item
             self._bytes += item.nbytes
@@ -102,18 +114,29 @@ class ImageStore:
         image: Image,
         description: str,
         truth: dict[str, Any] | None = None,
+        encode: Callable[[], tuple[bytes, str]] | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> StoredImage:
-        item = self.put(image, description, truth)
+        item = self.put(image, description, truth, encode, meta)
         with self._lock:
             self._derived[(source_id, key)] = item.image_id
         return item
 
     def encoded(self, image_id: str) -> tuple[bytes, str]:
-        """取得編碼後的影像（JPEG）與 content type。"""
+        """取得編碼後的影像與 content type（預設 JPEG）。"""
         item = self.get(image_id)
         if item._encoded is None:
-            item._encoded = encode_jpeg(item.image)
-        return item._encoded, "image/jpeg"
+            if item._encode is not None:
+                encoded, content_type = item._encode()
+            else:
+                encoded, content_type = encode_jpeg(item.image), "image/jpeg"
+            with self._lock:
+                if item._encoded is None:  # 其他執行緒可能已編好
+                    item._encoded, item._content_type = encoded, content_type
+                    if item.image_id in self._items:
+                        self._bytes += len(encoded)
+                        self._evict()
+        return item._encoded, item._content_type
 
     def __len__(self) -> int:
         with self._lock:

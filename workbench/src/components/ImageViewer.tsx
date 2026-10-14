@@ -19,8 +19,11 @@ export function ImageViewer({
   width: number
   height: number
   alt: string
-  /** 以影像像素為座標的 SVG 內容（viewBox 為 0 0 width height） */
-  overlay?: ReactNode
+  /**
+   * 以影像像素為座標的 SVG 內容（viewBox 為 0 0 width height）。
+   * 傳函式時會收到 px（一個螢幕像素等於幾個影像像素），用來讓標記維持固定的螢幕大小。
+   */
+  overlay?: ReactNode | ((px: number) => ReactNode)
   className?: string
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
@@ -127,7 +130,7 @@ export function ImageViewer({
               className="pointer-events-none absolute inset-0 size-full"
               aria-hidden
             >
-              {overlay}
+              {typeof overlay === 'function' ? overlay(1 / view.scale) : overlay}
             </svg>
           )}
         </div>

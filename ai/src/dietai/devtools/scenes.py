@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from dietai import synthetic
-from dietai.preprocess.types import Ellipse, Image, Quad
+from dietai.preprocess.types import Box, Ellipse, Image, Quad
 
 SCENES = ("label", "ean13", "invoice", "nutrition", "food")
 
@@ -33,9 +33,9 @@ def synthesize(scene: str, params: dict[str, Any] | None = None) -> Scene:
 
     - ``label``：品質檢查用標示（``height``、``width``、``seed``）
     - ``ean13``：EAN-13 條碼（``code``、``module_px``…）；真值為條碼內容
-    - ``invoice``：電子發票雙 QR（``left``、``right`` 為文字，以 ``encoding`` 編碼，預設 UTF-8）
+    - ``invoice``：電子發票雙 QR（``left``、``right`` 為文字，以 ``encoding`` 編碼，預設 Big5）
     - ``nutrition``：透視變形的營養標示（``strength``、``seed``…）；真值為表格四角
-    - ``food``：餐桌上的盤子（``n_dishes``、``seed``、``tilt``…）；真值為盤緣橢圓
+    - ``food``：餐桌上的盤子（``n_dishes``、``seed``、``tilt``…）；真值為盤緣橢圓與其外接框
     """
     params = dict(params or {})
     if scene == "label":
@@ -46,9 +46,9 @@ def synthesize(scene: str, params: dict[str, Any] | None = None) -> Scene:
         code = params.get("code", _default(synthetic.ean13_scene, "code"))
         return Scene(img, f"合成 EAN-13（{code}）", {"text": code, "format": "EAN13"})
     if scene == "invoice":
-        encoding = str(params.pop("encoding", "utf-8"))
-        left = str(params.pop("left", "INVOICE-LEFT"))
-        right = str(params.pop("right", "**INVOICE-RIGHT"))
+        encoding = str(params.pop("encoding", "big5"))
+        left = str(params.pop("left", "AB12345678 茶葉蛋:1:25"))
+        right = str(params.pop("right", "**鮮奶:1:35"))
         try:
             params["left"], params["right"] = left.encode(encoding), right.encode(encoding)
         except (LookupError, UnicodeEncodeError) as exc:
@@ -65,7 +65,10 @@ def synthesize(scene: str, params: dict[str, Any] | None = None) -> Scene:
         return Scene(
             img,
             f"合成餐桌（種子 {params.get('seed', 0)}）",
-            {"plates": [_ellipse_dict(e) for e in plates]},
+            {
+                "plates": [_ellipse_dict(e) for e in plates],
+                "plate_boxes": [_box_dict(e.bbox()) for e in plates],
+            },
         )
     raise SceneError(f"未知的場景 {scene!r}，可用：{', '.join(SCENES)}", "scene")
 
@@ -87,6 +90,10 @@ def _default(fn: Callable[..., Any], name: str) -> Any:
 
 def _quad_points(quad: Quad) -> list[dict[str, float]]:
     return [{"x": float(x), "y": float(y)} for x, y in quad]
+
+
+def _box_dict(b: Box) -> dict[str, int]:
+    return {"x": b.x, "y": b.y, "w": b.w, "h": b.h}
 
 
 def _ellipse_dict(e: Ellipse) -> dict[str, float]:

@@ -7,7 +7,6 @@ from typing import Any
 
 import cv2
 import numpy as np
-import numpy.typing as npt
 
 from dietai.devtools.views import gray_histogram_counts
 from dietai.preprocess import (
@@ -22,7 +21,6 @@ from dietai.preprocess.types import Box, Ellipse, Image, Quad
 HIT_COLORS = ((211, 38, 192), (230, 120, 0), (212, 182, 6))  # 紫、藍、青
 FOUND_COLOR = (211, 38, 192)  # 紫：程式找到的結果
 TRUTH_COLOR = (230, 120, 0)  # 藍：合成影像的真值
-GLARE_COLOR = (0, 0, 255)
 
 
 def gray_histogram(img: Image) -> list[dict[str, int]]:
@@ -128,15 +126,6 @@ def draw_quads(img: Image, quads: Sequence[tuple[Quad, tuple[int, int, int], str
     return np.asarray(out, dtype=np.uint8)
 
 
-def mask_overlay(img: Image, mask: npt.NDArray[np.bool_], alpha: float = 0.6) -> Image:
-    """以紅色標出遮罩區域（BGR），例如光斑遮罩。"""
-    base = img if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    out = base.astype(np.float32)
-    color = np.array(GLARE_COLOR, dtype=np.float32)
-    out[mask] = out[mask] * (1 - alpha) + color * alpha
-    return out.astype(np.uint8)
-
-
 def quad_errors(found: Quad, truth: Quad) -> list[float]:
     """四角各自的誤差（像素），順序為左上、右上、右下、左下。"""
     return [float(d) for d in np.linalg.norm(np.asarray(found) - np.asarray(truth), axis=1)]
@@ -176,15 +165,6 @@ def draw_ellipses(img: Image, ellipses: Sequence[tuple[Ellipse, tuple[int, int, 
         cv2.ellipse(out, center, axes, e.angle, 0, 360, color, thickness, cv2.LINE_AA)
         cv2.circle(out, center, thickness * 2, color, -1)
     return np.asarray(out, dtype=np.uint8)
-
-
-def mask_on_small(img: Image, mask: npt.NDArray[np.bool_]) -> Image:
-    """把縮小後算出的遮罩（如 ``food.dish_foreground``）疊在同尺寸的縮圖上（BGR）。"""
-    h, w = mask.shape
-    small = (
-        img if img.shape[:2] == (h, w) else cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)
-    )
-    return mask_overlay(np.asarray(small, dtype=np.uint8), mask)
 
 
 def vlm_size_rows(img: Image, sides: Sequence[int], jpeg_quality: int) -> list[dict[str, Any]]:
