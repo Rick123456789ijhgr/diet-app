@@ -1,4 +1,4 @@
-// 基本元件（shadcn/ui 風格，以 Radix 為底）。顏色只用主題變數，見 index.css。
+// 基本元件（以 Radix 為底，精密儀器風）。顏色只用主題變數，見 index.css。
 import { Slider as RSlider, Switch as RSwitch, Tabs as RTabs, ToggleGroup, Tooltip } from 'radix-ui'
 import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 
@@ -16,13 +16,13 @@ export function Button({
     <button
       type="button"
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors',
-        'focus-visible:ring-primary/40 focus-visible:ring-2 focus-visible:outline-none',
-        'disabled:pointer-events-none disabled:opacity-50',
-        size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-9 px-3.5 text-sm',
-        variant === 'primary' && 'bg-primary text-white hover:opacity-90',
-        variant === 'outline' && 'border-card-border bg-card hover:bg-hover border',
-        variant === 'ghost' && 'text-muted hover:bg-hover hover:text-ink',
+        'inline-flex items-center justify-center gap-1.5 rounded-[3px] font-medium transition-colors',
+        'focus-visible:ring-primary/50 focus-visible:ring-2 focus-visible:outline-none',
+        'disabled:pointer-events-none disabled:opacity-40',
+        size === 'sm' ? 'h-6 px-2 text-xs' : 'h-7 px-3 text-[13px]',
+        variant === 'primary' && 'bg-primary hover:bg-primary-ink text-white',
+        variant === 'outline' && 'border-line-strong bg-card hover:bg-hover border',
+        variant === 'ghost' && 'text-ink-2 hover:bg-hover hover:text-ink',
         className,
       )}
       {...props}
@@ -32,15 +32,13 @@ export function Button({
 
 export function Card({ className, ...props }: ComponentProps<'div'>) {
   return (
-    <div
-      className={cn('border-card-border bg-card shadow-card rounded-xl border', className)}
-      {...props}
-    />
+    <div className={cn('border-card-border bg-card rounded-[4px] border', className)} {...props} />
   )
 }
 
-type BadgeTone = 'primary' | 'accent' | 'danger' | 'muted'
+type BadgeTone = 'primary' | 'accent' | 'ok' | 'warn' | 'danger' | 'muted'
 
+/** 小標籤。accent 為「需要注意」（與 warn 相同），保留給既有呼叫端。 */
 export function Badge({
   tone = 'muted',
   className,
@@ -49,11 +47,12 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap',
-        tone === 'primary' && 'bg-primary-soft text-primary',
-        tone === 'accent' && 'bg-accent/15 text-accent',
-        tone === 'danger' && 'bg-danger-soft text-danger',
-        tone === 'muted' && 'bg-hover text-muted',
+        'inline-flex h-5 items-center gap-1 rounded-[3px] border px-1.5 text-[11px] font-medium whitespace-nowrap',
+        tone === 'primary' && 'border-primary/30 bg-primary-soft text-primary-ink',
+        tone === 'ok' && 'border-ok/30 bg-ok-soft text-ok',
+        (tone === 'warn' || tone === 'accent') && 'border-warn/30 bg-warn-soft text-warn',
+        tone === 'danger' && 'border-danger/30 bg-danger-soft text-danger',
+        tone === 'muted' && 'border-card-border bg-sunken text-ink-2',
         className,
       )}
       {...props}
@@ -67,15 +66,15 @@ export function Slider({
 }: ComponentProps<typeof RSlider.Root> & { 'aria-label'?: string }) {
   return (
     <RSlider.Root
-      className={cn('relative flex h-5 w-full touch-none items-center select-none', className)}
+      className={cn('relative flex h-4 w-full touch-none items-center select-none', className)}
       {...props}
     >
-      <RSlider.Track className="bg-hover relative h-1.5 grow overflow-hidden rounded-full">
+      <RSlider.Track className="bg-line-strong/60 relative h-[2px] grow">
         <RSlider.Range className="bg-primary absolute h-full" />
       </RSlider.Track>
       <RSlider.Thumb
         aria-label={props['aria-label']}
-        className="border-primary bg-card focus-visible:ring-primary/40 block size-4 rounded-full border-2 shadow focus-visible:ring-4 focus-visible:outline-none"
+        className="border-primary bg-card focus-visible:ring-primary/40 block h-3.5 w-2 rounded-[2px] border-2 focus-visible:ring-4 focus-visible:outline-none"
       />
     </RSlider.Root>
   )
@@ -85,23 +84,24 @@ export function Switch({ className, ...props }: ComponentProps<typeof RSwitch.Ro
   return (
     <RSwitch.Root
       className={cn(
-        'data-[state=checked]:bg-primary bg-card-border relative h-5 w-9 shrink-0 rounded-full transition-colors',
+        'data-[state=checked]:bg-primary bg-line-strong relative h-4 w-7 shrink-0 rounded-[3px] transition-colors',
         'focus-visible:ring-primary/40 focus-visible:ring-2 focus-visible:outline-none',
         className,
       )}
       {...props}
     >
-      <RSwitch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-[18px]" />
+      <RSwitch.Thumb className="block h-3 w-3 translate-x-0.5 rounded-[2px] bg-white transition-transform data-[state=checked]:translate-x-[14px]" />
     </RSwitch.Root>
   )
 }
 
 export const Tabs = RTabs.Root
 
+/** 分頁：底線式，像儀器面板上的頁籤。 */
 export function TabsList({ className, ...props }: ComponentProps<typeof RTabs.List>) {
   return (
     <RTabs.List
-      className={cn('bg-hover grid auto-cols-fr grid-flow-col gap-1 rounded-lg p-1', className)}
+      className={cn('border-card-border grid auto-cols-fr grid-flow-col border-b', className)}
       {...props}
     />
   )
@@ -111,8 +111,9 @@ export function TabsTrigger({ className, ...props }: ComponentProps<typeof RTabs
   return (
     <RTabs.Trigger
       className={cn(
-        'text-muted inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium',
-        'data-[state=active]:bg-card data-[state=active]:text-ink data-[state=active]:shadow-sm',
+        'text-muted hover:text-ink -mb-px inline-flex h-9 items-center justify-center gap-1.5 border-b-2 border-transparent px-2 text-[13px] font-medium',
+        'data-[state=active]:border-primary data-[state=active]:text-ink',
+        'focus-visible:bg-hover focus-visible:outline-none',
         className,
       )}
       {...props}
@@ -122,7 +123,7 @@ export function TabsTrigger({ className, ...props }: ComponentProps<typeof RTabs
 
 export const TabsContent = RTabs.Content
 
-/** 單選的分段按鈕（例如檢視切換）。 */
+/** 單選的分段按鈕（例如檢視切換）；選中的一格以底部藍線標示。 */
 export function Segmented<T extends string>({
   value,
   onChange,
@@ -142,15 +143,20 @@ export function Segmented<T extends string>({
       value={value}
       onValueChange={(v) => v && onChange(v as T)}
       aria-label={label}
-      className={cn('bg-hover inline-flex gap-1 rounded-lg p-1', className)}
+      className={cn(
+        'border-card-border bg-sunken divide-card-border inline-flex divide-x rounded-[3px] border',
+        className,
+      )}
     >
       {options.map((o) => (
         <ToggleGroup.Item
           key={o.value}
           value={o.value}
           className={cn(
-            'text-muted inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap',
-            'data-[state=on]:bg-card data-[state=on]:text-ink data-[state=on]:shadow-sm',
+            'text-muted hover:text-ink inline-flex h-7 flex-1 items-center justify-center gap-1.5 px-2.5 text-xs font-medium whitespace-nowrap first:rounded-l-[2px] last:rounded-r-[2px]',
+            'data-[state=on]:bg-card data-[state=on]:text-ink data-[state=on]:shadow-[inset_0_-2px_0_var(--primary)]',
+            'focus-visible:ring-primary/50 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset',
+            '[&_svg]:size-3.5',
           )}
         >
           {o.label}
@@ -170,7 +176,7 @@ export function Hint({ text, children }: { text: ReactNode; children: ReactNode 
         <Tooltip.Content
           side="top"
           sideOffset={6}
-          className="bg-ink text-canvas z-50 max-w-72 rounded-md px-2.5 py-1.5 text-xs leading-relaxed shadow-lg"
+          className="bg-ink text-canvas z-50 max-w-72 rounded-[3px] px-2.5 py-1.5 text-xs leading-relaxed"
         >
           {text}
         </Tooltip.Content>
@@ -184,8 +190,9 @@ export function NumberInput({ className, ...props }: Omit<ComponentProps<'input'
     <input
       type="number"
       className={cn(
-        'border-card-border bg-card tabular h-7 w-20 rounded-md border px-2 text-right text-sm',
-        'focus-visible:border-primary focus-visible:outline-none',
+        'border-card-border bg-sunken readout h-6 w-20 rounded-[3px] border px-1.5 text-right text-xs',
+        'focus-visible:border-primary focus-visible:bg-card focus-visible:outline-none',
+        'aria-[invalid=true]:border-danger',
         className,
       )}
       {...props}

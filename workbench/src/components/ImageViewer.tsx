@@ -15,6 +15,7 @@ export function ImageViewer({
   overlay,
   className,
   onError,
+  fill,
 }: {
   src: string
   width: number
@@ -28,6 +29,8 @@ export function ImageViewer({
   className?: string
   /** 影像載入失敗（例如暫存影像已被淘汰），通常用來重新取得影像 */
   onError?: () => void
+  /** 撐滿父元素的高度（放在 MainView 裡）；否則使用固定高度 */
+  fill?: boolean
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<View>({ scale: 1, x: 0, y: 0 })
@@ -89,10 +92,15 @@ export function ImageViewer({
       : null
 
   return (
-    <div className={cn('flex flex-col gap-2', className)}>
+    <div className={cn('flex flex-col', fill && 'min-h-0 flex-1', className)}>
       <div
         ref={boxRef}
-        className="bg-hover relative h-[min(62vh,640px)] cursor-grab touch-none overflow-hidden rounded-lg select-none active:cursor-grabbing"
+        className={cn(
+          'viewport-grid relative cursor-crosshair touch-none overflow-hidden select-none active:cursor-grabbing',
+          fill
+            ? 'min-h-[280px] flex-1'
+            : 'border-card-border h-[min(62vh,640px)] rounded-[3px] border',
+        )}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
           drag.current = { ...local(e), view }
@@ -139,18 +147,25 @@ export function ImageViewer({
           )}
         </div>
       </div>
-      <div className="text-muted tabular flex items-center gap-3 text-xs">
-        <span>
-          {width}×{height} px
+      <div
+        className={cn(
+          'text-muted flex h-8 shrink-0 items-center gap-4 overflow-hidden text-[11px] whitespace-nowrap',
+          fill ? 'border-card-border bg-card border-t px-3' : 'mt-1',
+        )}
+      >
+        <span className="readout">
+          {width}×{height}
         </span>
-        <span>縮放 {Math.round(view.scale * 100)}%</span>
-        <span>{inside ? `座標 (${inside.x}, ${inside.y})` : '滾輪縮放、拖曳移動、雙擊置中'}</span>
+        <span className="readout w-16">{Math.round(view.scale * 100)}%</span>
+        <span className={cn('min-w-0 truncate', inside && 'readout text-ink')}>
+          {inside ? `x ${inside.x}  y ${inside.y}` : '滾輪縮放、拖曳移動、雙擊置中'}
+        </span>
         <span className="flex-1" />
-        <Button size="sm" variant="ghost" onClick={fit}>
+        <Button size="sm" variant="ghost" className="shrink-0" onClick={fit}>
           <Maximize className="size-3.5" aria-hidden />
           符合畫面
         </Button>
-        <Button size="sm" variant="ghost" onClick={actual}>
+        <Button size="sm" variant="ghost" className="shrink-0" onClick={actual}>
           <Scan className="size-3.5" aria-hidden />
           原始大小
         </Button>

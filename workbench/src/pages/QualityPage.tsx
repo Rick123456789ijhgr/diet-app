@@ -7,7 +7,7 @@ import { ConfigIO } from '@/components/ConfigIO'
 import { Histogram } from '@/components/Histogram'
 import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { ImageViewer } from '@/components/ImageViewer'
-import { EmptyState, PageHeader, Section, Workspace } from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
 import {
   AnalysisFrame,
@@ -20,7 +20,7 @@ import {
 } from '@/components/results'
 import { StepsTable } from '@/components/StepsTable'
 import { ToolPanel } from '@/components/ToolPanel'
-import { Badge, Card, Segmented } from '@/components/ui/primitives'
+import { Badge, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass } from '@/hooks/useConfigSchemas'
@@ -104,19 +104,19 @@ export function QualityPage() {
     />
   )
 
+  const busy = (pipeline.pending || analysis.busy) && (
+    <Badge tone="primary" aria-live="polite">
+      計算中…
+    </Badge>
+  )
+
   return (
-    <Workspace panel={panel}>
-      <PageHeader
-        title="品質檢查"
-        description="疊加模擬退化，觀察模糊、曝光、解析度三項檢查的結果。"
-        aside={
-          (pipeline.pending || analysis.busy) && (
-            <Badge tone="primary" aria-live="polite">
-              計算中…
-            </Badge>
-          )
-        }
-      />
+    <Workspace
+      panel={panel}
+      title="品質檢查"
+      description="疊加模擬退化，觀察模糊、曝光、解析度三項檢查的結果。"
+      aside={busy}
+    >
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!quality.schema}>
         {({ data: result, roundTripMs, config: used }, img) => {
           const current = valuesOf(used as ConfigOverride)
@@ -124,78 +124,62 @@ export function QualityPage() {
           const pct = (v: number) => `${(v * 100).toFixed(1)}%`
           const signed = (v: number, f: (v: number) => string) =>
             (v >= 0 ? '+' : '−') + f(Math.abs(v))
+          const isImage = view === 'original' || view === 'laplacian' || view === 'exposure'
           return (
-            <>
-              <StatusCard
-                tone={result.passed ? 'ok' : 'bad'}
-                title={result.passed ? '通過品質檢查' : '未通過'}
-                badges={<WarningBadges codes={result.warnings} />}
-                detail={[
-                  img.description,
-                  `${img.width}×${img.height} px`,
-                  `平均亮度 ${result.mean_brightness.toFixed(0)}`,
-                  `往返 ${roundTripMs.toFixed(0)} ms`,
-                ]}
-              />
-              <MetricGrid>
-                <Metric
-                  label="模糊分數"
-                  value={result.blur_score.toFixed(0)}
-                  delta={`${signed(result.blur_score - current('blur_min'), (v) => v.toFixed(0))} 相對下限 ${current('blur_min')}`}
-                  good={result.blur_score >= current('blur_min')}
-                  help={`拉普拉斯變異數（縮放到短邊 ${current('blur_short_side')} px）；越低越模糊。`}
-                />
-                <Metric
-                  label="短邊"
-                  value={`${short} px`}
-                  delta={`${signed(short - current('min_short_side'), String)} 相對下限 ${current('min_short_side')}`}
-                  good={result.resolution_ok}
-                />
-                <Metric
-                  label="過暗比例"
-                  value={pct(result.dark_ratio)}
-                  delta={`${signed(result.dark_ratio - current('dark_ratio_max'), pct)} 相對上限`}
-                  good={result.dark_ratio <= current('dark_ratio_max')}
-                  help={`灰階 < ${current('dark_level')} 的像素比例；上限 ${pct(current('dark_ratio_max'))}。`}
-                />
-                <Metric
-                  label="過亮比例"
-                  value={pct(result.bright_ratio)}
-                  delta={`${signed(result.bright_ratio - current('bright_ratio_max'), pct)} 相對上限`}
-                  good={result.bright_ratio <= current('bright_ratio_max')}
-                  help={`灰階 > ${current('bright_level')} 的像素比例；上限 ${pct(current('bright_ratio_max'))}。`}
-                />
-              </MetricGrid>
-              <Section title="檢視">
-                <Segmented
-                  label="檢視"
-                  value={view}
-                  onChange={setView}
-                  options={VIEWS}
-                  className="mb-3"
-                />
-                <Card className="p-3">
-                  {view === 'steps' ? (
-                    <StepsTable steps={result.steps} />
-                  ) : view === 'original' ? (
+            <Split
+              main={
+                <MainView
+                  scroll={!isImage}
+                  toolbar={
                     <>
-                      <ImageViewer
-                        src={artifactUrl(img.image_id)}
-                        width={img.width}
-                        height={img.height}
-                        alt="輸入影像"
-                      />
+                      <Segmented label="檢視" value={view} onChange={setView} options={VIEWS} />
+                      <span className="flex-1" />
                       <a
                         href={artifactUrl(img.image_id)}
                         download="workbench_input.jpg"
-                        className="text-primary mt-2 inline-flex items-center gap-1 text-xs hover:underline"
+                        className="text-primary-ink inline-flex items-center gap-1 text-xs hover:underline"
                       >
                         <Download className="size-3.5" aria-hidden />
                         下載影像（JPEG）
                       </a>
                     </>
+                  }
+                  footer={
+                    view === 'laplacian' ? (
+                      <>
+                        縮放到短邊 {current('blur_short_side')} px
+                        後的拉普拉斯響應強度，越亮代表邊緣越銳利；模糊分數就是這張圖的變異數。
+                      </>
+                    ) : view === 'exposure' ? (
+                      <Legend
+                        items={[
+                          {
+                            color: 'rgb(0 80 255)',
+                            label: `過暗（灰階 < ${current('dark_level')}）`,
+                          },
+                          {
+                            color: 'rgb(255 0 0)',
+                            label: `過亮（灰階 > ${current('bright_level')}）`,
+                          },
+                        ]}
+                      />
+                    ) : undefined
+                  }
+                >
+                  {view === 'steps' ? (
+                    <StepsTable steps={result.steps} />
+                  ) : view === 'original' ? (
+                    <ImageViewer
+                      fill
+                      src={artifactUrl(img.image_id)}
+                      width={img.width}
+                      height={img.height}
+                      alt="輸入影像"
+                    />
                   ) : rendered.error ? (
-                    <ErrorBox error={rendered.error} />
+                    <div className="p-4">
+                      <ErrorBox error={rendered.error} />
+                    </div>
                   ) : !rendered.data ? (
                     <EmptyState>載入中…</EmptyState>
                   ) : view === 'histogram' ? (
@@ -215,39 +199,65 @@ export function QualityPage() {
                       ]}
                     />
                   ) : rendered.data.image ? (
-                    <>
-                      <ImageViewer
-                        src={artifactUrl(rendered.data.image.image_id)}
-                        width={rendered.data.image.width}
-                        height={rendered.data.image.height}
-                        alt={view === 'laplacian' ? '拉普拉斯響應熱度圖' : '過暗與過亮像素遮罩'}
-                      />
-                      {view === 'laplacian' ? (
-                        <p className="text-muted mt-2 text-xs">
-                          縮放到短邊 {current('blur_short_side')} px
-                          後的拉普拉斯響應強度，越亮代表邊緣越銳利；模糊分數就是這張圖的變異數。
-                        </p>
-                      ) : (
-                        <Legend
-                          items={[
-                            {
-                              color: 'rgb(0 80 255)',
-                              label: `過暗（灰階 < ${current('dark_level')}）`,
-                            },
-                            {
-                              color: 'rgb(255 0 0)',
-                              label: `過亮（灰階 > ${current('bright_level')}）`,
-                            },
-                          ]}
-                        />
-                      )}
-                    </>
+                    <ImageViewer
+                      fill
+                      src={artifactUrl(rendered.data.image.image_id)}
+                      width={rendered.data.image.width}
+                      height={rendered.data.image.height}
+                      alt={view === 'laplacian' ? '拉普拉斯響應熱度圖' : '過暗與過亮像素遮罩'}
+                    />
                   ) : (
                     <EmptyState>沒有影像</EmptyState>
                   )}
-                </Card>
-              </Section>
-            </>
+                </MainView>
+              }
+              readout={
+                <>
+                  <StatusCard
+                    tone={result.passed ? 'ok' : 'bad'}
+                    title={result.passed ? '通過品質檢查' : '未通過'}
+                    badges={result.warnings.length > 0 && <WarningBadges codes={result.warnings} />}
+                    detail={[
+                      img.description,
+                      `${img.width}×${img.height} px`,
+                      `平均亮度 ${result.mean_brightness.toFixed(0)}`,
+                      `往返 ${roundTripMs.toFixed(0)} ms`,
+                    ]}
+                  />
+                  <ReadoutBlock title="指標">
+                    <MetricGrid>
+                      <Metric
+                        label="模糊分數"
+                        value={result.blur_score.toFixed(0)}
+                        delta={`${signed(result.blur_score - current('blur_min'), (v) => v.toFixed(0))} 相對下限 ${current('blur_min')}`}
+                        good={result.blur_score >= current('blur_min')}
+                        help={`拉普拉斯變異數（縮放到短邊 ${current('blur_short_side')} px）；越低越模糊。`}
+                      />
+                      <Metric
+                        label="短邊"
+                        value={`${short} px`}
+                        delta={`${signed(short - current('min_short_side'), String)} 相對下限 ${current('min_short_side')}`}
+                        good={result.resolution_ok}
+                      />
+                      <Metric
+                        label="過暗比例"
+                        value={pct(result.dark_ratio)}
+                        delta={`${signed(result.dark_ratio - current('dark_ratio_max'), pct)} 相對上限`}
+                        good={result.dark_ratio <= current('dark_ratio_max')}
+                        help={`灰階 < ${current('dark_level')} 的像素比例；上限 ${pct(current('dark_ratio_max'))}。`}
+                      />
+                      <Metric
+                        label="過亮比例"
+                        value={pct(result.bright_ratio)}
+                        delta={`${signed(result.bright_ratio - current('bright_ratio_max'), pct)} 相對上限`}
+                        good={result.bright_ratio <= current('bright_ratio_max')}
+                        help={`灰階 > ${current('bright_level')} 的像素比例；上限 ${pct(current('bright_ratio_max'))}。`}
+                      />
+                    </MetricGrid>
+                  </ReadoutBlock>
+                </>
+              }
+            />
           )
         }}
       </AnalysisFrame>

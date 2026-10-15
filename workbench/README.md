@@ -40,18 +40,18 @@ npm run build
 src/
   api/client.ts       openapi-fetch 客戶端、ApiError、artifactUrl
   api/gen/            由 openapi/workbench.yaml 產生（make gen），不手改
-  nav.ts              模組與頁面註冊表（左欄＝模組，頂部膠囊＝頁面）
+  nav.ts              模組與頁面註冊表（頂部列：模組下拉選單＋頁面分頁）
   App.tsx             路由；完成的頁面在這裡註冊（延遲載入）
   queryClient.ts      TanStack Query 設定；IMAGE_NOT_FOUND 時自動重新上傳
   components/
-    layout/           外框（AppShell）、工具頁雙欄（Workspace）
+    layout/           外框（AppShell：頂部列＋狀態列）、工具頁三欄（Workspace、Split、MainView）
     ui/primitives.tsx 基本元件（shadcn/ui 風格，以 Radix 為底）
     ToolPanel.tsx     左側控制面板（影像／參數／匯出入分頁）
     ParamForm.tsx     依 Python param() 宣告自動產生的參數表單
     LadderControls    條碼階梯的序列參數（嘗試順序、多尺度倍率、採用格式）
     ImageViewer.tsx   可縮放、拖曳、查座標的影像檢視，幾何結果以 SVG 疊圖
-    overlays.tsx      疊圖用的四邊形、矩形、橢圓（找到＝紫、真值＝靛藍虛線）
-    results.tsx       結果區：AnalysisFrame（載入、錯誤、淡化）、狀態列、指標卡、表格
+    overlays.tsx      疊圖用的四邊形、矩形、橢圓（找到＝橘、真值＝青綠虛線）
+    results.tsx       結果區：AnalysisFrame（載入、錯誤、淡化）、狀態（StatusCard）、讀數格（MetricGrid／Metric）、表格
     ImageSourcePanel  影像來源（合成場景參數／上傳）＋模擬退化
     ConfigIO.tsx      匯出 JSON、Python 建構式、匯入
   hooks/
@@ -67,7 +67,7 @@ e2e/                  Playwright 冒煙測試
 ## 新增一個頁面
 
 1. 在 `nav.ts` 把該工具的 `ready` 改為 `true`。
-2. 在 `pages/` 新增頁面：`Workspace`＋`ToolPanel` 排版，`useImagePipeline` 取影像、`useAnalysis` 呼叫分析、`AnalysisFrame` 處理載入與錯誤，參數用 `ParamForm`，影像用 `ImageViewer`（幾何結果用 `overlays.tsx` 疊圖）。可參考 `QualityPage`、`LabelPage`。
+2. 在 `pages/` 新增頁面：`Workspace`（控制面板＋頁首）＋`ToolPanel`，`useImagePipeline` 取影像、`useAnalysis` 呼叫分析、`AnalysisFrame` 處理載入與錯誤，結果用 `Split`（`MainView` 主檢視＋讀數欄），參數用 `ParamForm`，影像用 `ImageViewer fill`（幾何結果用 `overlays.tsx` 疊圖）。可參考 `QualityPage`、`LabelPage`。
 3. 在 `App.tsx` 註冊路由（`lazy` 載入）。
 4. 補 `src/test/server.ts` 的假回應與頁面測試，並在 `e2e/` 加一個冒煙測試。
 

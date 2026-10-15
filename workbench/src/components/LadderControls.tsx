@@ -63,7 +63,9 @@ export function LadderControls({
         </Button>
       </div>
       <fieldset>
-        <legend className="text-muted mb-1 text-xs font-semibold">嘗試順序</legend>
+        <legend className="text-ink-2 border-card-border mb-1.5 w-full border-b pb-1 text-[11px] font-semibold tracking-wider">
+          嘗試順序
+        </legend>
         <p className="text-muted mb-2 text-xs">
           依序嘗試，第一次成功即停止；最終順序由 E1 實驗決定。
         </p>
@@ -71,7 +73,7 @@ export function LadderControls({
           {rungs.map((r, i) => (
             <li
               key={r}
-              className="border-card-border flex items-center gap-2 rounded-md border px-2 py-1 text-sm"
+              className="border-card-border bg-card flex items-center gap-2 rounded-[3px] border px-2 py-1 text-[13px]"
             >
               <span className="text-muted tabular w-4 text-xs">{i + 1}</span>
               <span className="flex-1">{rungText(r)}</span>
@@ -117,7 +119,9 @@ export function LadderControls({
       </fieldset>
 
       <fieldset>
-        <legend className="text-muted mb-1 text-xs font-semibold">多尺度倍率</legend>
+        <legend className="text-ink-2 border-card-border mb-1.5 w-full border-b pb-1 text-[11px] font-semibold tracking-wider">
+          多尺度倍率
+        </legend>
         <p className="text-muted mb-2 text-xs">多尺度階依點選順序嘗試的縮放倍率。</p>
         <Chips
           options={[...new Set([...SCALE_OPTIONS, ...scales])].sort((a, b) => a - b)}
@@ -132,7 +136,9 @@ export function LadderControls({
 
       {showFormats && (
         <fieldset>
-          <legend className="text-muted mb-1 text-xs font-semibold">採用格式</legend>
+          <legend className="text-ink-2 border-card-border mb-1.5 w-full border-b pb-1 text-[11px] font-semibold tracking-wider">
+            採用格式
+          </legend>
           <p className="text-muted mb-2 text-xs">
             全部不選為全部採用；其他格式的結果不採用（例如斜拍 EAN-13 被誤讀成 UPC-E）。
           </p>
@@ -202,9 +208,9 @@ function Chips<T extends string | number>({
             aria-pressed={on}
             onClick={() => onToggle(o)}
             className={cn(
-              'rounded-full border px-2.5 py-0.5 text-xs',
+              'readout rounded-[3px] border px-2 py-0.5 text-xs',
               on
-                ? 'border-primary bg-primary-soft text-primary'
+                ? 'border-primary bg-primary-soft text-primary-ink'
                 : 'border-card-border text-muted hover:bg-hover',
             )}
           >

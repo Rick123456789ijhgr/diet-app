@@ -108,10 +108,14 @@ describe('品質檢查頁', () => {
 })
 
 describe('外框', () => {
-  it('左欄列出模組，尚無工具的模組顯示說明', async () => {
+  it('模組選單列出所有模組，尚無工具的模組顯示說明', async () => {
+    const user = userEvent.setup()
     renderAt('/coldstart')
-    expect(await screen.findByRole('complementary', { name: '模組' })).toHaveTextContent('冷啟動')
     expect(await screen.findByText('冷啟動上傳尚無工具。')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '切換模組' }))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(7)
+    expect(menu).toHaveTextContent('影像前處理')
   })
 
   it('總覽列出各模組的工具', () => {

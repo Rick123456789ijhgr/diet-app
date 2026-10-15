@@ -3,51 +3,111 @@
 /* 深色模式以 <html class="dark"> 切換（見 index.html 與 ThemeToggle） */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* 色系：靛藍主色、紫輔色；狀態色只用靛藍（正常）與紅（異常），不使用綠與橘 */
+/*
+ * 精密儀器風：石墨灰中性色、細線分隔（不用陰影）、小圓角、數字等寬。
+ * - 互動色只有一個藍（primary）；狀態色 ok／warn／danger 一律搭配圖示與文字，不單靠顏色。
+ * - 影像檢視區（viewport）在深淺色模式都是深色「螢幕」，讓影像與疊圖最清楚。
+ * - 圖表系列色（series-1…8）為經色盲驗證的固定順序，依序取用、不循環（見 charts.tsx）。
+ */
 :root {
-  --canvas: #f1f3f7;
-  --card: #ffffff;
-  --card-border: #e7eaf0;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --hover: #f3f4f8;
-  --primary: #4f46e5;
-  --primary-soft: #eef0ff;
-  --accent: #8b5cf6;
-  --danger: #dc2626;
-  --danger-soft: #fdecec;
-  --shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 14px -6px rgb(15 23 42 / 0.08);
+  --canvas: #f1f1ef;
+  --card: #fcfcfb;
+  --sunken: #f1f1ef;
+  --card-border: #e1e0d9;
+  --line-strong: #c3c2b7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6b6a65;
+  --hover: #ebebe7;
+  --primary: #2a78d6;
+  --primary-ink: #1c5cab;
+  --primary-soft: #e3eefb;
+  --ok: #0a7d0a;
+  --ok-mark: #0ca30c;
+  --ok-soft: #e4f3e4;
+  --warn: #8a5a00;
+  --warn-mark: #fab219;
+  --warn-soft: #fdf1d6;
+  --danger: #c22f2f;
+  --danger-mark: #d03b3b;
+  --danger-soft: #fbe7e7;
+  --viewport: #1a1a19;
+  --viewport-grid: #232322;
+  --viewport-ink: #c3c2b7;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  color-scheme: light;
 }
 
 .dark {
-  --canvas: #0b0d12;
-  --card: #151922;
-  --card-border: #232838;
-  --ink: #e6e9f2;
-  --muted: #94a3b8;
-  --hover: #1e2330;
-  --primary: #818cf8;
-  --primary-soft: #23264a;
-  --accent: #a78bfa;
-  --danger: #f87171;
-  --danger-soft: #3a1d22;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --canvas: #0d0d0d;
+  --card: #1a1a19;
+  --sunken: #141413;
+  --card-border: #2c2c2a;
+  --line-strong: #444441;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #8f8d86;
+  --hover: #262624;
+  --primary: #3987e5;
+  --primary-ink: #6da7ec;
+  --primary-soft: #16263a;
+  --ok: #3cc23c;
+  --ok-mark: #0ca30c;
+  --ok-soft: #142614;
+  --warn: #fab219;
+  --warn-mark: #fab219;
+  --warn-soft: #2e2410;
+  --danger: #e66767;
+  --danger-mark: #e66767;
+  --danger-soft: #331a1a;
+  --viewport: #0f0f0e;
+  --viewport-grid: #191918;
+  --viewport-ink: #c3c2b7;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  color-scheme: dark;
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
   --color-card: var(--card);
+  --color-sunken: var(--sunken);
   --color-card-border: var(--card-border);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-hover: var(--hover);
   --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
   --color-primary-soft: var(--primary-soft);
-  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-ok-mark: var(--ok-mark);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-mark: var(--warn-mark);
+  --color-warn-soft: var(--warn-soft);
   --color-danger: var(--danger);
+  --color-danger-mark: var(--danger-mark);
   --color-danger-soft: var(--danger-soft);
-  --shadow-card: var(--shadow);
+  --color-viewport: var(--viewport);
+  --color-viewport-ink: var(--viewport-ink);
   --font-sans: 'Noto Sans TC', ui-sans-serif, system-ui, 'Microsoft JhengHei', sans-serif;
+  --font-mono:
+    'Cascadia Mono', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
 }
 
 html,
@@ -60,10 +120,33 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-sans);
+  font-size: 13px;
   -webkit-font-smoothing: antialiased;
 }
 
 /* 數字對齊，方便比較 */
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* 儀表讀數：等寬數字 */
+.readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* 影像檢視區的格線底，像儀器螢幕 */
+.viewport-grid {
+  background-color: var(--viewport);
+  background-image:
+    linear-gradient(var(--viewport-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--viewport-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* 細捲軸 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }

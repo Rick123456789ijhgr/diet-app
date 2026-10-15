@@ -23,24 +23,30 @@ export function ToolPanel({
 }) {
   return (
     <Tabs defaultValue="image">
-      <TabsList className="mb-4">
+      <TabsList className="bg-card sticky top-0 z-10">
         <TabsTrigger value="image">
-          <ImageIcon className="size-4" aria-hidden />
+          <ImageIcon className="size-3.5" aria-hidden />
           {imageLabel}
         </TabsTrigger>
         <TabsTrigger value="params">
-          <SlidersHorizontal className="size-4" aria-hidden />
+          <SlidersHorizontal className="size-3.5" aria-hidden />
           {paramsLabel}
-          {changed > 0 && <Badge tone="accent">{changed}</Badge>}
+          {changed > 0 && <Badge tone="primary">{changed}</Badge>}
         </TabsTrigger>
         <TabsTrigger value="io">
-          <ArrowLeftRight className="size-4" aria-hidden />
+          <ArrowLeftRight className="size-3.5" aria-hidden />
           匯出入
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="image">{image}</TabsContent>
-      <TabsContent value="params">{params}</TabsContent>
-      <TabsContent value="io">{io}</TabsContent>
+      <TabsContent value="image" className="p-3">
+        {image}
+      </TabsContent>
+      <TabsContent value="params" className="p-3">
+        {params}
+      </TabsContent>
+      <TabsContent value="io" className="p-3">
+        {io}
+      </TabsContent>
     </Tabs>
   )
 }

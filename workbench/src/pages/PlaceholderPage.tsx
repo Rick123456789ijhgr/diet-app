@@ -18,7 +18,7 @@ export function PlaceholderPage() {
           </span>
         </>
       ) : first ? (
-        <Link to={toolPath(module, first)} className="text-primary underline">
+        <Link to={toolPath(module, first)} className="text-primary-ink underline">
           前往 {first.name}
         </Link>
       ) : (
