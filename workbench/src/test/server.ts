@@ -4,6 +4,8 @@ import { setupServer } from 'msw/node'
 
 import type { ConfigClass, ConfigSchemas, ImageRef, QualityResult } from '@/api/client'
 
+import { coldstartHandlers } from './coldstart'
+
 export const qualitySchema: ConfigClass = {
   name: 'QualityConfig',
   doc: '共通品質檢查的參數。',
@@ -358,6 +360,7 @@ export const e1Run = {
 }
 
 export const handlers = [
+  ...coldstartHandlers,
   http.post('*/workbench/v1/dev/sweeps', async ({ request }) => {
     const body = (await json(request)) as { target: string; params: Record<string, unknown> }
     const thumbs = [{ level: 0, image_id: 'thumb-0', width: 200, height: 120 }]

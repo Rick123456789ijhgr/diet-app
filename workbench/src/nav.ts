@@ -8,6 +8,7 @@ import {
   FlaskConical,
   Images,
   LayoutDashboard,
+  ListChecks,
   type LucideIcon,
   PackagePlus,
   ReceiptText,
@@ -148,8 +149,17 @@ export const MODULES: Module[] = [
     short: '冷啟動',
     name: '冷啟動上傳',
     icon: PackagePlus,
-    description: '上傳包裝照片、人工確認條碼與營養數值，寫入產品資料庫（階段 5）。',
-    tools: [],
+    description: '上傳包裝照片、人工確認條碼與營養數值，寫入產品資料庫（需登入）。',
+    tools: [
+      {
+        slug: 'submissions',
+        name: '上傳清單',
+        icon: ListChecks,
+        description: '新增上傳、上傳三種照片、人工確認並寫入產品資料庫；以條碼查產品。',
+        stage: 5,
+        ready: true,
+      },
+    ],
   },
 ]
 
@@ -161,7 +171,7 @@ export function modulePath(module: Module): string {
   return module.id ? `/${module.id}` : '/'
 }
 
-/** 依網址找出目前的模組與頁面。 */
+/** 依網址找出目前的模組與頁面；只看前兩段，詳情頁（例如 /coldstart/submissions/:id）歸在所屬頁面。 */
 export function locate(pathname: string): { module: Module; tool?: Tool } {
   const [moduleId, slug] = pathname.split('/').filter(Boolean)
   const module = MODULES.find((m) => m.id === moduleId) ?? HOME

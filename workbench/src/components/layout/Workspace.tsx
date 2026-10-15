@@ -37,17 +37,32 @@ export function Workspace({
         {panel}
       </section>
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-end gap-4 px-1 pt-1 pb-3">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
-            <p className="text-muted mt-0.5 truncate text-[13px]" title={description}>
-              {description}
-            </p>
-          </div>
-          {aside}
-        </div>
+        <PageHeader title={title} description={description} aside={aside} />
         <div className="min-h-0 flex-1">{children}</div>
       </div>
+    </div>
+  )
+}
+
+/** 頁面標題列：大標題・說明，右側放操作。工具頁由 Workspace 帶入；沒有控制面板的頁面直接使用。 */
+export function PageHeader({
+  title,
+  description,
+  aside,
+}: {
+  title: ReactNode
+  description: string
+  aside?: ReactNode
+}) {
+  return (
+    <div className="flex shrink-0 items-end gap-4 px-1 pt-1 pb-3">
+      <div className="min-w-0 flex-1">
+        <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
+        <p className="text-muted mt-0.5 truncate text-[13px]" title={description}>
+          {description}
+        </p>
+      </div>
+      {aside}
     </div>
   )
 }

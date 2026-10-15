@@ -34,6 +34,21 @@ export const ERROR_TEXT: Record<string, string> = {
   NETWORK: '網路連線失敗',
   PATH_NOT_FOUND: '找不到路徑',
   INTERNAL: '伺服器內部錯誤',
+  HTTP_ERROR: '請求失敗',
+  // 登入與冷啟動上傳
+  INVALID_CREDENTIALS: '帳號或密碼錯誤',
+  UNAUTHORIZED: '尚未登入或登入已過期，請重新登入',
+  DB_UNAVAILABLE: '資料庫或物件儲存未設定或無法連線',
+  PRECONDITION_FAILED: '這筆上傳已被其他人修改，請重新載入',
+  SUBMISSION_CLOSED: '這筆上傳已確認或已退回，不能再修改',
+  SUBMISSION_NOT_FOUND: '找不到這筆上傳',
+  PRODUCT_NOT_FOUND: '查無此產品',
+  BARCODE_EXISTS: '此條碼的產品已存在',
+  DRAFT_INCOMPLETE: '欄位尚未填完',
+  NUTRITION_INCONSISTENT: '營養數值不一致',
+  INVALID_BARCODE: '條碼格式不正確（須為 8 到 14 位數字）',
+  INVALID_DRAFT: '輸入的欄位不合法',
+  UNSUPPORTED_IMAGE: '不支援的影像格式（請用 JPEG 或 PNG）',
 }
 
 /** 條碼逐步升級的各階（Rung）。 */
@@ -91,8 +106,77 @@ export const GROUP_TEXT: Record<string, string> = {
   '': '其他',
 }
 
+/** 照片種類（ImageKind）。 */
+export const IMAGE_KIND_TEXT: Record<string, string> = {
+  front: '包裝正面',
+  barcode: '條碼',
+  label: '營養標示',
+}
+
+/** 上傳狀態（SubmissionStatus）。 */
+export const STATUS_TEXT: Record<string, string> = {
+  draft: '草稿',
+  confirmed: '已確認',
+  rejected: '已退回',
+}
+
+/** 營養素（Nutrients 的欄位）與單位。 */
+export const NUTRIENT_TEXT: Record<string, string> = {
+  energy_kcal: '熱量',
+  protein_g: '蛋白質',
+  fat_g: '脂肪',
+  saturated_fat_g: '飽和脂肪',
+  trans_fat_g: '反式脂肪',
+  carbohydrate_g: '碳水化合物',
+  sugar_g: '糖',
+  sodium_mg: '鈉',
+}
+export const NUTRIENT_UNIT_TEXT: Record<string, string> = {
+  energy_kcal: '大卡',
+  protein_g: '公克',
+  fat_g: '公克',
+  saturated_fat_g: '公克',
+  trans_fat_g: '公克',
+  carbohydrate_g: '公克',
+  sugar_g: '公克',
+  sodium_mg: '毫克',
+}
+
+/** 草稿欄位（Draft 的欄位；確認時 missing 回傳的路徑）。 */
+export const DRAFT_FIELD_TEXT: Record<string, string> = {
+  barcode: '條碼',
+  name: '品名',
+  brand: '品牌',
+  net_content: '淨重或容量',
+  content_unit: '單位',
+  serving_size: '每份份量',
+  servings_per_package: '每包裝份數',
+}
+
+/** 容量單位（ContentUnit）。 */
+export const UNIT_TEXT: Record<string, string> = { g: '公克', ml: '毫升' }
+
+/** 營養數值不一致的種類（NutritionIssue.code）。 */
+export const ISSUE_TEXT: Record<string, string> = {
+  BASIS_MISMATCH: '每份與每 100 的數值換算不符',
+  FAT_PARTS_EXCEED_FAT: '飽和脂肪加反式脂肪大於脂肪',
+  SUGAR_EXCEEDS_CARBOHYDRATE: '糖大於碳水化合物',
+}
+
+/** 營養標示的基準（NutritionIssue.basis）。 */
+export const BASIS_TEXT: Record<string, string> = {
+  per_serving: '每份',
+  per_100: '每 100',
+  both: '每份與每 100',
+}
+
 export const warningText = (code: string) => WARNING_TEXT[code] ?? code
 export const errorText = (code: string) => ERROR_TEXT[code] ?? code
 export const groupText = (group: string) => GROUP_TEXT[group] ?? group
 export const rungText = (rung: string) => RUNG_TEXT[rung] ?? rung
 export const outcomeText = (o: string) => OUTCOME_TEXT[o] ?? o
+export const imageKindText = (k: string) => IMAGE_KIND_TEXT[k] ?? k
+export const statusText = (s: string) => STATUS_TEXT[s] ?? s
+export const nutrientText = (n: string) => NUTRIENT_TEXT[n] ?? n
+export const issueText = (c: string) => ISSUE_TEXT[c] ?? c
+export const unitText = (u: string) => UNIT_TEXT[u] ?? u

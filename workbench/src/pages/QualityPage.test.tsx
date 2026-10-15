@@ -109,8 +109,8 @@ describe('品質檢查頁', () => {
 
 describe('外框', () => {
   it('左側列出所有模組，尚無工具的模組顯示說明', async () => {
-    renderAt('/coldstart')
-    expect(await screen.findByText('冷啟動上傳尚無工具。')).toBeInTheDocument()
+    renderAt('/m2')
+    expect(await screen.findByText('條碼、發票、營養標示尚無工具。')).toBeInTheDocument()
     const rail = screen.getByRole('navigation', { name: '模組清單' })
     expect(within(rail).getAllByRole('link')).toHaveLength(7)
     expect(within(rail).getByRole('link', { name: '冷啟動上傳' })).toHaveAttribute(
@@ -122,7 +122,7 @@ describe('外框', () => {
   it('總覽列出各模組的工具', () => {
     renderAt('/')
     expect(screen.getByText('影像前處理')).toBeInTheDocument()
-    // 模組一的七個工具都已遷移
-    expect(screen.getAllByText('可用')).toHaveLength(7)
+    // 模組一的七個工具都已遷移，另有冷啟動的上傳清單
+    expect(screen.getAllByText('可用')).toHaveLength(8)
   })
 })
