@@ -2,7 +2,7 @@
 
 > 對應決策：`docs/adr/0003-workbench-react-go.md`
 > 使用方式：一次只做一個階段，一個階段一個 PR。規格草稿（第 2 節）經 Rick 審核同意後才寫入 `proto/`、`openapi/`、`db/migrations/`。
-> 審核紀錄：2026-10-13 Rick 同意第 2.1 至 2.3 節（含第 2.5 節的修正）；第 2.4 節由第 2.6 節（2026-10-16 草稿）取代，待審核。
+> 審核紀錄：2026-10-13 Rick 同意第 2.1 至 2.3 節（含第 2.5 節的修正）；第 2.4 節由第 2.6 節取代；2026-10-16 Rick 同意第 2.6 節（D1–D6 與審核重點皆依建議，見 2.6.5）。
 
 ---
 
@@ -270,7 +270,7 @@ message JsonResponse { string json = 1; }
 - **JSON 為主的回應一律是物件**：`FreeJson`（掃描、批次、E1、直方圖、真值）限定為 JSON 物件，Python 回傳串列時須包一層，例如 `{"rows": [...]}`。
 - **Go 升到 1.25**：grpc-go 1.84 需要 Go 1.25；`api/Dockerfile` 一併改為 `golang:1.25`。
 
-### 2.6 階段 5 規格草稿（2026-10-16，待審核；取代 2.4 節）
+### 2.6 階段 5 規格（2026-10-16 同意；取代 2.4 節）
 
 > 依 2.4 節初稿細化。**規劃書 6.1、9.2 不在 repo 中**（README 指向 `docs/`，實際沒有），以下尚未與之對齊；請提供這兩節，或確認先依本草稿實作、差異之後以新的 migration 補上。
 > 審核方式：逐項回覆「同意」或要改的地方。同意後才寫入 `db/migrations/`、`openapi/workbench.yaml`（`db/CLAUDE.md`：migration 須由人主導）。
@@ -409,6 +409,16 @@ CREATE UNIQUE INDEX product_images_submission_kind_idx ON product_images (submis
 2. **與真值比較改由後端計算**：`RenderView` 新增 `truth_compare` 檢視（`data_json`：營養標示的四角平均與最大誤差（px）、食物照片的盤數差與菜數差），取代前端 `lib/geometry.ts` 的計算，符合「數字由程式決定」，評測數字也與研究共用 `dietai.evaluation`。`PreprocessLabelResponse`、`PreprocessFoodResponse` 不變（正式流程沒有真值）。
 
 兩者都只新增 `view` 的值，不改 proto 欄位；`openapi/workbench.yaml` 的 `view` 列舉加兩個值。
+
+---
+
+#### 2.6.5 審核結果（2026-10-16）
+
+Rick 同意 D1–D6 皆依建議。審核重點的決定：
+
+1. **營養數值的兩條檢查不放在資料庫**：台灣標示有「低於門檻可標示為 0」的規定（例如反式脂肪 ≤ 0.3 g），標示本身就可能違反「飽和＋反式 ≤ 脂肪」「糖 ≤ 碳水」。改由 Go 在確認時檢查，違反時回 `422 NUTRITION_INCONSISTENT` 並列出差異；人確認標示確實如此後，以 `accept_warnings: true` 再送一次即照原樣存入。`nutrition_facts` 刪除這兩條 `CHECK`。每份與每 100 的一致性檢查（D3）同樣處理。
+2. **UPC-A 與 EAN-13 視為同一條碼**：`products` 新增 `gtin TEXT NOT NULL UNIQUE CHECK (gtin ~ '^[0-9]{14}$')`（標示數字補 0 到 14 碼，由 Go 計算並檢查校驗碼），`barcode` 存標示原樣、不設唯一。查詢與重複判斷一律用 `gtin`。
+3. **規劃書 6.1、9.2**：先依本節實作，差異之後以新的 migration 補上。
 
 ---
 
