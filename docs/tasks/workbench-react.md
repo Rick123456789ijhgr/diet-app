@@ -387,6 +387,8 @@ message JsonResponse { string json = 1; }
 - **前處理**：每張照片都做品質檢查；條碼照片另做解碼（唯一的有效條碼且草稿沒填時預填），營養標示照片另做標示前處理（只取四角與警告）。
   Python 未啟動時照片仍保存，摘要記錄錯誤。
 - **重傳照片**：同一種照片取代舊的，舊檔從物件儲存刪除。
+- **物件儲存改用 RustFS**：Docker Hub 的 `minio/minio` 已移除，`deploy/docker-compose.yml` 與 CI 改用 S3 相容的 `rustfs/rustfs:1.0.0`；
+  Go 用標準 S3 客戶端（minio-go），程式不受影響，環境變數沿用 `MINIO_*`。線上部署時可換成任何 S3 相容服務。
 - **本機開發的資料庫**：Windows 原生 PostgreSQL 沒有 pgvector，`000001` 的 `CREATE EXTENSION vector` 會失敗；Go 的整合測試在沒有 pgvector 時略過該行，
   實際使用仍以 `make db-up`（pgvector 映像）為準。
 

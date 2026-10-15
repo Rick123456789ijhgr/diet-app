@@ -35,7 +35,8 @@ cd workbench && npm run dev                                       # Vite（/work
 開發工具頁不需要登入。沒有設定資料庫時，頁面會顯示「資料庫或物件儲存未設定或無法連線」（DB_UNAVAILABLE）。
 
 1. 安裝並開啟 Docker Desktop。
-2. 在根目錄把 `.env.example` 複製為 `.env` 並填入密碼，執行 `make db-up`：只啟動 Postgres、MinIO 並套用 migration
+2. 在根目錄把 `.env.example` 複製為 `.env` 並填入密碼，執行 `make db-up`：只啟動 Postgres、物件儲存（S3 相容的 RustFS，
+   MinIO 已不提供公開映像；設定沿用 `MINIO_*`）並套用 migration
    （`make up` 會另外啟動容器版的 Go 與 Python，與 `make workbench` 的埠衝突）。
 3. `make workbench`：`scripts/dev.mjs` 由 `.env` 推導 `DATABASE_URL`（`localhost:5432`）與 MinIO 設定
    （`MINIO_ENDPOINT=localhost:9000`、`MINIO_ACCESS_KEY`／`MINIO_SECRET_KEY` 沿用 `MINIO_ROOT_USER`／`MINIO_ROOT_PASSWORD`）傳給 Go；
