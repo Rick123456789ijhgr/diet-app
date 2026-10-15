@@ -18,7 +18,8 @@ rem 實際的啟動流程在 workbench\scripts\dev.mjs（與 make workbench 相�
 cd /d "%~dp0"
 set "URL=http://localhost:8080"
 
-curl -s -f -o nul "%URL%/workbench/v1/dev/config-schemas" && (
+rem API 與首頁都正常才算已在執行；只有 API 正常時交給 dev.mjs 判斷並提示關閉舊程序
+curl -s -f -o nul "%URL%/workbench/v1/dev/config-schemas" && curl -s -f -o nul "%URL%/" && (
     echo 工作台已在執行，開啟瀏覽器 · Already running
     start "" "%URL%"
     exit /b 0

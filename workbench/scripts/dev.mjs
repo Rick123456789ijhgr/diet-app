@@ -102,12 +102,17 @@ function ensureNode() {
   runOrFail('npm', ['ci', '--no-audit', '--no-fund'], path.join(root, 'workbench'), '安裝前端套件')
 }
 
-async function isReady(timeoutMs) {
+async function isOk(url, timeoutMs) {
   try {
-    return (await fetch(readyUrl, { signal: AbortSignal.timeout(timeoutMs) })).ok
+    return (await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })).ok
   } catch {
     return false
   }
+}
+
+// API 與前端首頁都正常才算就緒：只看 API 會把沒有內嵌前端的舊版 Go（首頁 404）當成就緒
+async function isReady(timeoutMs) {
+  return (await isOk(readyUrl, timeoutMs)) && (await isOk(`${webUrl}/`, timeoutMs))
 }
 
 // 已在執行（例如重複雙擊）時不重複啟動：埠已被佔用，新啟動的程序只會失敗
@@ -115,6 +120,12 @@ if (await isReady(1000)) {
   log(`工作台已在執行：${webUrl}`)
   if (!process.env.WORKBENCH_NO_OPEN) openBrowser(webUrl)
   process.exit(0)
+}
+if (await isOk(readyUrl, 1000)) {
+  fail(
+    `${webUrl} 上已有舊版工作台在執行，但首頁無法開啟（可能是之前的 make workbench-dev 或舊視窗）。` +
+      '請先關閉那個視窗或程序，再重新啟動。',
+  )
 }
 
 if (!process.env.WORKBENCH_SKIP_SETUP) {
