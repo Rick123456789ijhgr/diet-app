@@ -83,6 +83,8 @@ func domainError(err error) *Error {
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return &Error{http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error(), ""}
+	case errors.Is(err, auth.ErrTooManyAttempts):
+		return &Error{http.StatusTooManyRequests, "TOO_MANY_ATTEMPTS", err.Error(), ""}
 	case errors.Is(err, auth.ErrUnauthenticated):
 		return &Error{http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), ""}
 	case errors.Is(err, coldstart.ErrUnavailable):

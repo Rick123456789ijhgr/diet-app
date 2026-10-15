@@ -1011,6 +1011,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description 同一帳號 15 分鐘內登入失敗 10 次，暫停登入（TOO_MANY_ATTEMPTS） */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["DbUnavailable"];
         };
     };

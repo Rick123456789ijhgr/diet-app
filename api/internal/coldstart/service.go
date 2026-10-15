@@ -44,6 +44,8 @@ type Tx interface {
 	CreateProduct(ctx context.Context, p NewProduct) (string, error)
 	// AddNutrition 新增一版營養標示，並把同一產品、同一基準的舊版標記為已取代。
 	AddNutrition(ctx context.Context, productID string, basis Basis, n Nutrients, userID string) error
+	// SetServingSize 更新產品的每份份量（修正營養數值時，份量隨新版數值更新）。
+	SetServingSize(ctx context.Context, productID string, size float64) error
 	// AttachImages 把這筆上傳的照片掛到產品。
 	AttachImages(ctx context.Context, submissionID, productID string) error
 }
@@ -51,7 +53,7 @@ type Tx interface {
 // ErrGTINTaken 由 Tx.CreateProduct 回傳：同一 GTIN 的產品已存在（並行確認時）。
 var ErrGTINTaken = errors.New("同一條碼的產品已存在")
 
-// Objects 是照片原檔的物件儲存（MinIO）。
+// Objects 是照片原檔的物件儲存（MinIO）。Get 找不到物件時，回傳的錯誤實作 NotFound() bool。
 type Objects interface {
 	Put(ctx context.Context, key string, data []byte, contentType string) error
 	Get(ctx context.Context, key string) ([]byte, error)
@@ -103,8 +105,11 @@ func (s *Service) List(ctx context.Context, status Status, limit int) ([]Submiss
 	if status != "" && status != StatusDraft && status != StatusConfirmed && status != StatusRejected {
 		return nil, &InvalidError{"INVALID_REQUEST", "status", "未知的狀態"}
 	}
-	if limit <= 0 || limit > 200 {
+	switch {
+	case limit <= 0:
 		limit = 50
+	case limit > 200:
+		limit = 200
 	}
 	return s.store.ListSubmissions(ctx, status, limit)
 }
@@ -130,6 +135,10 @@ func (s *Service) ImageData(ctx context.Context, id string, kind Kind) ([]byte, 
 		return nil, "", ErrNotFound
 	}
 	data, err := s.objects.Get(ctx, img.ObjectKey)
+	var nf interface{ NotFound() bool }
+	if errors.As(err, &nf) && nf.NotFound() {
+		return nil, "", ErrNotFound // 資料庫有紀錄、物件儲存卻沒有檔案
+	}
 	if err != nil {
 		return nil, "", err
 	}
@@ -159,14 +168,25 @@ func (s *Service) UploadImage(ctx context.Context, id string, kind Kind, data []
 	}
 	ext := map[string]string{"image/jpeg": "jpg", "image/png": "png"}[img.ContentType]
 	img.ObjectKey = fmt.Sprintf("coldstart/%s/%s-%s.%s", id, kind, hex.EncodeToString(img.SHA256[:8]), ext)
-	if err := s.objects.Put(ctx, img.ObjectKey, data, img.ContentType); err != nil {
-		return Submission{}, fmt.Errorf("coldstart: 存入物件儲存: %w", err)
-	}
+	// 存檔與前處理互不相依，並行執行以縮短上傳等待
+	putErr := make(chan error, 1)
+	go func() { putErr <- s.objects.Put(ctx, img.ObjectKey, data, img.ContentType) }()
 	if s.pre != nil {
 		img.Preprocess = s.pre.Preprocess(ctx, kind, data)
 	}
 	if img.Preprocess.Warnings == nil {
 		img.Preprocess.Warnings = []string{}
+	}
+	if err := <-putErr; err != nil {
+		return Submission{}, fmt.Errorf("coldstart: 存入物件儲存: %w", err)
+	}
+	// 同一內容重傳時物件鍵相同：失敗時不可刪除，否則會刪到資料庫仍指向的檔案
+	if old, ok := sub.Image(kind); !ok || old.ObjectKey != img.ObjectKey {
+		defer func() {
+			if err != nil {
+				s.deleteObject(ctx, img.ObjectKey)
+			}
+		}()
 	}
 
 	var out Submission
@@ -196,12 +216,16 @@ func (s *Service) UploadImage(ctx context.Context, id string, kind Kind, data []
 		return Submission{}, err
 	}
 	if replaced != nil && replaced.ObjectKey != img.ObjectKey {
-		// 舊檔刪除失敗不影響結果（資料庫已不再指向它），只記錄
-		if err := s.objects.Delete(ctx, replaced.ObjectKey); err != nil {
-			s.logger.WarnContext(ctx, "coldstart: 刪除被取代的照片失敗", "key", replaced.ObjectKey, "err", err)
-		}
+		s.deleteObject(ctx, replaced.ObjectKey)
 	}
 	return out, nil
+}
+
+// deleteObject 刪除不再被資料庫指向的物件；失敗不影響結果，只記錄。
+func (s *Service) deleteObject(ctx context.Context, key string) {
+	if err := s.objects.Delete(context.WithoutCancel(ctx), key); err != nil {
+		s.logger.WarnContext(ctx, "coldstart: 刪除照片失敗", "key", key, "err", err)
+	}
 }
 
 // SaveDraft 儲存人工輸入；version 非空時須與目前版本相同。
@@ -356,6 +380,13 @@ func apply(ctx context.Context, tx Tx, sub Submission, userID string, req Confir
 	}
 
 	productID := req.ProductID
+	if req.Mode == ModeReviseNutrition && d.ServingSize != nil &&
+		(product.ServingSize == nil || Round2(*d.ServingSize) != *product.ServingSize) {
+		// 新的每份數值依草稿的份量；份量一併寫回產品，兩者才一致
+		if err := tx.SetServingSize(ctx, productID, Round2(*d.ServingSize)); err != nil {
+			return "", err
+		}
+	}
 	if req.Mode == ModeCreate {
 		var err error
 		productID, err = tx.CreateProduct(ctx, NewProduct{

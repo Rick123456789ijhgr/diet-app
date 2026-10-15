@@ -2,6 +2,7 @@ package workbench
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -15,6 +16,10 @@ const SessionCookie = "wb_session"
 
 type tokenKey struct{}
 
+// sessionErrKey 保存查詢工作階段時的非預期錯誤（例如資料庫斷線）：需要登入的路由回傳它（5xx），
+// 而不是 401，前端才不會把使用者當成已登出。
+type sessionErrKey struct{}
+
 // withSession 由 Cookie 取得登入者放進 context；沒有或無效時不處理（需要登入的路由自行回 401）。
 func (h *handler) withSession(r *http.Request) *http.Request {
 	if h.auth == nil {
@@ -25,8 +30,12 @@ func (h *handler) withSession(r *http.Request) *http.Request {
 		return r
 	}
 	ctx := context.WithValue(r.Context(), tokenKey{}, c.Value)
-	if u, err := h.auth.Authenticate(ctx, c.Value); err == nil {
+	u, err := h.auth.Authenticate(ctx, c.Value)
+	switch {
+	case err == nil:
 		ctx = auth.WithUser(ctx, u)
+	case !errors.Is(err, auth.ErrUnauthenticated):
+		ctx = context.WithValue(ctx, sessionErrKey{}, err)
 	}
 	return r.WithContext(ctx)
 }
@@ -55,8 +64,8 @@ func (h *handler) Login(ctx context.Context, req api.LoginRequestObject) (api.Lo
 }
 
 func (h *handler) Logout(ctx context.Context, _ api.LogoutRequestObject) (api.LogoutResponseObject, error) {
-	if _, ok := auth.UserFrom(ctx); !ok {
-		return nil, auth.ErrUnauthenticated
+	if _, err := currentUser(ctx); err != nil {
+		return nil, err
 	}
 	token, _ := ctx.Value(tokenKey{}).(string)
 	if err := h.auth.Logout(ctx, token); err != nil {
@@ -69,9 +78,9 @@ func (h *handler) GetMe(ctx context.Context, _ api.GetMeRequestObject) (api.GetM
 	if h.auth == nil {
 		return nil, coldstart.ErrUnavailable
 	}
-	u, ok := auth.UserFrom(ctx)
-	if !ok {
-		return nil, auth.ErrUnauthenticated
+	u, err := currentUser(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return api.GetMe200JSONResponse(apiUser(u)), nil
 }

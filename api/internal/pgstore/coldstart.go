@@ -327,6 +327,11 @@ func (t pgTx) AddNutrition(ctx context.Context, productID string, basis coldstar
 	return err
 }
 
+func (t pgTx) SetServingSize(ctx context.Context, productID string, size float64) error {
+	_, err := t.tx.Exec(ctx, `UPDATE products SET serving_size = $2 WHERE id = $1`, productID, size)
+	return err
+}
+
 func (t pgTx) AttachImages(ctx context.Context, submissionID, productID string) error {
 	_, err := t.tx.Exec(ctx, `UPDATE product_images SET product_id = $2 WHERE submission_id = $1`, submissionID, productID)
 	return err

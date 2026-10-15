@@ -256,6 +256,7 @@ func TestColdstartStore(t *testing.T) {
 	// 修正數值：新增一版，舊版保留
 	revised := fullDraft("0036000291452")
 	revised.Nutrition.Per100.SodiumMg, revised.Nutrition.PerServing.SodiumMg = f(520), f(156)
+	revised.ServingSize = f(30.004) // 捨入後與產品相同：不更新份量
 	_, _ = svc.SaveDraft(ctx, second.ID, revised, "")
 	_, p, err := svc.Confirm(ctx, user.ID, second.ID, coldstart.ConfirmRequest{Mode: coldstart.ModeReviseNutrition, ProductID: product.ID}, "")
 	if err != nil || *p.Nutrition[coldstart.Per100].Values.SodiumMg != 520 || len(p.Images) != 6 {

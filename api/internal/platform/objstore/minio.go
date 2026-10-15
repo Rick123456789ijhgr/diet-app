@@ -4,7 +4,6 @@ package objstore
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 
@@ -12,8 +11,13 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// ErrNotFound 表示物件不存在。
-var ErrNotFound = errors.New("objstore: 物件不存在")
+// ErrNotFound 表示物件不存在；實作 NotFound() bool，讓呼叫端不必 import 本套件也能判斷。
+var ErrNotFound error = notFoundError{}
+
+type notFoundError struct{}
+
+func (notFoundError) Error() string  { return "objstore: 物件不存在" }
+func (notFoundError) NotFound() bool { return true }
 
 // Config 是 MinIO 連線設定。
 type Config struct {
@@ -60,19 +64,27 @@ func (m *MinIO) Put(ctx context.Context, key string, data []byte, contentType st
 func (m *MinIO) Get(ctx context.Context, key string) ([]byte, error) {
 	obj, err := m.client.GetObject(ctx, m.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, err
+		return nil, notFoundOr(err)
 	}
 	defer obj.Close()
+	// GetObject 是延遲的：Stat 才會真的發出請求，物件不存在時在這裡得知
+	if _, err := obj.Stat(); err != nil {
+		return nil, notFoundOr(err)
+	}
 	data, err := io.ReadAll(obj)
 	if err != nil {
-		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
-			return nil, ErrNotFound
-		}
-		return nil, err
+		return nil, notFoundOr(err)
 	}
 	return data, nil
 }
 
 func (m *MinIO) Delete(ctx context.Context, key string) error {
 	return m.client.RemoveObject(ctx, m.bucket, key, minio.RemoveObjectOptions{})
+}
+
+func notFoundOr(err error) error {
+	if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		return ErrNotFound
+	}
+	return err
 }

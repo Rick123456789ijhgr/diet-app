@@ -16,8 +16,11 @@ import (
 
 // 冷啟動上傳（任務書 2.6 節）：只做登入檢查與型別轉換，流程在 coldstart.Service。
 
-// currentUser 取出登入者；未登入時回 401。
+// currentUser 取出登入者；未登入時回 401，查詢工作階段失敗時回傳該錯誤。
 func currentUser(ctx context.Context) (auth.User, error) {
+	if err, ok := ctx.Value(sessionErrKey{}).(error); ok {
+		return auth.User{}, err
+	}
 	u, ok := auth.UserFrom(ctx)
 	if !ok {
 		return auth.User{}, auth.ErrUnauthenticated

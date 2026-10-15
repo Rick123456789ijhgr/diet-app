@@ -292,3 +292,48 @@ func TestRejectAndUnavailable(t *testing.T) {
 		t.Errorf("未設定資料庫：%v", err)
 	}
 }
+
+func TestReviewFixes(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv()
+
+	// 修正數值時份量改變：產品的份量一併更新，與新的每份數值一致
+	first := e.ready(t, "4710088410108")
+	_, product, err := e.svc.Confirm(ctx, user, first.ID, coldstart.ConfirmRequest{Mode: coldstart.ModeCreate}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := e.ready(t, "4710088410108")
+	d := fullDraft("4710088410108")
+	d.ServingSize = f(25)
+	d.Nutrition.PerServing = nutrients(130, 1.75, 7.5, 2.5, 0, 13.25, 0.5, 125)
+	_, _ = e.svc.SaveDraft(ctx, second.ID, d, "")
+	_, p, err := e.svc.Confirm(ctx, user, second.ID, coldstart.ConfirmRequest{Mode: coldstart.ModeReviseNutrition, ProductID: product.ID}, "")
+	if err != nil || p.ServingSize == nil || *p.ServingSize != 25 {
+		t.Errorf("份量應更新為 25：%v %v", err, p.ServingSize)
+	}
+
+	// 物件儲存中的檔案不見：回 ErrNotFound（404），不是 500
+	third, _ := e.svc.Create(ctx, user)
+	third, _ = e.svc.UploadImage(ctx, third.ID, coldstart.KindFront, pngBytes(t, 10, 10))
+	img, _ := third.Image(coldstart.KindFront)
+	_ = e.objects.Delete(ctx, img.ObjectKey)
+	if _, _, err := e.svc.ImageData(ctx, third.ID, coldstart.KindFront); !errors.Is(err, coldstart.ErrNotFound) {
+		t.Errorf("檔案遺失：%v", err)
+	}
+
+	// 已關閉的上傳：照片不會留在物件儲存
+	before := len(e.objects.Keys())
+	if _, err := e.svc.UploadImage(ctx, first.ID, coldstart.KindFront, pngBytes(t, 12, 12)); !errors.Is(err, coldstart.ErrClosed) {
+		t.Errorf("已確認的上傳：%v", err)
+	}
+	if after := len(e.objects.Keys()); after != before {
+		t.Errorf("物件數 %d → %d", before, after)
+	}
+
+	// 超過資料庫上限的數值（捨入後）
+	var invalid *coldstart.InvalidError
+	if _, err := e.svc.SaveDraft(ctx, third.ID, coldstart.Draft{ServingSize: f(99999999.996)}, ""); !errors.As(err, &invalid) {
+		t.Errorf("超過上限：%v", err)
+	}
+}

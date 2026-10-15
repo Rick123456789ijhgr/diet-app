@@ -261,6 +261,16 @@ func (t memTx) AddNutrition(_ context.Context, productID string, basis coldstart
 	return nil
 }
 
+func (t memTx) SetServingSize(_ context.Context, productID string, size float64) error {
+	p, ok := t.m.st.products[productID]
+	if !ok {
+		return coldstart.ErrNotFound
+	}
+	p.ServingSize = &size
+	t.m.st.products[productID] = p
+	return nil
+}
+
 func (t memTx) AttachImages(_ context.Context, submissionID, productID string) error {
 	for i, r := range t.m.st.images {
 		if r.submissionID == submissionID {
@@ -290,7 +300,7 @@ func (o *MemObjects) Get(_ context.Context, key string) ([]byte, error) {
 	defer o.mu.Unlock()
 	d, ok := o.Data[key]
 	if !ok {
-		return nil, coldstart.ErrNotFound
+		return nil, notFound{}
 	}
 	return d, nil
 }
@@ -301,6 +311,11 @@ func (o *MemObjects) Delete(_ context.Context, key string) error {
 	delete(o.Data, key)
 	return nil
 }
+
+type notFound struct{}
+
+func (notFound) Error() string  { return "物件不存在" }
+func (notFound) NotFound() bool { return true }
 
 // Keys 回傳目前所有物件的鍵（排序後），測試用。
 func (o *MemObjects) Keys() []string {

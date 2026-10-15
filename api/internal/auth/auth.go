@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,6 +29,8 @@ var (
 	ErrNotFound = errors.New("找不到")
 	// ErrUserExists 由 Store 回傳：帳號已存在。
 	ErrUserExists = errors.New("帳號已存在")
+	// ErrTooManyAttempts 表示同一帳號短時間內失敗太多次，暫時不接受登入。
+	ErrTooManyAttempts = errors.New("登入失敗次數過多，請稍後再試")
 	// ErrInvalidUsername 表示帳號格式不符（3–32 個小寫英數字或 _ . -）。
 	ErrInvalidUsername = errors.New("帳號須為 3–32 個小寫英文字母、數字或 _ . -")
 )
@@ -36,6 +39,14 @@ var usernamePattern = regexp.MustCompile(`^[a-z0-9_.-]{3,32}$`)
 
 // MinPasswordLen 是密碼的最短長度。
 const MinPasswordLen = 10
+
+// 登入限制：同一帳號在 lockWindow 內失敗 maxFailures 次後暫停登入；
+// argon2id 每次約用 64 MiB，同時最多計算 maxConcurrentHashes 個，避免大量請求耗盡記憶體。
+const (
+	maxFailures         = 10
+	lockWindow          = 15 * time.Minute
+	maxConcurrentHashes = 4
+)
 
 // User 是組員帳號。
 type User struct {
@@ -65,6 +76,10 @@ type Service struct {
 	now   func() time.Time
 	// dummyHash 用於帳號不存在時仍做一次雜湊比對，讓回應時間不洩漏帳號是否存在
 	dummyHash string
+	hashSlots chan struct{}
+
+	mu       sync.Mutex
+	failures map[string][]time.Time // 帳號 → lockWindow 內的失敗時間
 }
 
 func NewService(store Store) *Service {
@@ -72,26 +87,34 @@ func NewService(store Store) *Service {
 	if err != nil {
 		panic(err)
 	}
-	return &Service{store: store, now: time.Now, dummyHash: dummy}
+	return &Service{
+		store: store, now: time.Now, dummyHash: dummy,
+		hashSlots: make(chan struct{}, maxConcurrentHashes), failures: map[string][]time.Time{},
+	}
 }
 
 // Login 驗證帳號密碼並建立工作階段，回傳要放進 Cookie 的 token。
 func (s *Service) Login(ctx context.Context, username, password string) (User, string, error) {
-	user, hash, err := s.store.UserByUsername(ctx, strings.TrimSpace(username))
+	username = strings.TrimSpace(username)
+	if s.locked(username) {
+		return User{}, "", ErrTooManyAttempts
+	}
+	user, hash, err := s.store.UserByUsername(ctx, username)
 	if errors.Is(err, ErrNotFound) {
-		_, _ = VerifyPassword(password, s.dummyHash)
-		return User{}, "", ErrInvalidCredentials
+		hash, err = s.dummyHash, nil
 	}
 	if err != nil {
 		return User{}, "", err
 	}
-	ok, err := VerifyPassword(password, hash)
+	ok, err := s.verify(ctx, password, hash)
 	if err != nil {
 		return User{}, "", err
 	}
-	if !ok || user.Disabled {
+	if !ok || user.ID == "" || user.Disabled {
+		s.recordFailure(username)
 		return User{}, "", ErrInvalidCredentials
 	}
+	s.clearFailures(username)
 	token, tokenHash, err := newToken()
 	if err != nil {
 		return User{}, "", err
@@ -144,6 +167,57 @@ func (s *Service) SetPassword(ctx context.Context, username, password string) er
 		return err
 	}
 	return s.store.SetPassword(ctx, username, hash)
+}
+
+// verify 在限定的並行數內比對密碼。
+func (s *Service) verify(ctx context.Context, password, hash string) (bool, error) {
+	select {
+	case s.hashSlots <- struct{}{}:
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+	defer func() { <-s.hashSlots }()
+	return VerifyPassword(password, hash)
+}
+
+func (s *Service) recent(username string) []time.Time {
+	cutoff := s.now().Add(-lockWindow)
+	kept := s.failures[username][:0]
+	for _, t := range s.failures[username] {
+		if t.After(cutoff) {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) == 0 {
+		delete(s.failures, username)
+		return nil
+	}
+	s.failures[username] = kept
+	return kept
+}
+
+func (s *Service) locked(username string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.recent(username)) >= maxFailures
+}
+
+func (s *Service) recordFailure(username string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// 大量不同帳號（含不存在的）失敗時，先清掉過期的紀錄，避免記憶體無限成長
+	if len(s.failures) > 10000 {
+		for name := range s.failures {
+			s.recent(name)
+		}
+	}
+	s.failures[username] = append(s.recent(username), s.now())
+}
+
+func (s *Service) clearFailures(username string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.failures, username)
 }
 
 func hashChecked(password string) (string, error) {

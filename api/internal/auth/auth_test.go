@@ -98,3 +98,22 @@ func TestCreateUserValidation(t *testing.T) {
 		t.Errorf("重複帳號：%v", err)
 	}
 }
+
+func TestLoginLocksAfterRepeatedFailures(t *testing.T) {
+	ctx := context.Background()
+	svc := auth.NewService(authtest.NewMemStore())
+	_, _ = svc.CreateUser(ctx, "amy", "Amy", "long-enough-pw")
+	for i := 0; i < 10; i++ {
+		if _, _, err := svc.Login(ctx, "amy", "wrong-password"); !errors.Is(err, auth.ErrInvalidCredentials) {
+			t.Fatalf("第 %d 次：%v", i+1, err)
+		}
+	}
+	// 鎖定後，即使密碼正確也暫停登入
+	if _, _, err := svc.Login(ctx, "amy", "long-enough-pw"); !errors.Is(err, auth.ErrTooManyAttempts) {
+		t.Errorf("鎖定後：%v", err)
+	}
+	// 其他帳號不受影響（不存在的帳號也計數，但不會影響 amy 以外的人）
+	if _, _, err := svc.Login(ctx, "bob", "whatever-pw"); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("其他帳號：%v", err)
+	}
+}

@@ -3,6 +3,7 @@ package workbench
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/png"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	api "github.com/your-org/diet-app/api/gen/openapi/workbenchapi"
 	"github.com/your-org/diet-app/api/internal/auth"
@@ -199,5 +201,37 @@ func TestColdstartFlow(t *testing.T) {
 	list := decode[struct{ Items []api.SubmissionSummary }](t, resp)
 	if len(list.Items) != 1 || list.Items[0].Name == nil || *list.Items[0].Name != "測試洋芋片" || len(list.Items[0].Images) != 3 {
 		t.Errorf("清單 = %+v", list)
+	}
+}
+
+// 上傳上限：HTTP 層與冷啟動流程的上限必須一致（都由 gRPC 訊息上限決定）。
+func TestUploadLimitsAgree(t *testing.T) {
+	if MaxUploadBytes != coldstart.MaxImageBytes {
+		t.Errorf("MaxUploadBytes = %d，coldstart.MaxImageBytes = %d", MaxUploadBytes, coldstart.MaxImageBytes)
+	}
+}
+
+// failingStore 模擬資料庫斷線：查詢工作階段失敗。
+type failingStore struct{ *authtest.MemStore }
+
+func (failingStore) SessionUser(context.Context, []byte, time.Time) (auth.User, error) {
+	return auth.User{}, errors.New("連線中斷")
+}
+
+// 查詢工作階段失敗時回 5xx，不是 401（前端不會因此把使用者登出）。
+func TestSessionLookupErrorIsNot401(t *testing.T) {
+	srv := httptest.NewServer(NewHTTPHandler(NewService(&fakeAI{}), Options{
+		Auth: auth.NewService(failingStore{authtest.NewMemStore()}),
+	}))
+	t.Cleanup(srv.Close)
+	r, _ := http.NewRequest(http.MethodGet, srv.URL+"/workbench/v1/auth/me", nil)
+	r.AddCookie(&http.Cookie{Name: SessionCookie, Value: "some-token"})
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("status = %d，預期 500", resp.StatusCode)
 	}
 }

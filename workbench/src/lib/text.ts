@@ -46,6 +46,7 @@ export const ERROR_TEXT: Record<string, string> = {
   NUTRITION_INCONSISTENT: '營養數值不一致',
   INVALID_BARCODE: '條碼不正確（須為 8、12、13 或 14 位數字且校驗碼正確）',
   BARCODE_MISMATCH: '草稿的條碼與指定的產品不同',
+  TOO_MANY_ATTEMPTS: '登入失敗次數過多，請 15 分鐘後再試',
   INVALID_DRAFT: '輸入的欄位不合法',
   UNSUPPORTED_IMAGE: '不支援的影像格式（請用 JPEG 或 PNG）',
 }

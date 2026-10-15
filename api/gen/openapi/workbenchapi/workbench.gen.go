@@ -1945,6 +1945,20 @@ func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
+type Login429JSONResponse Error
+
+func (response Login429JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type Login503JSONResponse struct{ DbUnavailableJSONResponse }
 
 func (response Login503JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {

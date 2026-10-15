@@ -103,6 +103,18 @@ func missingNutrition(d Draft, basis Basis) []string {
 	return out
 }
 
+// maxNumeric 是 NUMERIC(10,2) 的上限。
+const maxNumeric = 99999999.99
+
+// inRange 檢查捨入到兩位小數後仍在資料庫可存的範圍內。
+func inRange(v float64, allowZero bool) bool {
+	r := Round2(v)
+	if allowZero {
+		return r >= 0 && r <= maxNumeric
+	}
+	return r > 0 && r <= maxNumeric
+}
+
 func blank(s *string) bool { return s == nil || strings.TrimSpace(*s) == "" }
 
 // Missing 列出確認前必填但缺少的欄位與照片。
@@ -160,7 +172,7 @@ func validateDraft(d Draft) error {
 		"net_content": d.NetContent, "serving_size": d.ServingSize, "servings_per_package": d.ServingsPerPackage,
 	}
 	for name, v := range positive {
-		if v != nil && !(*v > 0 && *v < 1e8) {
+		if v != nil && !inRange(*v, false) {
 			return &InvalidError{"INVALID_DRAFT", name, name + " 必須大於 0"}
 		}
 	}
@@ -173,7 +185,7 @@ func validateDraft(d Draft) error {
 				continue
 			}
 			for _, f := range NutrientFields {
-				if v := f.Get(b.n); v != nil && !(*v >= 0 && *v < 1e8) {
+				if v := f.Get(b.n); v != nil && !inRange(*v, true) {
 					field := "nutrition." + string(b.basis) + "." + f.Name
 					return &InvalidError{"INVALID_DRAFT", field, field + " 必須是 0 以上的數字"}
 				}

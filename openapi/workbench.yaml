@@ -53,6 +53,12 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: 同一帳號 15 分鐘內登入失敗 10 次，暫停登入（TOO_MANY_ATTEMPTS）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/DbUnavailable"
   /workbench/v1/auth/logout:
