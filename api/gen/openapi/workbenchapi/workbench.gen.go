@@ -390,7 +390,7 @@ type Draft struct {
 	Brand       *string      `json:"brand,omitempty"`
 	ContentUnit *ContentUnit `json:"content_unit,omitempty"`
 	Name        *string      `json:"name,omitempty"`
-	NetContent  *float32     `json:"net_content,omitempty"`
+	NetContent  *float64     `json:"net_content,omitempty"`
 	Nutrition   *struct {
 		// Per100 台灣營養標示的八項必要欄位；草稿中都可省略
 		Per100 *Nutrients `json:"per_100,omitempty"`
@@ -400,8 +400,8 @@ type Draft struct {
 	} `json:"nutrition,omitempty"`
 
 	// ServingSize 每份的量（單位同 content_unit）
-	ServingSize        *float32 `json:"serving_size,omitempty"`
-	ServingsPerPackage *float32 `json:"servings_per_package,omitempty"`
+	ServingSize        *float64 `json:"serving_size,omitempty"`
+	ServingsPerPackage *float64 `json:"servings_per_package,omitempty"`
 }
 
 // Ellipse defines model for Ellipse.
@@ -521,38 +521,38 @@ type LoginRequest struct {
 
 // Nutrients 台灣營養標示的八項必要欄位；草稿中都可省略
 type Nutrients struct {
-	CarbohydrateG *float32 `json:"carbohydrate_g,omitempty"`
-	EnergyKcal    *float32 `json:"energy_kcal,omitempty"`
-	FatG          *float32 `json:"fat_g,omitempty"`
-	ProteinG      *float32 `json:"protein_g,omitempty"`
-	SaturatedFatG *float32 `json:"saturated_fat_g,omitempty"`
-	SodiumMg      *float32 `json:"sodium_mg,omitempty"`
-	SugarG        *float32 `json:"sugar_g,omitempty"`
-	TransFatG     *float32 `json:"trans_fat_g,omitempty"`
+	CarbohydrateG *float64 `json:"carbohydrate_g,omitempty"`
+	EnergyKcal    *float64 `json:"energy_kcal,omitempty"`
+	FatG          *float64 `json:"fat_g,omitempty"`
+	ProteinG      *float64 `json:"protein_g,omitempty"`
+	SaturatedFatG *float64 `json:"saturated_fat_g,omitempty"`
+	SodiumMg      *float64 `json:"sodium_mg,omitempty"`
+	SugarG        *float64 `json:"sugar_g,omitempty"`
+	TransFatG     *float64 `json:"trans_fat_g,omitempty"`
 }
 
 // NutritionFacts defines model for NutritionFacts.
 type NutritionFacts struct {
-	CarbohydrateG *float32  `json:"carbohydrate_g,omitempty"`
+	CarbohydrateG *float64  `json:"carbohydrate_g,omitempty"`
 	ConfirmedAt   time.Time `json:"confirmed_at"`
 	ConfirmedBy   User      `json:"confirmed_by"`
-	EnergyKcal    *float32  `json:"energy_kcal,omitempty"`
-	FatG          *float32  `json:"fat_g,omitempty"`
-	ProteinG      *float32  `json:"protein_g,omitempty"`
-	SaturatedFatG *float32  `json:"saturated_fat_g,omitempty"`
-	SodiumMg      *float32  `json:"sodium_mg,omitempty"`
-	SugarG        *float32  `json:"sugar_g,omitempty"`
-	TransFatG     *float32  `json:"trans_fat_g,omitempty"`
+	EnergyKcal    *float64  `json:"energy_kcal,omitempty"`
+	FatG          *float64  `json:"fat_g,omitempty"`
+	ProteinG      *float64  `json:"protein_g,omitempty"`
+	SaturatedFatG *float64  `json:"saturated_fat_g,omitempty"`
+	SodiumMg      *float64  `json:"sodium_mg,omitempty"`
+	SugarG        *float64  `json:"sugar_g,omitempty"`
+	TransFatG     *float64  `json:"trans_fat_g,omitempty"`
 }
 
 // NutritionIssue defines model for NutritionIssue.
 type NutritionIssue struct {
-	Actual *float32            `json:"actual,omitempty"`
+	Actual *float64            `json:"actual,omitempty"`
 	Basis  NutritionIssueBasis `json:"basis"`
 
 	// Code BASIS_MISMATCH（每份與每 100 換算不符）、FAT_PARTS_EXCEED_FAT、SUGAR_EXCEEDS_CARBOHYDRATE
 	Code     string   `json:"code"`
-	Expected *float32 `json:"expected,omitempty"`
+	Expected *float64 `json:"expected,omitempty"`
 	Message  string   `json:"message"`
 	Nutrient *string  `json:"nutrient,omitempty"`
 }
@@ -579,15 +579,15 @@ type Product struct {
 	Id         string         `json:"id"`
 	Images     []ProductImage `json:"images"`
 	Name       string         `json:"name"`
-	NetContent *float32       `json:"net_content,omitempty"`
+	NetContent *float64       `json:"net_content,omitempty"`
 
 	// Nutrition 有效（未被取代）的營養標示
 	Nutrition struct {
 		Per100     *NutritionFacts `json:"per_100,omitempty"`
 		PerServing *NutritionFacts `json:"per_serving,omitempty"`
 	} `json:"nutrition"`
-	ServingSize        *float32 `json:"serving_size,omitempty"`
-	ServingsPerPackage *float32 `json:"servings_per_package,omitempty"`
+	ServingSize        *float64 `json:"serving_size,omitempty"`
+	ServingsPerPackage *float64 `json:"servings_per_package,omitempty"`
 }
 
 // ProductImage defines model for ProductImage.
@@ -1945,6 +1945,20 @@ func (response Login401JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 	return err
 }
 
+type Login503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response Login503JSONResponse) VisitLoginResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LogoutRequestObject struct {
 }
 
@@ -2005,6 +2019,20 @@ func (response GetMe401JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMe503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response GetMe503JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }

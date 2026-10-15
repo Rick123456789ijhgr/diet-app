@@ -718,13 +718,21 @@ export interface components {
         ContentUnit: "g" | "ml";
         /** @description 台灣營養標示的八項必要欄位；草稿中都可省略 */
         Nutrients: {
+            /** Format: double */
             energy_kcal?: number;
+            /** Format: double */
             protein_g?: number;
+            /** Format: double */
             fat_g?: number;
+            /** Format: double */
             saturated_fat_g?: number;
+            /** Format: double */
             trans_fat_g?: number;
+            /** Format: double */
             carbohydrate_g?: number;
+            /** Format: double */
             sugar_g?: number;
+            /** Format: double */
             sodium_mg?: number;
         };
         /** @description 人工輸入中的欄位；草稿可缺欄位，確認時才檢查完整性 */
@@ -733,10 +741,15 @@ export interface components {
             barcode?: string;
             name?: string;
             brand?: string;
+            /** Format: double */
             net_content?: number;
             content_unit?: components["schemas"]["ContentUnit"];
-            /** @description 每份的量（單位同 content_unit） */
+            /**
+             * Format: double
+             * @description 每份的量（單位同 content_unit）
+             */
             serving_size?: number;
+            /** Format: double */
             servings_per_package?: number;
             nutrition?: {
                 per_serving?: components["schemas"]["Nutrients"];
@@ -814,9 +827,12 @@ export interface components {
             barcode: string;
             name: string;
             brand?: string;
+            /** Format: double */
             net_content?: number;
             content_unit: components["schemas"]["ContentUnit"];
+            /** Format: double */
             serving_size?: number;
+            /** Format: double */
             servings_per_package?: number;
             /** @description 有效（未被取代）的營養標示 */
             nutrition: {
@@ -848,7 +864,9 @@ export interface components {
             /** @enum {string} */
             basis: "per_serving" | "per_100" | "both";
             nutrient?: string;
+            /** Format: double */
             expected?: number;
+            /** Format: double */
             actual?: number;
             message: string;
         };
@@ -993,6 +1011,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DbUnavailable"];
         };
     };
     logout: {
@@ -1033,6 +1052,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DbUnavailable"];
         };
     };
     listSubmissions: {

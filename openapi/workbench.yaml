@@ -53,6 +53,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/DbUnavailable"
   /workbench/v1/auth/logout:
     post:
       operationId: logout
@@ -81,6 +83,8 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/DbUnavailable"
 
   /workbench/v1/coldstart/submissions:
     get:
@@ -1394,27 +1398,35 @@ components:
       properties:
         energy_kcal:
           type: number
+          format: double
           minimum: 0
         protein_g:
           type: number
+          format: double
           minimum: 0
         fat_g:
           type: number
+          format: double
           minimum: 0
         saturated_fat_g:
           type: number
+          format: double
           minimum: 0
         trans_fat_g:
           type: number
+          format: double
           minimum: 0
         carbohydrate_g:
           type: number
+          format: double
           minimum: 0
         sugar_g:
           type: number
+          format: double
           minimum: 0
         sodium_mg:
           type: number
+          format: double
           minimum: 0
     Draft:
       type: object
@@ -1429,15 +1441,18 @@ components:
           type: string
         net_content:
           type: number
+          format: double
           exclusiveMinimum: 0
         content_unit:
           $ref: "#/components/schemas/ContentUnit"
         serving_size:
           type: number
+          format: double
           exclusiveMinimum: 0
           description: 每份的量（單位同 content_unit）
         servings_per_package:
           type: number
+          format: double
           exclusiveMinimum: 0
         nutrition:
           type: object
@@ -1590,12 +1605,15 @@ components:
           type: string
         net_content:
           type: number
+          format: double
         content_unit:
           $ref: "#/components/schemas/ContentUnit"
         serving_size:
           type: number
+          format: double
         servings_per_package:
           type: number
+          format: double
         nutrition:
           type: object
           description: 有效（未被取代）的營養標示
@@ -1647,8 +1665,10 @@ components:
           type: string
         expected:
           type: number
+          format: double
         actual:
           type: number
+          format: double
         message:
           type: string
     ConfirmProblem:
