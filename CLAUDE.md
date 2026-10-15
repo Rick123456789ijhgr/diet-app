@@ -43,7 +43,7 @@ make e1-synthetic # E1 條碼消融：以合成資料端到端跑一次（resear
 ```
 
 Windows 安裝 make：`winget install ezwinports.make`（裝完重開終端機）。
-不想用指令時，雙擊根目錄的 `啟動工作台.bat` 即可開啟工作台。
+不想用指令時，雙擊根目錄的 `啟動全部服務.bat`（React 版，啟動 Python、Go、Vite 並在就緒後開啟工作台）或 `啟動工作台.bat`（Streamlit 版）。
 
 ## 工作流程
 
