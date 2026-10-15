@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	api "github.com/your-org/diet-app/api/gen/openapi/workbenchapi"
+	"github.com/your-org/diet-app/api/internal/auth"
+	"github.com/your-org/diet-app/api/internal/coldstart"
 	"github.com/your-org/diet-app/api/internal/platform/aiclient"
 	"github.com/your-org/diet-app/api/internal/platform/requestid"
 )
@@ -28,6 +30,11 @@ type Options struct {
 	// DevTools 為 false 時，/workbench/v1/dev/* 一律回 404（線上部署不開）。
 	DevTools bool
 	Logger   *slog.Logger
+	// Auth、Coldstart 為 nil 時（沒有設定資料庫），登入與冷啟動路由回 503 DB_UNAVAILABLE。
+	Auth      *auth.Service
+	Coldstart *coldstart.Service
+	// SecureCookie 在 HTTPS 部署時設為 true，工作階段 Cookie 加上 Secure。
+	SecureCookie bool
 }
 
 // NewHTTPHandler 回傳 /workbench/v1/* 的 HTTP handler。
@@ -36,14 +43,18 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	strict := api.NewStrictHandlerWithOptions(&handler{svc: svc}, nil, api.StrictHTTPServerOptions{
+	h := &handler{svc: svc, auth: opts.Auth, cs: opts.Coldstart, secureCookie: opts.SecureCookie}
+	if h.cs == nil {
+		h.cs = coldstart.NewService(nil, nil, nil, logger) // 所有操作回 ErrUnavailable
+	}
+	strict := api.NewStrictHandlerWithOptions(h, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), ""})
 		},
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			e := toError(err)
-			// 使用者取消（換參數、離開頁面）不是錯誤，不記錄
-			if e.Status >= http.StatusInternalServerError && !canceled(r, err) {
+			// 使用者取消（換參數、離開頁面）與「沒有設定資料庫」（設定問題，回應已說明）不記成錯誤
+			if e.Status >= http.StatusInternalServerError && !canceled(r, err) && e.Code != "DB_UNAVAILABLE" {
 				logger.ErrorContext(r.Context(), "workbench",
 					"request_id", requestid.From(r.Context()), "path", r.URL.Path, "err", err)
 			}
@@ -66,13 +77,16 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 			writeError(w, errDevToolsOff)
 			return
 		}
-		routes.ServeHTTP(w, r)
+		routes.ServeHTTP(w, h.withSession(r))
 	})
 }
 
-// handler 實作產生的 StrictServerInterface；只做轉接，邏輯在 Service。
+// handler 實作產生的 StrictServerInterface；只做轉接，邏輯在 Service、auth.Service、coldstart.Service。
 type handler struct {
-	svc *Service
+	svc          *Service
+	auth         *auth.Service
+	cs           *coldstart.Service
+	secureCookie bool
 }
 
 var _ api.StrictServerInterface = (*handler)(nil)
@@ -170,18 +184,6 @@ func (h *handler) PreprocessFood(ctx context.Context, req api.PreprocessFoodRequ
 }
 
 // 登入於階段 5 實作（任務書第 4 節）。
-
-func (h *handler) Login(context.Context, api.LoginRequestObject) (api.LoginResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (h *handler) Logout(context.Context, api.LogoutRequestObject) (api.LogoutResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-func (h *handler) GetMe(context.Context, api.GetMeRequestObject) (api.GetMeResponseObject, error) {
-	return nil, errNotImplemented
-}
 
 func (h *handler) RunSweep(ctx context.Context, req api.RunSweepRequestObject) (api.RunSweepResponseObject, error) {
 	out, err := h.svc.Sweep(ctx, *req.Body)

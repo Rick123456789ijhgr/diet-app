@@ -213,10 +213,11 @@ func TestUnknownPathIsJSON404(t *testing.T) {
 	}
 }
 
-func TestLaterStageRoutesAre501(t *testing.T) {
-	resp := postJSON(t, newServer(t, &fakeAI{}, true).URL+"/workbench/v1/auth/login", `{"username":"a","password":"b"}`)
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501", resp.StatusCode)
+func TestWithoutDatabaseLoginAndColdstartAre503(t *testing.T) {
+	url := newServer(t, &fakeAI{}, true).URL
+	if resp := postJSON(t, url+"/workbench/v1/auth/login", `{"username":"a","password":"b"}`); resp.StatusCode != http.StatusServiceUnavailable ||
+		decode[api.Error](t, resp).Code != "DB_UNAVAILABLE" {
+		t.Fatalf("登入 status = %d", resp.StatusCode)
 	}
 }
 

@@ -1,4 +1,4 @@
-.PHONY: up down setup test lint gen test-api test-ai test-web lint-api lint-ai lint-web workbench workbench-dev e1-synthetic
+.PHONY: up down db-up setup test lint gen test-api test-ai test-web lint-api lint-ai lint-web workbench workbench-dev e1-synthetic
 
 # Windows（PowerShell／cmd 下由 cmd.exe 執行）與 Linux／macOS（sh）共用：
 # 指令只用兩邊都支援的語法，含斜線的執行檔路徑一律加引號。
@@ -27,6 +27,10 @@ up:
 
 down:
 	docker compose -f deploy/docker-compose.yml --env-file .env down
+
+# 只啟動 Postgres、MinIO 並套用 migration（工作台的冷啟動上傳需要；Go 與 Python 由 make workbench 啟動）
+db-up:
+	docker compose -f deploy/docker-compose.yml --env-file .env up -d db minio migrate
 
 # 建立 ai/.venv 並安裝開發所需套件（含工作台與 gRPC 服務）
 setup:

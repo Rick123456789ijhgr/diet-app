@@ -10,7 +10,7 @@
 // 環境變數（皆可省略）：AI_GRPC_PORT（預設 50051）、API_PORT（8080）、WEB_PORT（5173，只用於 --dev）、
 // WORKBENCH_NO_OPEN=1（不自動開瀏覽器）、WORKBENCH_SKIP_SETUP=1（不檢查套件）。
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -23,6 +23,35 @@ const webPort = process.env.WEB_PORT ?? '5173'
 const venvPython = path.join(root, 'ai', '.venv', isWin ? 'Scripts/python.exe' : 'bin/python')
 const vite = path.join(root, 'workbench', 'node_modules', 'vite', 'bin', 'vite.js')
 const devMode = process.argv.includes('--dev')
+
+// 冷啟動上傳需要的資料庫與 MinIO 設定：已設定環境變數時沿用；否則由根目錄 .env（make db-up 用的那份）
+// 推導本機位址。兩者都沒有時，Go 照常啟動，冷啟動頁會提示「未連線資料庫」。
+function storageEnv() {
+  const file = path.join(root, '.env')
+  const dotenv = {}
+  if (existsSync(file)) {
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
+      if (m) dotenv[m[1]] = m[2]
+    }
+  }
+  const get = (k) => process.env[k] ?? dotenv[k]
+  const env = {}
+  const db = get('DATABASE_URL')
+  if (db) env.DATABASE_URL = db
+  else if (get('POSTGRES_USER') && get('POSTGRES_DB')) {
+    const user = encodeURIComponent(get('POSTGRES_USER'))
+    const password = encodeURIComponent(get('POSTGRES_PASSWORD') ?? '')
+    env.DATABASE_URL = `postgres://${user}:${password}@localhost:5432/${get('POSTGRES_DB')}?sslmode=disable`
+  }
+  const minio = get('MINIO_ENDPOINT')
+  if (minio || get('MINIO_ROOT_USER')) {
+    env.MINIO_ENDPOINT = minio ?? 'localhost:9000'
+    env.MINIO_ACCESS_KEY = get('MINIO_ACCESS_KEY') ?? get('MINIO_ROOT_USER') ?? ''
+    env.MINIO_SECRET_KEY = get('MINIO_SECRET_KEY') ?? get('MINIO_ROOT_PASSWORD') ?? ''
+  }
+  return env
+}
 const webUrl = `http://localhost:${devMode ? webPort : apiPort}`
 // 經網頁的網址 → Go → Python 的輕量請求；成功代表服務都就緒
 const readyUrl = `${webUrl}/workbench/v1/dev/config-schemas`
@@ -125,7 +154,12 @@ const procs = [
     cmd: 'go',
     args: ['run', './cmd/server'],
     cwd: path.join(root, 'api'),
-    env: { WORKBENCH_DEV_TOOLS: '1', AI_GRPC_ADDR: `127.0.0.1:${aiPort}`, PORT: apiPort },
+    env: {
+      WORKBENCH_DEV_TOOLS: '1',
+      AI_GRPC_ADDR: `127.0.0.1:${aiPort}`,
+      PORT: apiPort,
+      ...storageEnv(),
+    },
   },
   {
     name: 'web',
