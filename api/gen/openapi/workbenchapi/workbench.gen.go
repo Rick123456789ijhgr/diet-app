@@ -14,6 +14,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -34,6 +35,87 @@ func (e ConfigFieldType) Valid() bool {
 	case Float:
 		return true
 	case Int:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConfirmRequestMode.
+const (
+	AddImages       ConfirmRequestMode = "add_images"
+	Create          ConfirmRequestMode = "create"
+	ReviseNutrition ConfirmRequestMode = "revise_nutrition"
+)
+
+// Valid indicates whether the value is a known member of the ConfirmRequestMode enum.
+func (e ConfirmRequestMode) Valid() bool {
+	switch e {
+	case AddImages:
+		return true
+	case Create:
+		return true
+	case ReviseNutrition:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ContentUnit.
+const (
+	G  ContentUnit = "g"
+	Ml ContentUnit = "ml"
+)
+
+// Valid indicates whether the value is a known member of the ContentUnit enum.
+func (e ContentUnit) Valid() bool {
+	switch e {
+	case G:
+		return true
+	case Ml:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ImageKind.
+const (
+	ImageKindBarcode ImageKind = "barcode"
+	ImageKindFront   ImageKind = "front"
+	ImageKindLabel   ImageKind = "label"
+)
+
+// Valid indicates whether the value is a known member of the ImageKind enum.
+func (e ImageKind) Valid() bool {
+	switch e {
+	case ImageKindBarcode:
+		return true
+	case ImageKindFront:
+		return true
+	case ImageKindLabel:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for NutritionIssueBasis.
+const (
+	Both       NutritionIssueBasis = "both"
+	Per100     NutritionIssueBasis = "per_100"
+	PerServing NutritionIssueBasis = "per_serving"
+)
+
+// Valid indicates whether the value is a known member of the NutritionIssueBasis enum.
+func (e NutritionIssueBasis) Valid() bool {
+	switch e {
+	case Both:
+		return true
+	case Per100:
+		return true
+	case PerServing:
 		return true
 	default:
 		return false
@@ -73,18 +155,39 @@ func (e RenderViewRequestView) Valid() bool {
 	}
 }
 
+// Defines values for SubmissionStatus.
+const (
+	SubmissionStatusConfirmed SubmissionStatus = "confirmed"
+	SubmissionStatusDraft     SubmissionStatus = "draft"
+	SubmissionStatusRejected  SubmissionStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the SubmissionStatus enum.
+func (e SubmissionStatus) Valid() bool {
+	switch e {
+	case SubmissionStatusConfirmed:
+		return true
+	case SubmissionStatusDraft:
+		return true
+	case SubmissionStatusRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SweepRequestTarget.
 const (
-	Barcode SweepRequestTarget = "barcode"
-	Quality SweepRequestTarget = "quality"
+	SweepRequestTargetBarcode SweepRequestTarget = "barcode"
+	SweepRequestTargetQuality SweepRequestTarget = "quality"
 )
 
 // Valid indicates whether the value is a known member of the SweepRequestTarget enum.
 func (e SweepRequestTarget) Valid() bool {
 	switch e {
-	case Barcode:
+	case SweepRequestTargetBarcode:
 		return true
-	case Quality:
+	case SweepRequestTargetQuality:
 		return true
 	default:
 		return false
@@ -93,29 +196,35 @@ func (e SweepRequestTarget) Valid() bool {
 
 // Defines values for SynthesizeRequestScene.
 const (
-	Ean13     SynthesizeRequestScene = "ean13"
-	Food      SynthesizeRequestScene = "food"
-	Invoice   SynthesizeRequestScene = "invoice"
-	Label     SynthesizeRequestScene = "label"
-	Nutrition SynthesizeRequestScene = "nutrition"
+	SynthesizeRequestSceneEan13     SynthesizeRequestScene = "ean13"
+	SynthesizeRequestSceneFood      SynthesizeRequestScene = "food"
+	SynthesizeRequestSceneInvoice   SynthesizeRequestScene = "invoice"
+	SynthesizeRequestSceneLabel     SynthesizeRequestScene = "label"
+	SynthesizeRequestSceneNutrition SynthesizeRequestScene = "nutrition"
 )
 
 // Valid indicates whether the value is a known member of the SynthesizeRequestScene enum.
 func (e SynthesizeRequestScene) Valid() bool {
 	switch e {
-	case Ean13:
+	case SynthesizeRequestSceneEan13:
 		return true
-	case Food:
+	case SynthesizeRequestSceneFood:
 		return true
-	case Invoice:
+	case SynthesizeRequestSceneInvoice:
 		return true
-	case Label:
+	case SynthesizeRequestSceneLabel:
 		return true
-	case Nutrition:
+	case SynthesizeRequestSceneNutrition:
 		return true
 	default:
 		return false
 	}
+}
+
+// BarcodeHit defines model for BarcodeHit.
+type BarcodeHit struct {
+	Format string `json:"format"`
+	Text   string `json:"text"`
 }
 
 // BarcodeResult defines model for BarcodeResult.
@@ -215,6 +324,47 @@ type ConfigSchemas struct {
 	Enums map[string][]string `json:"enums"`
 }
 
+// ConfirmProblem defines model for ConfirmProblem.
+type ConfirmProblem struct {
+	// Code DRAFT_INCOMPLETE 或 NUTRITION_INCONSISTENT
+	Code    string            `json:"code"`
+	Issues  *[]NutritionIssue `json:"issues,omitempty"`
+	Message string            `json:"message"`
+
+	// Missing 缺少的欄位（例如 nutrition.per_100.sodium_mg）
+	Missing *[]string `json:"missing,omitempty"`
+}
+
+// ConfirmRequest defines model for ConfirmRequest.
+type ConfirmRequest struct {
+	// AcceptWarnings 已確認標示確實如此，數值不一致時仍照原樣存入
+	AcceptWarnings *bool              `json:"accept_warnings,omitempty"`
+	Mode           ConfirmRequestMode `json:"mode"`
+
+	// ProductId add_images、revise_nutrition 時必填
+	ProductId *string `json:"product_id,omitempty"`
+}
+
+// ConfirmRequestMode defines model for ConfirmRequest.Mode.
+type ConfirmRequestMode string
+
+// ConfirmResponse defines model for ConfirmResponse.
+type ConfirmResponse struct {
+	Product    Product    `json:"product"`
+	Submission Submission `json:"submission"`
+}
+
+// ConflictError defines model for ConflictError.
+type ConflictError struct {
+	// Code BARCODE_EXISTS（附既有產品）、SUBMISSION_CLOSED（已確認或已退回，不能再修改）
+	Code    string   `json:"code"`
+	Message string   `json:"message"`
+	Product *Product `json:"product,omitempty"`
+}
+
+// ContentUnit defines model for ContentUnit.
+type ContentUnit string
+
 // DecodeHit defines model for DecodeHit.
 type DecodeHit struct {
 	Corners []Point `json:"corners"`
@@ -231,6 +381,27 @@ type DecodeHit struct {
 type DegradeRequest struct {
 	// Degradation 只含與預設值不同的設定欄位，例如 {"blur_min": 150}；省略或空物件表示全部用預設值
 	Degradation ConfigOverride `json:"degradation"`
+}
+
+// Draft 人工輸入中的欄位；草稿可缺欄位，確認時才檢查完整性
+type Draft struct {
+	// Barcode 標示上的條碼數字（8 到 14 位）
+	Barcode     *string      `json:"barcode,omitempty"`
+	Brand       *string      `json:"brand,omitempty"`
+	ContentUnit *ContentUnit `json:"content_unit,omitempty"`
+	Name        *string      `json:"name,omitempty"`
+	NetContent  *float32     `json:"net_content,omitempty"`
+	Nutrition   *struct {
+		// Per100 台灣營養標示的八項必要欄位；草稿中都可省略
+		Per100 *Nutrients `json:"per_100,omitempty"`
+
+		// PerServing 台灣營養標示的八項必要欄位；草稿中都可省略
+		PerServing *Nutrients `json:"per_serving,omitempty"`
+	} `json:"nutrition,omitempty"`
+
+	// ServingSize 每份的量（單位同 content_unit）
+	ServingSize        *float32 `json:"serving_size,omitempty"`
+	ServingsPerPackage *float32 `json:"servings_per_package,omitempty"`
 }
 
 // Ellipse defines model for Ellipse.
@@ -269,12 +440,31 @@ type FoodResult struct {
 // FreeJson 結構由 Python 定義的 JSON 物件（只有工作台會讀）
 type FreeJson map[string]interface{}
 
+// ImageKind front＝包裝正面、barcode＝條碼、label＝營養標示
+type ImageKind string
+
 // ImageOutput defines model for ImageOutput.
 type ImageOutput struct {
 	// ArtifactId 以 GET /dev/artifacts/{artifact_id} 取得
 	ArtifactId string `json:"artifact_id"`
 	Height     int32  `json:"height"`
 	Width      int32  `json:"width"`
+}
+
+// ImagePreprocess 前處理摘要，只供參考；數值不寫入產品
+type ImagePreprocess struct {
+	// Barcodes 條碼照片解出的條碼
+	Barcodes *[]BarcodeHit `json:"barcodes,omitempty"`
+
+	// Error 前處理失敗的原因（照片仍已保存）
+	Error *string `json:"error,omitempty"`
+
+	// LabelQuad 營養標示照片中表格的四角（原圖座標）
+	LabelQuad     *[]Point `json:"label_quad,omitempty"`
+	QualityPassed *bool    `json:"quality_passed,omitempty"`
+
+	// Warnings PreprocessWarning 代碼
+	Warnings []string `json:"warnings"`
 }
 
 // ImageRef defines model for ImageRef.
@@ -329,10 +519,85 @@ type LoginRequest struct {
 	Username string `json:"username"`
 }
 
+// Nutrients 台灣營養標示的八項必要欄位；草稿中都可省略
+type Nutrients struct {
+	CarbohydrateG *float32 `json:"carbohydrate_g,omitempty"`
+	EnergyKcal    *float32 `json:"energy_kcal,omitempty"`
+	FatG          *float32 `json:"fat_g,omitempty"`
+	ProteinG      *float32 `json:"protein_g,omitempty"`
+	SaturatedFatG *float32 `json:"saturated_fat_g,omitempty"`
+	SodiumMg      *float32 `json:"sodium_mg,omitempty"`
+	SugarG        *float32 `json:"sugar_g,omitempty"`
+	TransFatG     *float32 `json:"trans_fat_g,omitempty"`
+}
+
+// NutritionFacts defines model for NutritionFacts.
+type NutritionFacts struct {
+	CarbohydrateG *float32  `json:"carbohydrate_g,omitempty"`
+	ConfirmedAt   time.Time `json:"confirmed_at"`
+	ConfirmedBy   User      `json:"confirmed_by"`
+	EnergyKcal    *float32  `json:"energy_kcal,omitempty"`
+	FatG          *float32  `json:"fat_g,omitempty"`
+	ProteinG      *float32  `json:"protein_g,omitempty"`
+	SaturatedFatG *float32  `json:"saturated_fat_g,omitempty"`
+	SodiumMg      *float32  `json:"sodium_mg,omitempty"`
+	SugarG        *float32  `json:"sugar_g,omitempty"`
+	TransFatG     *float32  `json:"trans_fat_g,omitempty"`
+}
+
+// NutritionIssue defines model for NutritionIssue.
+type NutritionIssue struct {
+	Actual *float32            `json:"actual,omitempty"`
+	Basis  NutritionIssueBasis `json:"basis"`
+
+	// Code BASIS_MISMATCH（每份與每 100 換算不符）、FAT_PARTS_EXCEED_FAT、SUGAR_EXCEEDS_CARBOHYDRATE
+	Code     string   `json:"code"`
+	Expected *float32 `json:"expected,omitempty"`
+	Message  string   `json:"message"`
+	Nutrient *string  `json:"nutrient,omitempty"`
+}
+
+// NutritionIssueBasis defines model for NutritionIssue.Basis.
+type NutritionIssueBasis string
+
 // Point defines model for Point.
 type Point struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
+}
+
+// Product defines model for Product.
+type Product struct {
+	// Barcode 標示上的原樣
+	Barcode     string      `json:"barcode"`
+	Brand       *string     `json:"brand,omitempty"`
+	ContentUnit ContentUnit `json:"content_unit"`
+	CreatedAt   time.Time   `json:"created_at"`
+
+	// Gtin 補 0 到 14 碼的條碼
+	Gtin       string         `json:"gtin"`
+	Id         string         `json:"id"`
+	Images     []ProductImage `json:"images"`
+	Name       string         `json:"name"`
+	NetContent *float32       `json:"net_content,omitempty"`
+
+	// Nutrition 有效（未被取代）的營養標示
+	Nutrition struct {
+		Per100     *NutritionFacts `json:"per_100,omitempty"`
+		PerServing *NutritionFacts `json:"per_serving,omitempty"`
+	} `json:"nutrition"`
+	ServingSize        *float32 `json:"serving_size,omitempty"`
+	ServingsPerPackage *float32 `json:"servings_per_package,omitempty"`
+}
+
+// ProductImage defines model for ProductImage.
+type ProductImage struct {
+	Height int `json:"height"`
+
+	// Kind front＝包裝正面、barcode＝條碼、label＝營養標示
+	Kind         ImageKind `json:"kind"`
+	SubmissionId string    `json:"submission_id"`
+	Width        int       `json:"width"`
 }
 
 // QualityResult defines model for QualityResult.
@@ -393,6 +658,55 @@ type Step struct {
 	Params    map[string]interface{} `json:"params"`
 }
 
+// Submission defines model for Submission.
+type Submission struct {
+	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
+	ConfirmedBy *User      `json:"confirmed_by,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	CreatedBy   User       `json:"created_by"`
+
+	// Draft 人工輸入中的欄位；草稿可缺欄位，確認時才檢查完整性
+	Draft        Draft             `json:"draft"`
+	Id           string            `json:"id"`
+	Images       []SubmissionImage `json:"images"`
+	ProductId    *string           `json:"product_id,omitempty"`
+	RejectReason *string           `json:"reject_reason,omitempty"`
+	Status       SubmissionStatus  `json:"status"`
+
+	// UpdatedAt 樂觀鎖版本；寫入時放在 If-Match 標頭
+	UpdatedAt string `json:"updated_at"`
+}
+
+// SubmissionImage defines model for SubmissionImage.
+type SubmissionImage struct {
+	ContentType string `json:"content_type"`
+	Height      int    `json:"height"`
+
+	// Kind front＝包裝正面、barcode＝條碼、label＝營養標示
+	Kind ImageKind `json:"kind"`
+
+	// Preprocess 前處理摘要，只供參考；數值不寫入產品
+	Preprocess ImagePreprocess `json:"preprocess"`
+	UploadedAt time.Time       `json:"uploaded_at"`
+	Width      int             `json:"width"`
+}
+
+// SubmissionStatus defines model for SubmissionStatus.
+type SubmissionStatus string
+
+// SubmissionSummary defines model for SubmissionSummary.
+type SubmissionSummary struct {
+	Barcode   *string `json:"barcode,omitempty"`
+	CreatedBy User    `json:"created_by"`
+	Id        string  `json:"id"`
+
+	// Images 已上傳的照片種類
+	Images    []ImageKind      `json:"images"`
+	Name      *string          `json:"name,omitempty"`
+	Status    SubmissionStatus `json:"status"`
+	UpdatedAt time.Time        `json:"updated_at"`
+}
+
 // SweepRequest defines model for SweepRequest.
 type SweepRequest struct {
 	Params *map[string]interface{} `json:"params,omitempty"`
@@ -429,14 +743,29 @@ type VlmImage struct {
 // E1Root defines model for E1Root.
 type E1Root = string
 
+// IfMatch defines model for IfMatch.
+type IfMatch = string
+
 // ImageId defines model for ImageId.
 type ImageId = string
+
+// SubmissionId defines model for SubmissionId.
+type SubmissionId = string
 
 // BadRequest defines model for BadRequest.
 type BadRequest = Error
 
+// Conflict defines model for Conflict.
+type Conflict = ConflictError
+
+// DbUnavailable defines model for DbUnavailable.
+type DbUnavailable = Error
+
 // NotFound defines model for NotFound.
 type NotFound = Error
+
+// PreconditionFailed defines model for PreconditionFailed.
+type PreconditionFailed = Error
 
 // SplitLocked defines model for SplitLocked.
 type SplitLocked = Error
@@ -449,6 +778,42 @@ type Unauthorized = Error
 
 // Unavailable defines model for Unavailable.
 type Unavailable = Error
+
+// ListSubmissionsParams defines parameters for ListSubmissions.
+type ListSubmissionsParams struct {
+	// Status 只列出此狀態；省略時列出全部
+	Status *SubmissionStatus `form:"status,omitempty" json:"status,omitempty"`
+	Limit  *int              `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ConfirmSubmissionParams defines parameters for ConfirmSubmission.
+type ConfirmSubmissionParams struct {
+	// IfMatch 上次取得的 updated_at；與目前版本不同時回 412，避免覆蓋別人的修改
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// SaveDraftParams defines parameters for SaveDraft.
+type SaveDraftParams struct {
+	// IfMatch 上次取得的 updated_at；與目前版本不同時回 412，避免覆蓋別人的修改
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// UploadSubmissionImageMultipartBody defines parameters for UploadSubmissionImage.
+type UploadSubmissionImageMultipartBody struct {
+	// File JPEG 或 PNG
+	File openapi_types.File `json:"file"`
+}
+
+// RejectSubmissionJSONBody defines parameters for RejectSubmission.
+type RejectSubmissionJSONBody struct {
+	Reason string `json:"reason"`
+}
+
+// RejectSubmissionParams defines parameters for RejectSubmission.
+type RejectSubmissionParams struct {
+	// IfMatch 上次取得的 updated_at；與目前版本不同時回 412，避免覆蓋別人的修改
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
 
 // ListE1RunsParams defines parameters for ListE1Runs.
 type ListE1RunsParams struct {
@@ -473,6 +838,18 @@ type PutImageMultipartBody struct {
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
+
+// ConfirmSubmissionJSONRequestBody defines body for ConfirmSubmission for application/json ContentType.
+type ConfirmSubmissionJSONRequestBody = ConfirmRequest
+
+// SaveDraftJSONRequestBody defines body for SaveDraft for application/json ContentType.
+type SaveDraftJSONRequestBody = Draft
+
+// UploadSubmissionImageMultipartRequestBody defines body for UploadSubmissionImage for multipart/form-data ContentType.
+type UploadSubmissionImageMultipartRequestBody UploadSubmissionImageMultipartBody
+
+// RejectSubmissionJSONRequestBody defines body for RejectSubmission for application/json ContentType.
+type RejectSubmissionJSONRequestBody RejectSubmissionJSONBody
 
 // DecodeBarcodeJSONRequestBody defines body for DecodeBarcode for application/json ContentType.
 type DecodeBarcodeJSONRequestBody = LadderRequest
@@ -583,6 +960,33 @@ type ServerInterface interface {
 	// GetMe 目前登入者
 	// (GET /workbench/v1/auth/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetProduct 以條碼查產品（UPC-A 與 EAN-13 視為同一條碼）
+	// (GET /workbench/v1/coldstart/products/{barcode})
+	GetProduct(w http.ResponseWriter, r *http.Request, barcode string)
+	// ListSubmissions 列出冷啟動上傳（新的在前）
+	// (GET /workbench/v1/coldstart/submissions)
+	ListSubmissions(w http.ResponseWriter, r *http.Request, params ListSubmissionsParams)
+	// CreateSubmission 建立一筆上傳（草稿）
+	// (POST /workbench/v1/coldstart/submissions)
+	CreateSubmission(w http.ResponseWriter, r *http.Request)
+	// GetSubmission 取得上傳內容與前處理結果
+	// (GET /workbench/v1/coldstart/submissions/{submission_id})
+	GetSubmission(w http.ResponseWriter, r *http.Request, submissionId SubmissionId)
+	// ConfirmSubmission 確認並寫入產品資料庫
+	// (POST /workbench/v1/coldstart/submissions/{submission_id}/confirm)
+	ConfirmSubmission(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, params ConfirmSubmissionParams)
+	// SaveDraft 儲存人工輸入（草稿可缺欄位）
+	// (PUT /workbench/v1/coldstart/submissions/{submission_id}/draft)
+	SaveDraft(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, params SaveDraftParams)
+	// GetSubmissionImage 取得上傳的原圖
+	// (GET /workbench/v1/coldstart/submissions/{submission_id}/images/{kind})
+	GetSubmissionImage(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, kind ImageKind)
+	// UploadSubmissionImage 上傳照片（重傳同一種會取代）
+	// (PUT /workbench/v1/coldstart/submissions/{submission_id}/images/{kind})
+	UploadSubmissionImage(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, kind ImageKind)
+	// RejectSubmission 退回（不建立產品）
+	// (POST /workbench/v1/coldstart/submissions/{submission_id}/reject)
+	RejectSubmission(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, params RejectSubmissionParams)
 	// GetArtifact 取得暫存影像或診斷影像
 	// (GET /workbench/v1/dev/artifacts/{artifact_id})
 	GetArtifact(w http.ResponseWriter, r *http.Request, artifactId string)
@@ -675,6 +1079,338 @@ func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProduct operation middleware
+func (siw *ServerInterfaceWrapper) GetProduct(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "barcode" -------------
+	var barcode string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "barcode", r.PathValue("barcode"), &barcode, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "barcode", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProduct(w, r, barcode)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSubmissions operation middleware
+func (siw *ServerInterfaceWrapper) ListSubmissions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSubmissionsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSubmissions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSubmission operation middleware
+func (siw *ServerInterfaceWrapper) CreateSubmission(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSubmission(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSubmission operation middleware
+func (siw *ServerInterfaceWrapper) GetSubmission(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "submission_id" -------------
+	var submissionId SubmissionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "submission_id", r.PathValue("submission_id"), &submissionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "submission_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSubmission(w, r, submissionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConfirmSubmission operation middleware
+func (siw *ServerInterfaceWrapper) ConfirmSubmission(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "submission_id" -------------
+	var submissionId SubmissionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "submission_id", r.PathValue("submission_id"), &submissionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "submission_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ConfirmSubmissionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConfirmSubmission(w, r, submissionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SaveDraft operation middleware
+func (siw *ServerInterfaceWrapper) SaveDraft(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "submission_id" -------------
+	var submissionId SubmissionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "submission_id", r.PathValue("submission_id"), &submissionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "submission_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SaveDraftParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SaveDraft(w, r, submissionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSubmissionImage operation middleware
+func (siw *ServerInterfaceWrapper) GetSubmissionImage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "submission_id" -------------
+	var submissionId SubmissionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "submission_id", r.PathValue("submission_id"), &submissionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "submission_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "kind" -------------
+	var kind ImageKind
+
+	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSubmissionImage(w, r, submissionId, kind)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadSubmissionImage operation middleware
+func (siw *ServerInterfaceWrapper) UploadSubmissionImage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "submission_id" -------------
+	var submissionId SubmissionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "submission_id", r.PathValue("submission_id"), &submissionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "submission_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "kind" -------------
+	var kind ImageKind
+
+	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadSubmissionImage(w, r, submissionId, kind)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RejectSubmission operation middleware
+func (siw *ServerInterfaceWrapper) RejectSubmission(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "submission_id" -------------
+	var submissionId SubmissionId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "submission_id", r.PathValue("submission_id"), &submissionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "submission_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RejectSubmissionParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectSubmission(w, r, submissionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1102,6 +1838,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/auth/login", wrapper.Login)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/auth/logout", wrapper.Logout)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/auth/me", wrapper.GetMe)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/coldstart/submissions", wrapper.ListSubmissions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/coldstart/submissions", wrapper.CreateSubmission)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/coldstart/submissions/{submission_id}", wrapper.GetSubmission)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/coldstart/submissions/{submission_id}/images/{kind}", wrapper.GetSubmissionImage)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workbench/v1/coldstart/submissions/{submission_id}/images/{kind}", wrapper.UploadSubmissionImage)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workbench/v1/coldstart/submissions/{submission_id}/draft", wrapper.SaveDraft)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/coldstart/submissions/{submission_id}/confirm", wrapper.ConfirmSubmission)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/coldstart/submissions/{submission_id}/reject", wrapper.RejectSubmission)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/coldstart/products/{barcode}", wrapper.GetProduct)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/config-schemas", wrapper.GetConfigSchemas)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/images", wrapper.PutImage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/images/synthesize", wrapper.SynthesizeImage)
@@ -1124,7 +1869,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 type BadRequestJSONResponse Error
 
+type ConflictJSONResponse ConflictError
+
+type DbUnavailableJSONResponse Error
+
 type NotFoundJSONResponse Error
+
+type PreconditionFailedJSONResponse Error
 
 type SplitLockedJSONResponse Error
 
@@ -1254,6 +2005,786 @@ func (response GetMe401JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProductRequestObject struct {
+	Barcode string `json:"barcode"`
+}
+
+type GetProductResponseObject interface {
+	VisitGetProductResponse(w http.ResponseWriter) error
+}
+
+type GetProduct200JSONResponse Product
+
+func (response GetProduct200JSONResponse) VisitGetProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProduct400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetProduct400JSONResponse) VisitGetProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProduct401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetProduct401JSONResponse) VisitGetProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProduct404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetProduct404JSONResponse) VisitGetProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetProduct503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response GetProduct503JSONResponse) VisitGetProductResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSubmissionsRequestObject struct {
+	Params ListSubmissionsParams
+}
+
+type ListSubmissionsResponseObject interface {
+	VisitListSubmissionsResponse(w http.ResponseWriter) error
+}
+
+type ListSubmissions200JSONResponse struct {
+	Items []SubmissionSummary `json:"items"`
+}
+
+func (response ListSubmissions200JSONResponse) VisitListSubmissionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSubmissions401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListSubmissions401JSONResponse) VisitListSubmissionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSubmissions503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response ListSubmissions503JSONResponse) VisitListSubmissionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSubmissionRequestObject struct {
+}
+
+type CreateSubmissionResponseObject interface {
+	VisitCreateSubmissionResponse(w http.ResponseWriter) error
+}
+
+type CreateSubmission201JSONResponse Submission
+
+func (response CreateSubmission201JSONResponse) VisitCreateSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSubmission401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response CreateSubmission401JSONResponse) VisitCreateSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSubmission503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response CreateSubmission503JSONResponse) VisitCreateSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSubmissionRequestObject struct {
+	SubmissionId SubmissionId `json:"submission_id"`
+}
+
+type GetSubmissionResponseObject interface {
+	VisitGetSubmissionResponse(w http.ResponseWriter) error
+}
+
+type GetSubmission200JSONResponse Submission
+
+func (response GetSubmission200JSONResponse) VisitGetSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSubmission401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetSubmission401JSONResponse) VisitGetSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSubmission404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetSubmission404JSONResponse) VisitGetSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSubmission503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response GetSubmission503JSONResponse) VisitGetSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmissionRequestObject struct {
+	SubmissionId SubmissionId `json:"submission_id"`
+	Params       ConfirmSubmissionParams
+	Body         *ConfirmSubmissionJSONRequestBody
+}
+
+type ConfirmSubmissionResponseObject interface {
+	VisitConfirmSubmissionResponse(w http.ResponseWriter) error
+}
+
+type ConfirmSubmission200JSONResponse ConfirmResponse
+
+func (response ConfirmSubmission200JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmission400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ConfirmSubmission400JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmission401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ConfirmSubmission401JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmission404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ConfirmSubmission404JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmission409JSONResponse struct{ ConflictJSONResponse }
+
+func (response ConfirmSubmission409JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmission412JSONResponse struct{ PreconditionFailedJSONResponse }
+
+func (response ConfirmSubmission412JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmission422JSONResponse ConfirmProblem
+
+func (response ConfirmSubmission422JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ConfirmSubmission503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response ConfirmSubmission503JSONResponse) VisitConfirmSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraftRequestObject struct {
+	SubmissionId SubmissionId `json:"submission_id"`
+	Params       SaveDraftParams
+	Body         *SaveDraftJSONRequestBody
+}
+
+type SaveDraftResponseObject interface {
+	VisitSaveDraftResponse(w http.ResponseWriter) error
+}
+
+type SaveDraft200JSONResponse Submission
+
+func (response SaveDraft200JSONResponse) VisitSaveDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraft400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response SaveDraft400JSONResponse) VisitSaveDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraft401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response SaveDraft401JSONResponse) VisitSaveDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraft404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response SaveDraft404JSONResponse) VisitSaveDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraft409JSONResponse struct{ ConflictJSONResponse }
+
+func (response SaveDraft409JSONResponse) VisitSaveDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraft412JSONResponse struct{ PreconditionFailedJSONResponse }
+
+func (response SaveDraft412JSONResponse) VisitSaveDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SaveDraft503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response SaveDraft503JSONResponse) VisitSaveDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSubmissionImageRequestObject struct {
+	SubmissionId SubmissionId `json:"submission_id"`
+	Kind         ImageKind    `json:"kind"`
+}
+
+type GetSubmissionImageResponseObject interface {
+	VisitGetSubmissionImageResponse(w http.ResponseWriter) error
+}
+
+type GetSubmissionImage200ImagejpegResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetSubmissionImage200ImagejpegResponse) VisitGetSubmissionImageResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetSubmissionImage200ImagepngResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetSubmissionImage200ImagepngResponse) VisitGetSubmissionImageResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/png")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetSubmissionImage401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetSubmissionImage401JSONResponse) VisitGetSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSubmissionImage404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetSubmissionImage404JSONResponse) VisitGetSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSubmissionImage503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response GetSubmissionImage503JSONResponse) VisitGetSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSubmissionImageRequestObject struct {
+	SubmissionId SubmissionId `json:"submission_id"`
+	Kind         ImageKind    `json:"kind"`
+	Body         *multipart.Reader
+}
+
+type UploadSubmissionImageResponseObject interface {
+	VisitUploadSubmissionImageResponse(w http.ResponseWriter) error
+}
+
+type UploadSubmissionImage200JSONResponse Submission
+
+func (response UploadSubmissionImage200JSONResponse) VisitUploadSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSubmissionImage400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UploadSubmissionImage400JSONResponse) VisitUploadSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSubmissionImage401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UploadSubmissionImage401JSONResponse) VisitUploadSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSubmissionImage404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UploadSubmissionImage404JSONResponse) VisitUploadSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSubmissionImage409JSONResponse struct{ ConflictJSONResponse }
+
+func (response UploadSubmissionImage409JSONResponse) VisitUploadSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSubmissionImage413JSONResponse struct{ TooLargeJSONResponse }
+
+func (response UploadSubmissionImage413JSONResponse) VisitUploadSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadSubmissionImage503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response UploadSubmissionImage503JSONResponse) VisitUploadSubmissionImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectSubmissionRequestObject struct {
+	SubmissionId SubmissionId `json:"submission_id"`
+	Params       RejectSubmissionParams
+	Body         *RejectSubmissionJSONRequestBody
+}
+
+type RejectSubmissionResponseObject interface {
+	VisitRejectSubmissionResponse(w http.ResponseWriter) error
+}
+
+type RejectSubmission200JSONResponse Submission
+
+func (response RejectSubmission200JSONResponse) VisitRejectSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectSubmission400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response RejectSubmission400JSONResponse) VisitRejectSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectSubmission401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RejectSubmission401JSONResponse) VisitRejectSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectSubmission404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response RejectSubmission404JSONResponse) VisitRejectSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectSubmission409JSONResponse struct{ ConflictJSONResponse }
+
+func (response RejectSubmission409JSONResponse) VisitRejectSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectSubmission412JSONResponse struct{ PreconditionFailedJSONResponse }
+
+func (response RejectSubmission412JSONResponse) VisitRejectSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RejectSubmission503JSONResponse struct{ DbUnavailableJSONResponse }
+
+func (response RejectSubmission503JSONResponse) VisitRejectSubmissionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -2392,6 +3923,33 @@ type StrictServerInterface interface {
 	// GetMe 目前登入者
 	// (GET /workbench/v1/auth/me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetProduct 以條碼查產品（UPC-A 與 EAN-13 視為同一條碼）
+	// (GET /workbench/v1/coldstart/products/{barcode})
+	GetProduct(ctx context.Context, request GetProductRequestObject) (GetProductResponseObject, error)
+	// ListSubmissions 列出冷啟動上傳（新的在前）
+	// (GET /workbench/v1/coldstart/submissions)
+	ListSubmissions(ctx context.Context, request ListSubmissionsRequestObject) (ListSubmissionsResponseObject, error)
+	// CreateSubmission 建立一筆上傳（草稿）
+	// (POST /workbench/v1/coldstart/submissions)
+	CreateSubmission(ctx context.Context, request CreateSubmissionRequestObject) (CreateSubmissionResponseObject, error)
+	// GetSubmission 取得上傳內容與前處理結果
+	// (GET /workbench/v1/coldstart/submissions/{submission_id})
+	GetSubmission(ctx context.Context, request GetSubmissionRequestObject) (GetSubmissionResponseObject, error)
+	// ConfirmSubmission 確認並寫入產品資料庫
+	// (POST /workbench/v1/coldstart/submissions/{submission_id}/confirm)
+	ConfirmSubmission(ctx context.Context, request ConfirmSubmissionRequestObject) (ConfirmSubmissionResponseObject, error)
+	// SaveDraft 儲存人工輸入（草稿可缺欄位）
+	// (PUT /workbench/v1/coldstart/submissions/{submission_id}/draft)
+	SaveDraft(ctx context.Context, request SaveDraftRequestObject) (SaveDraftResponseObject, error)
+	// GetSubmissionImage 取得上傳的原圖
+	// (GET /workbench/v1/coldstart/submissions/{submission_id}/images/{kind})
+	GetSubmissionImage(ctx context.Context, request GetSubmissionImageRequestObject) (GetSubmissionImageResponseObject, error)
+	// UploadSubmissionImage 上傳照片（重傳同一種會取代）
+	// (PUT /workbench/v1/coldstart/submissions/{submission_id}/images/{kind})
+	UploadSubmissionImage(ctx context.Context, request UploadSubmissionImageRequestObject) (UploadSubmissionImageResponseObject, error)
+	// RejectSubmission 退回（不建立產品）
+	// (POST /workbench/v1/coldstart/submissions/{submission_id}/reject)
+	RejectSubmission(ctx context.Context, request RejectSubmissionRequestObject) (RejectSubmissionResponseObject, error)
 	// GetArtifact 取得暫存影像或診斷影像
 	// (GET /workbench/v1/dev/artifacts/{artifact_id})
 	GetArtifact(ctx context.Context, request GetArtifactRequestObject) (GetArtifactResponseObject, error)
@@ -2553,6 +4111,271 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetProduct operation middleware
+func (sh *strictHandler) GetProduct(w http.ResponseWriter, r *http.Request, barcode string) {
+	var request GetProductRequestObject
+
+	request.Barcode = barcode
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetProduct(ctx, request.(GetProductRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetProduct")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetProductResponseObject); ok {
+		if err := validResponse.VisitGetProductResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSubmissions operation middleware
+func (sh *strictHandler) ListSubmissions(w http.ResponseWriter, r *http.Request, params ListSubmissionsParams) {
+	var request ListSubmissionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSubmissions(ctx, request.(ListSubmissionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSubmissions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSubmissionsResponseObject); ok {
+		if err := validResponse.VisitListSubmissionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSubmission operation middleware
+func (sh *strictHandler) CreateSubmission(w http.ResponseWriter, r *http.Request) {
+	var request CreateSubmissionRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSubmission(ctx, request.(CreateSubmissionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSubmission")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSubmissionResponseObject); ok {
+		if err := validResponse.VisitCreateSubmissionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSubmission operation middleware
+func (sh *strictHandler) GetSubmission(w http.ResponseWriter, r *http.Request, submissionId SubmissionId) {
+	var request GetSubmissionRequestObject
+
+	request.SubmissionId = submissionId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSubmission(ctx, request.(GetSubmissionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSubmission")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSubmissionResponseObject); ok {
+		if err := validResponse.VisitGetSubmissionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ConfirmSubmission operation middleware
+func (sh *strictHandler) ConfirmSubmission(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, params ConfirmSubmissionParams) {
+	var request ConfirmSubmissionRequestObject
+
+	request.SubmissionId = submissionId
+	request.Params = params
+
+	var body ConfirmSubmissionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConfirmSubmission(ctx, request.(ConfirmSubmissionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConfirmSubmission")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConfirmSubmissionResponseObject); ok {
+		if err := validResponse.VisitConfirmSubmissionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SaveDraft operation middleware
+func (sh *strictHandler) SaveDraft(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, params SaveDraftParams) {
+	var request SaveDraftRequestObject
+
+	request.SubmissionId = submissionId
+	request.Params = params
+
+	var body SaveDraftJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SaveDraft(ctx, request.(SaveDraftRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SaveDraft")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SaveDraftResponseObject); ok {
+		if err := validResponse.VisitSaveDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSubmissionImage operation middleware
+func (sh *strictHandler) GetSubmissionImage(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, kind ImageKind) {
+	var request GetSubmissionImageRequestObject
+
+	request.SubmissionId = submissionId
+	request.Kind = kind
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSubmissionImage(ctx, request.(GetSubmissionImageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSubmissionImage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSubmissionImageResponseObject); ok {
+		if err := validResponse.VisitGetSubmissionImageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadSubmissionImage operation middleware
+func (sh *strictHandler) UploadSubmissionImage(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, kind ImageKind) {
+	var request UploadSubmissionImageRequestObject
+
+	request.SubmissionId = submissionId
+	request.Kind = kind
+
+	if reader, err := r.MultipartReader(); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode multipart body: %w", err))
+		return
+	} else {
+		request.Body = reader
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadSubmissionImage(ctx, request.(UploadSubmissionImageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadSubmissionImage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadSubmissionImageResponseObject); ok {
+		if err := validResponse.VisitUploadSubmissionImageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RejectSubmission operation middleware
+func (sh *strictHandler) RejectSubmission(w http.ResponseWriter, r *http.Request, submissionId SubmissionId, params RejectSubmissionParams) {
+	var request RejectSubmissionRequestObject
+
+	request.SubmissionId = submissionId
+	request.Params = params
+
+	var body RejectSubmissionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RejectSubmission(ctx, request.(RejectSubmissionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RejectSubmission")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RejectSubmissionResponseObject); ok {
+		if err := validResponse.VisitRejectSubmissionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

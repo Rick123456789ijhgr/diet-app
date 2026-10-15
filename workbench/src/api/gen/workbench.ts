@@ -55,6 +55,139 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workbench/v1/coldstart/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出冷啟動上傳（新的在前） */
+        get: operations["listSubmissions"];
+        put?: never;
+        /** 建立一筆上傳（草稿） */
+        post: operations["createSubmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/coldstart/submissions/{submission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得上傳內容與前處理結果 */
+        get: operations["getSubmission"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/coldstart/submissions/{submission_id}/images/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得上傳的原圖 */
+        get: operations["getSubmissionImage"];
+        /**
+         * 上傳照片（重傳同一種會取代）
+         * @description Go 把原檔存進 MinIO，再呼叫 Python 前處理：front → 品質檢查；barcode → 品質檢查＋條碼解碼；
+         *     label → 品質檢查＋營養標示前處理。前處理失敗（例如 Python 未啟動）時照片仍會保存，摘要的 error 說明原因。
+         *     條碼照片解出唯一的條碼、且草稿尚未填條碼時，預先填入草稿（仍須人確認）。
+         */
+        put: operations["uploadSubmissionImage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/coldstart/submissions/{submission_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 儲存人工輸入（草稿可缺欄位） */
+        put: operations["saveDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/coldstart/submissions/{submission_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 確認並寫入產品資料庫
+         * @description - create：建立新產品與兩種基準的營養標示；同一條碼（GTIN）已存在時回 409 BARCODE_EXISTS（附既有產品）。
+         *     - add_images：照片補到既有產品（product_id），不改營養數值。
+         *     - revise_nutrition：既有產品新增一版營養標示，舊版保留並標記為已取代。
+         *     欄位不完整回 422 DRAFT_INCOMPLETE；數值不一致（每份與每 100 換算不符、飽和＋反式 > 脂肪、糖 > 碳水）
+         *     回 422 NUTRITION_INCONSISTENT，人確認標示確實如此後以 accept_warnings 再送一次即照原樣存入。
+         */
+        post: operations["confirmSubmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/coldstart/submissions/{submission_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 退回（不建立產品） */
+        post: operations["rejectSubmission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/coldstart/products/{barcode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 以條碼查產品（UPC-A 與 EAN-13 視為同一條碼） */
+        get: operations["getProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workbench/v1/dev/config-schemas": {
         parameters: {
             query?: never;
@@ -574,8 +707,194 @@ export interface components {
             n_codes?: number;
             root?: string;
         };
+        /** @enum {string} */
+        SubmissionStatus: "draft" | "confirmed" | "rejected";
+        /**
+         * @description front＝包裝正面、barcode＝條碼、label＝營養標示
+         * @enum {string}
+         */
+        ImageKind: "front" | "barcode" | "label";
+        /** @enum {string} */
+        ContentUnit: "g" | "ml";
+        /** @description 台灣營養標示的八項必要欄位；草稿中都可省略 */
+        Nutrients: {
+            energy_kcal?: number;
+            protein_g?: number;
+            fat_g?: number;
+            saturated_fat_g?: number;
+            trans_fat_g?: number;
+            carbohydrate_g?: number;
+            sugar_g?: number;
+            sodium_mg?: number;
+        };
+        /** @description 人工輸入中的欄位；草稿可缺欄位，確認時才檢查完整性 */
+        Draft: {
+            /** @description 標示上的條碼數字（8 到 14 位） */
+            barcode?: string;
+            name?: string;
+            brand?: string;
+            net_content?: number;
+            content_unit?: components["schemas"]["ContentUnit"];
+            /** @description 每份的量（單位同 content_unit） */
+            serving_size?: number;
+            servings_per_package?: number;
+            nutrition?: {
+                per_serving?: components["schemas"]["Nutrients"];
+                per_100?: components["schemas"]["Nutrients"];
+            };
+        };
+        BarcodeHit: {
+            format: string;
+            text: string;
+        };
+        /** @description 前處理摘要，只供參考；數值不寫入產品 */
+        ImagePreprocess: {
+            quality_passed?: boolean;
+            /** @description PreprocessWarning 代碼 */
+            warnings: string[];
+            /** @description 條碼照片解出的條碼 */
+            barcodes?: components["schemas"]["BarcodeHit"][];
+            /** @description 營養標示照片中表格的四角（原圖座標） */
+            label_quad?: components["schemas"]["Point"][];
+            /** @description 前處理失敗的原因（照片仍已保存） */
+            error?: string;
+        };
+        SubmissionImage: {
+            kind: components["schemas"]["ImageKind"];
+            width: number;
+            height: number;
+            content_type: string;
+            /** Format: date-time */
+            uploaded_at: string;
+            preprocess: components["schemas"]["ImagePreprocess"];
+        };
+        Submission: {
+            id: string;
+            status: components["schemas"]["SubmissionStatus"];
+            draft: components["schemas"]["Draft"];
+            images: components["schemas"]["SubmissionImage"][];
+            product_id?: string;
+            reject_reason?: string;
+            created_by: components["schemas"]["User"];
+            /** Format: date-time */
+            created_at: string;
+            /** @description 樂觀鎖版本；寫入時放在 If-Match 標頭 */
+            updated_at: string;
+            confirmed_by?: components["schemas"]["User"];
+            /** Format: date-time */
+            confirmed_at?: string;
+        };
+        SubmissionSummary: {
+            id: string;
+            status: components["schemas"]["SubmissionStatus"];
+            barcode?: string;
+            name?: string;
+            /** @description 已上傳的照片種類 */
+            images: components["schemas"]["ImageKind"][];
+            created_by: components["schemas"]["User"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        NutritionFacts: components["schemas"]["Nutrients"] & {
+            confirmed_by: components["schemas"]["User"];
+            /** Format: date-time */
+            confirmed_at: string;
+        };
+        ProductImage: {
+            kind: components["schemas"]["ImageKind"];
+            submission_id: string;
+            width: number;
+            height: number;
+        };
+        Product: {
+            id: string;
+            /** @description 補 0 到 14 碼的條碼 */
+            gtin: string;
+            /** @description 標示上的原樣 */
+            barcode: string;
+            name: string;
+            brand?: string;
+            net_content?: number;
+            content_unit: components["schemas"]["ContentUnit"];
+            serving_size?: number;
+            servings_per_package?: number;
+            /** @description 有效（未被取代）的營養標示 */
+            nutrition: {
+                per_serving?: components["schemas"]["NutritionFacts"];
+                per_100?: components["schemas"]["NutritionFacts"];
+            };
+            images: components["schemas"]["ProductImage"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        ConfirmRequest: {
+            /** @enum {string} */
+            mode: "create" | "add_images" | "revise_nutrition";
+            /** @description add_images、revise_nutrition 時必填 */
+            product_id?: string;
+            /**
+             * @description 已確認標示確實如此，數值不一致時仍照原樣存入
+             * @default false
+             */
+            accept_warnings: boolean;
+        };
+        ConfirmResponse: {
+            submission: components["schemas"]["Submission"];
+            product: components["schemas"]["Product"];
+        };
+        NutritionIssue: {
+            /** @description BASIS_MISMATCH（每份與每 100 換算不符）、FAT_PARTS_EXCEED_FAT、SUGAR_EXCEEDS_CARBOHYDRATE */
+            code: string;
+            /** @enum {string} */
+            basis: "per_serving" | "per_100" | "both";
+            nutrient?: string;
+            expected?: number;
+            actual?: number;
+            message: string;
+        };
+        ConfirmProblem: {
+            /** @description DRAFT_INCOMPLETE 或 NUTRITION_INCONSISTENT */
+            code: string;
+            message: string;
+            /** @description 缺少的欄位（例如 nutrition.per_100.sodium_mg） */
+            missing?: string[];
+            issues?: components["schemas"]["NutritionIssue"][];
+        };
+        ConflictError: {
+            /** @description BARCODE_EXISTS（附既有產品）、SUBMISSION_CLOSED（已確認或已退回，不能再修改） */
+            code: string;
+            message: string;
+            product?: components["schemas"]["Product"];
+        };
     };
     responses: {
+        /** @description 條碼已存在（BARCODE_EXISTS）或上傳已確認／退回（SUBMISSION_CLOSED） */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ConflictError"];
+            };
+        };
+        /** @description 已被其他人修改（PRECONDITION_FAILED），請重新載入 */
+        PreconditionFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description 沒有設定資料庫或物件儲存，或無法連線（DB_UNAVAILABLE） */
+        DbUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description 參數不合法（例如 INVALID_CONFIG，field 為欄位名稱） */
         BadRequest: {
             headers: {
@@ -632,6 +951,11 @@ export interface components {
         };
     };
     parameters: {
+        /** @description 上傳的 ID */
+        SubmissionId: string;
+        ImageKind: components["schemas"]["ImageKind"];
+        /** @description 上次取得的 updated_at；與目前版本不同時回 412，避免覆蓋別人的修改 */
+        IfMatch: string;
         /** @description 暫存影像的 ID */
         ImageId: string;
         /** @description E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾 */
@@ -709,6 +1033,296 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    listSubmissions: {
+        parameters: {
+            query?: {
+                /** @description 只列出此狀態；省略時列出全部 */
+                status?: components["schemas"]["SubmissionStatus"];
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 上傳清單 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SubmissionSummary"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    createSubmission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已建立 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Submission"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    getSubmission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 上傳的 ID */
+                submission_id: components["parameters"]["SubmissionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 上傳內容 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Submission"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    getSubmissionImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 上傳的 ID */
+                submission_id: components["parameters"]["SubmissionId"];
+                kind: components["parameters"]["ImageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 原圖 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    uploadSubmissionImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 上傳的 ID */
+                submission_id: components["parameters"]["SubmissionId"];
+                kind: components["parameters"]["ImageKind"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description JPEG 或 PNG
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 已保存；回傳更新後的上傳內容 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Submission"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["TooLarge"];
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    saveDraft: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 上次取得的 updated_at；與目前版本不同時回 412，避免覆蓋別人的修改 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description 上傳的 ID */
+                submission_id: components["parameters"]["SubmissionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Draft"];
+            };
+        };
+        responses: {
+            /** @description 已儲存 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Submission"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            412: components["responses"]["PreconditionFailed"];
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    confirmSubmission: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 上次取得的 updated_at；與目前版本不同時回 412，避免覆蓋別人的修改 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description 上傳的 ID */
+                submission_id: components["parameters"]["SubmissionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description 已確認 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            412: components["responses"]["PreconditionFailed"];
+            /** @description 草稿不完整（DRAFT_INCOMPLETE）或數值不一致（NUTRITION_INCONSISTENT） */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmProblem"];
+                };
+            };
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    rejectSubmission: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description 上次取得的 updated_at；與目前版本不同時回 412，避免覆蓋別人的修改 */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description 上傳的 ID */
+                submission_id: components["parameters"]["SubmissionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 已退回 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Submission"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            412: components["responses"]["PreconditionFailed"];
+            503: components["responses"]["DbUnavailable"];
+        };
+    };
+    getProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 8 到 14 位數字 */
+                barcode: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 產品、有效的營養標示與照片 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["DbUnavailable"];
         };
     };
     getConfigSchemas: {
