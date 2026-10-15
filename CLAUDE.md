@@ -34,6 +34,7 @@
 ```bash
 make setup     # 建立 ai/.venv 並安裝 Python 開發套件（make 會自動使用此環境，不必 activate）
 make up        # 啟動所有服務
+make db-up     # 只啟動 Postgres、MinIO 並套用 migration（工作台的冷啟動上傳需要）
 make test      # 全部測試
 make lint      # 全部 lint
 make gen       # 依規格重新產生程式碼（OpenAPI、proto、sqlc）

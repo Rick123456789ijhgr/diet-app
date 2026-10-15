@@ -365,6 +365,31 @@ message JsonResponse { string json = 1; }
 - **建置結果不進 git**：`api/Dockerfile` 目前不含前端（線上部署位置未定，屆時在映像建置時先 `npm run build`）。CI 的 Go 測試不需要前端（`static/.gitkeep` 讓 embed 在未建置時也能編譯）。
 - **每次啟動都重新建置前端**（約 3 秒），避免 Go 提供舊版前端。
 
+### 階段 5（2026-10-16 完成，PR 待審）
+
+冷啟動上傳：登入、上傳三種照片、前處理、人工確認、寫入產品資料庫。規格依第 2.6 節。
+
+- 規格：`db/migrations/000002_coldstart`、`openapi/workbench.yaml` 的冷啟動路由。實作時另外調整兩處（內容不變）：
+  冷啟動的數值欄位加上 `format: double`（`type: number` 預設產生 float32，八位有效數字以上失去精度）；
+  登入與 `/auth/me` 在沒有資料庫時回 503。
+- Go：`internal/barcode`（GTIN）、`internal/auth`（argon2id、工作階段）、`internal/coldstart`（流程與確定性規則，不 import 資料庫與 HTTP）、
+  `internal/pgstore`（PostgreSQL）、`internal/platform/objstore`（MinIO）、`workbench.Preprocessor`（呼叫 Python）、`cmd/wbuser`。
+- 前端：登入外框、上傳清單（含以條碼查產品）、編輯與確認頁（三個照片槽、營養標示四角疊圖、自動儲存帶 If-Match、409／412／422 的處理）。
+- 指令：`make db-up` 只啟動 Postgres、MinIO 與 migration；`make workbench` 由根目錄 `.env` 推導連線設定。
+- 驗收（本機，Windows 原生 PostgreSQL 17＋S3 相容的模擬器，因本機沒有 Docker）：登入 → 新增 → 上傳三張合成照片（條碼解出並預填、標示找到四角）
+  → 填欄位 → 確認，資料庫查到產品、兩種基準的營養標示與三張照片；同一條碼的補 0 寫法被擋下（409）。Playwright 14 項（含冷啟動）通過。
+  Go 的資料庫整合測試在 CI 以 pgvector／MinIO 容器執行。
+
+實作時的決定：
+- **一致性的容許誤差**：每份與每 100 換算、飽和＋反式 ≤ 脂肪、糖 ≤ 碳水，容許「衛福部可標示為 0 的門檻」（熱量 4 kcal、蛋白質／脂肪／碳水／糖 0.5 g、
+  飽和脂肪 0.1 g、反式脂肪 0.3 g、鈉 5 mg）或 5% 的捨入誤差，取較大者；超過時提示，人確認後照原樣存入。
+- **數值捨入**：存入前由 Go 四捨五入到兩位小數（資料庫為 `NUMERIC(10,2)`）。
+- **前處理**：每張照片都做品質檢查；條碼照片另做解碼（唯一的有效條碼且草稿沒填時預填），營養標示照片另做標示前處理（只取四角與警告）。
+  Python 未啟動時照片仍保存，摘要記錄錯誤。
+- **重傳照片**：同一種照片取代舊的，舊檔從物件儲存刪除。
+- **本機開發的資料庫**：Windows 原生 PostgreSQL 沒有 pgvector，`000001` 的 `CREATE EXTENSION vector` 會失敗；Go 的整合測試在沒有 pgvector 時略過該行，
+  實際使用仍以 `make db-up`（pgvector 映像）為準。
+
 ## 6. 後續改善（不阻擋階段 2）
 
 - **規格調整（須由人審核，可與階段 3 的規格一起提）**：
