@@ -4,7 +4,8 @@
 校準時不得使用 test split（見根目錄 CLAUDE.md 規則 7）。
 
 每個欄位以 ``param()`` 宣告，附上中文名稱、英文名稱、說明、合理範圍與是否待校準，
-工作台（``ai/workbench``）依此自動產生參數表單，PR 的「待校準清單」也可由此列出。
+工作台（``workbench/``，經 ``dietai.devtools.schema``）依此自動產生參數表單，
+PR 的「待校準清單」也可由此列出。
 """
 
 from __future__ import annotations

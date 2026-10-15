@@ -37,13 +37,13 @@ make up        # 啟動所有服務
 make test      # 全部測試
 make lint      # 全部 lint
 make gen       # 依規格重新產生程式碼（OpenAPI、proto、sqlc）
-make workbench # 開發工作台（Streamlit 版）：以合成影像或開發照片測試各模組、調整參數
-make workbench-react # 開發工作台（React 版）：一次啟動 Python gRPC、Go、Vite（遷移中，見 workbench/README.md）
+make workbench # 開發工作台：以合成影像或開發照片測試各模組、調整參數（http://localhost:8080）
+make workbench-dev # 改工作台前端時用：另外啟動 Vite 熱更新（http://localhost:5173）
 make e1-synthetic # E1 條碼消融：以合成資料端到端跑一次（research/experiments/e1_barcode）
 ```
 
 Windows 安裝 make：`winget install ezwinports.make`（裝完重開終端機）。
-不想用指令時，雙擊根目錄的 `啟動全部服務.bat`（React 版，啟動 Python、Go、Vite 並在就緒後開啟工作台）或 `啟動工作台.bat`（Streamlit 版）。
+不想用指令時，雙擊根目錄的 `啟動工作台.bat`（自動安裝套件、建置前端、啟動 Python 與 Go，就緒後開啟工作台）。
 
 ## 工作流程
 

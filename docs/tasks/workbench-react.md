@@ -278,7 +278,7 @@ message JsonResponse { string json = 1; }
 - **Go**：`internal/workbench`（handler → service，service 依賴 `AIClient` 介面）；`internal/platform/aiclient` 實作 gRPC 連線；handler 不寫業務邏輯，日誌帶 `request_id` 並透傳給 Python（gRPC metadata）。
 - **Python**：`server/` 只做 proto ↔ dietai 轉換；設定 JSON 經 `dietai.devtools.configs` 建成 dataclass 並驗證，錯誤回 `INVALID_ARGUMENT`（附欄位名稱）。
 - **測試**：Go 用 `httptest`＋假的 AIClient；Python 以程序內 gRPC server 測 servicer；前端用 Vitest＋Testing Library＋MSW；每頁一個 Playwright 冒煙測試（接真的 Go 與 Python，只在本機執行；CI 跑 lint、型別、Vitest、建置）。
-- **指令**：`make workbench` 同時啟動 Python gRPC、Go（`WORKBENCH_DEV_TOOLS=1`）、Vite；`make gen` 加入 oapi-codegen 與 openapi-typescript；`啟動工作台.bat` 改為啟動同樣三個程序。階段 1 至 3 先以 `make workbench-react` 啟動新版，`make workbench` 維持 Streamlit，到階段 4 再切換。
+- **指令**：`make workbench` 建置前端並啟動 Python gRPC、Go（`WORKBENCH_DEV_TOOLS=1`，以 embed 提供前端）；`make workbench-dev` 另啟動 Vite；`make gen` 加入 oapi-codegen 與 openapi-typescript；`啟動工作台.bat` 改為啟動同樣三個程序。階段 1 至 3 先以 `make workbench-react` 啟動新版，`make workbench` 維持 Streamlit，到階段 4 再切換。
 
 ---
 
@@ -349,6 +349,21 @@ message JsonResponse { string json = 1; }
 - **批次改為按「執行」才計算**（Streamlit 版是參數一改就重算）：資料夾可能很大，參數改了會提示重新執行。
 - **自我審查後的修正**：串流改為同一個執行緒迭代與關閉產生器（取消時不會在執行中被關閉）；E1 快速執行可真正中止並刪除未完成的資料夾，每次執行的合成資料各自一份；`useStream` 被新執行取代時不覆蓋狀態、事件每 100 ms 批次更新；SSE 提早結束時關閉連線；單張影像隨 IMAGE_NOT_FOUND 重新載入；門檻線改用算出該結果的參數；E1 換執行時重置選取；介面標籤改為中文。
 - **修正**：分析查詢在防抖跟上之前就以舊參數（缺少 image_id）送出，觸發「找不到暫存影像 → 重新上傳」的無限循環；查詢改為等防抖跟上才送出，重新上傳也加上 5 秒的頻率限制。
+
+### 階段 4（2026-10-16 完成，PR 待審）
+
+移除 Streamlit 版，只剩新版；`make workbench` 一個指令。
+
+- 刪除 `ai/workbench/`、`ai/tests/workbench/`、`workbench` extras（streamlit、pandas、altair），以及只供 Streamlit 版使用的設定匯出入函式（`config_to_json`、`config_python`、`calibration_rows` 等）。
+- Go 新增 `internal/webui`：`vite build` 輸出到 `api/internal/webui/static/app/`（不進 git），以 `embed` 打包；`/workbench/v1/*` 以外的路徑提供前端，前端路由回 `index.html`，帶雜湊的資源長期快取。沒有建置時顯示說明頁。
+- `make workbench`／雙擊 `啟動工作台.bat`：建置前端 → 啟動 Python 與 Go → 就緒後開啟 http://localhost:8080（一個網址、兩個程序）。改前端時用 `make workbench-dev`（另啟動 Vite 熱更新，:5173）。沿用 #17 的自動安裝套件與就緒檢查；`啟動全部服務.bat` 併入 `啟動工作台.bat`。
+- 已在執行時不重複啟動，直接開啟瀏覽器（原本會因埠被佔用而失敗，就緒檢查卻誤判成功）。
+- 使用者取消的請求（換參數、離開頁面）不再記成錯誤日誌。
+- 驗收：以建置版（Go 單一網址）跑 Playwright 13 項全數通過；Go、Python、Vitest 測試通過。
+
+實作時的決定：
+- **建置結果不進 git**：`api/Dockerfile` 目前不含前端（線上部署位置未定，屆時在映像建置時先 `npm run build`）。CI 的 Go 測試不需要前端（`static/.gitkeep` 讓 embed 在未建置時也能編譯）。
+- **每次啟動都重新建置前端**（約 3 秒），避免 Go 提供舊版前端。
 
 ## 6. 後續改善（不阻擋階段 2）
 

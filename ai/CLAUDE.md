@@ -22,8 +22,10 @@ src/dietai/
   synthetic/      合成影像與已知退化、合成實驗資料集（測試、工作台、研究共用；不放處理邏輯）
   evaluation/     實驗評測：manifest（含測試集鎖定）、批次執行與判定、統計彙整（研究腳本與工作台共用）
 tests/
-workbench/        開發工作台（Streamlit），見 workbench/README.md；系統執行時不依賴
 ```
+
+開發工作台的前端在專案根目錄的 `workbench/`（React，經 Go 呼叫本服務的 gRPC，見 ADR 0003）；
+本服務只提供 `server/` 的 RPC 與 `devtools/` 的純邏輯。
 
 ## 規則
 
@@ -34,7 +36,7 @@ workbench/        開發工作台（Streamlit），見 workbench/README.md；系
 - 前處理函式簽名為 `fn(image, cfg: XxxConfig = XxxConfig())`，門檻與參數一律放在 `preprocess/config.py` 的 frozen dataclass，不寫死在函式內；消融實驗以設定檔產生不同的 config 切換，不改程式。結果回傳 frozen dataclass，含 `steps`（`StepRecord`）與 `warnings`（`PreprocessWarning` 代碼）。
 - 影像一律為 `uint8` 的 `numpy.ndarray`，彩色為 BGR（OpenCV 慣例），灰階為 2 維；入口函式檢查格式並不得修改輸入。
 - gRPC 服務（`server/`）的方法以 `rpc.unary` 包裝：計算在執行緒中執行，領域例外轉成 gRPC 狀態，錯誤代碼放在 `google.rpc.ErrorInfo.reason`（例如 `IMAGE_NOT_FOUND`）、欄位名稱放在 `metadata["field"]`。設定一律經 `devtools.configs.config_from_override` 建構與驗證。
-- 工作台（`workbench/`）只 import `dietai`，不得複製處理邏輯；需要的中間結果（如 `laplacian_map`）加到 `dietai` 的公開函式。介面文字中文為主、英文為輔。
+- 工作台需要的中間結果（如 `laplacian_map`）加到 `dietai` 的公開函式，由 `server/` 經 gRPC 提供；`devtools/` 不得複製處理邏輯。
 - 設定欄位以 `config.param()` 宣告中英文名稱、說明、範圍與 `calibrate`，工作台據此自動產生表單。
 - 條碼／QR 解碼只透過 `preprocess.decoders.Decoder` 介面；`ZxingDecoder` 為預設實作，`PyzbarDecoder` 僅供實驗對照（ZBar 會轉碼 QR 內容，不可用於電子發票）。
 - 條碼逐步升級的每一階都由原圖獨立產生，順序與啟用由 `LadderConfig.rungs` 控制；新增一階時加到 `types.Rung` 與 `barcode.ladder_variants`。
@@ -49,8 +51,6 @@ pip install -e ".[dev]"          # 最小開發環境
 pip install -e ".[dev,vision]"   # 加上 OpenCV 等影像套件（preprocess 測試必需）
 pip install -e ".[dev,vision,grpc]" && WORKBENCH_DEV_TOOLS=1 python -m dietai.server
                                  # gRPC 服務（127.0.0.1:50051；開發模式註冊 WorkbenchService）
-pip install -e ".[dev,vision,workbench]" && streamlit run workbench/streamlit_app.py
-                                 # 開發工作台：調參數、模擬退化、參數掃描、資料夾批次、跑測試
 pytest                           # 含 slow 效能測試；CI 用 pytest -m "not slow"
 ruff check . && ruff format --check . && mypy
 ```

@@ -15,8 +15,6 @@ dependencies = [
 [project.optional-dependencies]
 # 影像處理；preprocess 的單元測試需要，CI 會安裝。版本鎖定，升級須另開 PR 並重跑 E1。
 vision = ["opencv-python-headless==4.12.0.88", "pyzbar==0.1.9", "zxing-cpp==3.1.1"]
-# 開發工作台（ai/workbench），只在本機使用；系統執行時不需要
-workbench = ["streamlit==1.65.0", "pandas==3.0.6", "altair==6.3.0"]
 ocr = ["paddleocr"]
 llm = ["litellm"]
 analytics = ["pandas>=2.2", "scipy", "pulp"]
@@ -43,14 +41,13 @@ packages = ["src/dietai"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["workbench"]
 addopts = "-q"
 markers = ["slow: 效能基準等較慢的測試（CI 以 -m 'not slow' 略過）"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "workbench"]
+src = ["src"]
 # src/dietai/v1 為 buf 產生的 proto 程式碼（見 proto/buf.gen.yaml），不檢查也不格式化
 extend-exclude = ["src/dietai/v1"]
 # research/ 以 research/ruff.toml 沿用本設定；lint 指令另外傳入 ../research
@@ -77,10 +74,9 @@ files = [
   "src/dietai/evaluation",
   "src/dietai/devtools",
   "src/dietai/server",
-  "workbench",
   "../research/experiments/e1_barcode",
 ]
-mypy_path = ["src", "workbench"]
+mypy_path = ["src"]
 explicit_package_bases = true
 strict = true
 # 呼叫產生的 add_XxxServicer_to_server 等未標註函式

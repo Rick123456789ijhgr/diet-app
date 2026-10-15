@@ -11,4 +11,4 @@
 | 營養計算（步驟 08） | — | `nutrition` | — |
 | 模組五 營養分析與建議 | `insights`、`profile` | `profile` | `analytics` |
 | 共用基礎 | `core` | `platform` | `domain`、`adapters`、`server` |
-| 開發工作台 | — | — | `ai/workbench`（不屬於 `dietai`，只呼叫其公開函式） |
+| 開發工作台（前端為 `workbench/`，React，ADR 0003） | — | `workbench`、`webui`（提供建置後的前端） | `server`、`devtools` |

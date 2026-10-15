@@ -197,7 +197,7 @@ def locate_invoice_qrs(img, decoder, cfg) -> InvoiceQrResult
 - [ ] 依賴套件加入 `ai/pyproject.toml`，並鎖定版本。
 - [ ] `docs/module-map.md` 更新對應關係（模組一 ↔ `dietai.preprocess.*`）。
 - [ ] PR 描述列出：完成項目、未完成與後續事項、所有「待校準」的門檻清單。
-- [ ] 新設定類別的欄位以 `param()` 宣告並加入 `ai/workbench/wb/configs.py` 的 `CONFIG_CLASSES`；在工作台新增該 Phase 的頁面（見 `ai/workbench/README.md`）。
+- [ ] 新設定類別的欄位以 `param()` 宣告並加入 `dietai/devtools/configs.py` 的 `CONFIG_CLASSES`；在工作台新增該 Phase 的頁面（見 `workbench/README.md`「新增一個頁面」）。
 
 ---
 

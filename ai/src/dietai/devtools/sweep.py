@@ -77,7 +77,6 @@ def quality_sweep(img: Image, ax: Axis, cfg: QualityConfig) -> SweepResult:
                 "warnings": [w.value for w in r.warnings],
             }
         )
-    # 與 Streamlit 版共用「首次觸發」的定義
     warnings = [", ".join(r["warnings"]) for r in rows]
     triggers = {
         code.value: first_trigger(ax.levels, warnings, code.value) for code in QUALITY_WARNINGS
