@@ -15,12 +15,13 @@ services:
       interval: 5s
       retries: 10
 
+  # 物件儲存（S3 相容）。MinIO 已不提供公開映像，改用相容的 RustFS；服務名稱沿用 minio，
+  # 帳密沿用 .env 的 MINIO_ROOT_USER／MINIO_ROOT_PASSWORD。主控台在 http://localhost:9001
   minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
+    image: rustfs/rustfs:1.0.0
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER}
+      RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
     ports: ["9000:9000", "9001:9001"]
     volumes: [minio-data:/data]
 
