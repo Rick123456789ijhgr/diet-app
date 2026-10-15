@@ -308,16 +308,16 @@ export function FoodPage() {
                     return (
                       <figure
                         key={c.image.artifact_id}
-                        className="border-card-border bg-card rounded-[4px] border"
+                        className="bg-sunken overflow-hidden rounded-2xl"
                       >
-                        <div className="viewport-grid rounded-t-[3px]">
+                        <div className="viewport-grid rounded-t-2xl">
                           <img
                             src={artifactUrl(c.image.artifact_id)}
                             alt={`第 ${i + 1} 道菜`}
                             className="aspect-square w-full object-contain"
                           />
                         </div>
-                        <figcaption className="text-muted border-card-border flex justify-between gap-2 border-t px-2 py-1 text-[11px]">
+                        <figcaption className="text-muted flex justify-between gap-2 px-3 py-1.5 text-xs">
                           <span className="text-ink font-medium">#{i + 1}</span>
                           <span className="readout truncate">
                             {b && `${b.x},${b.y} ${b.w}×${b.h}`} · {kb(c.num_bytes)}

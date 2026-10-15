@@ -96,10 +96,8 @@ export function ImageViewer({
       <div
         ref={boxRef}
         className={cn(
-          'viewport-grid relative cursor-crosshair touch-none overflow-hidden select-none active:cursor-grabbing',
-          fill
-            ? 'min-h-[280px] flex-1'
-            : 'border-card-border h-[min(62vh,640px)] rounded-[3px] border',
+          'viewport-grid relative cursor-crosshair touch-none overflow-hidden rounded-2xl select-none active:cursor-grabbing',
+          fill ? 'min-h-[280px] flex-1' : 'h-[min(62vh,640px)]',
         )}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
@@ -150,7 +148,7 @@ export function ImageViewer({
       <div
         className={cn(
           'text-muted flex h-8 shrink-0 items-center gap-4 overflow-hidden text-[11px] whitespace-nowrap',
-          fill ? 'border-card-border bg-card border-t px-3' : 'mt-1',
+          'mt-1 px-1',
         )}
       >
         <span className="readout">

@@ -2,9 +2,9 @@
 // 讓標記與文字在任何縮放下都維持相同的螢幕大小。
 import type { Box, Ellipse, Point } from '@/api/client'
 
-/** 程式找到的結果（橘，實線）與合成影像的真值（青綠，虛線）；影像檢視區固定是深色底。 */
-export const FOUND = 'var(--series-2)'
-export const TRUTH = 'var(--series-3)'
+/** 程式找到的結果（橘，實線）與合成影像的真值（藍，虛線）。 */
+export const FOUND = 'var(--series-1)'
+export const TRUTH = 'var(--series-2)'
 
 const STROKE = { vectorEffect: 'non-scaling-stroke' as const, strokeWidth: 2, fill: 'none' }
 
@@ -117,7 +117,7 @@ function Label({
       fontSize={13 * px}
       fontWeight={600}
       paintOrder="stroke"
-      stroke="rgb(15 15 14 / 0.85)"
+      stroke="var(--overlay-halo)"
       strokeWidth={3 * px}
     >
       {text}

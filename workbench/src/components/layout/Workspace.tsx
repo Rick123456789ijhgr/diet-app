@@ -1,16 +1,17 @@
-// 工具頁版面（精密儀器風）：
+// 工具頁版面（柔和卡片風）：灰色畫布上的白色大圓角卡片。
 //
-//   ┌ 控制面板 ┬ 頁首列（標題・說明・右側操作）──────────┐
-//   │          ├ 主檢視（影像／圖表，自行捲動）┬ 讀數欄 ─┤
-//   └──────────┴──────────────────────────────┴─────────┘
+//   ┌ 控制面板卡 ┐  大標題・說明                       右側操作
+//   │            │  ┌ 主檢視卡（影像／圖表）────┐ ┌ 讀數卡 ┐
+//   │            │  │                           │ ├ 讀數卡 ┤
+//   └────────────┘  └───────────────────────────┘ └────────┘
 //
-// Workspace 負責控制面板與頁首列；主檢視與讀數欄由 Split 排出（通常放在 AnalysisFrame 內）。
+// Workspace 負責控制面板與標題；主檢視與讀數欄由 Split 排出（通常放在 AnalysisFrame 內）。
 import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/cn'
 
-export const PANEL_WIDTH = 304
-export const READOUT_WIDTH = 288
+export const PANEL_WIDTH = 312
+export const READOUT_WIDTH = 296
 
 export function Workspace({
   panel,
@@ -22,24 +23,24 @@ export function Workspace({
   panel: ReactNode
   title: string
   description: string
-  /** 頁首列右側（計算中標示、模式切換等） */
+  /** 標題右側（計算中標示、模式切換等） */
   aside?: ReactNode
   children: ReactNode
 }) {
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 gap-3 pr-3 pb-3">
       <section
         aria-label="控制面板"
-        className="border-card-border bg-card shrink-0 overflow-y-auto border-r"
+        className="bg-card shadow-card shrink-0 overflow-y-auto rounded-[20px]"
         style={{ width: PANEL_WIDTH }}
       >
         {panel}
       </section>
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="border-card-border bg-card flex min-h-11 shrink-0 items-center gap-4 border-b px-4 py-1.5">
+        <div className="flex shrink-0 items-end gap-4 px-1 pt-1 pb-3">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[14px] leading-tight font-semibold">{title}</h1>
-            <p className="text-muted truncate text-xs" title={description}>
+            <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
+            <p className="text-muted mt-0.5 truncate text-[13px]" title={description}>
               {description}
             </p>
           </div>
@@ -51,15 +52,17 @@ export function Workspace({
   )
 }
 
-/** 主檢視＋右側讀數欄。main 自行捲動；readout 為空時主檢視佔滿。 */
+/** 主檢視卡＋右側讀數欄（多張小卡）。readout 為空時主檢視佔滿。 */
 export function Split({ main, readout }: { main: ReactNode; readout?: ReactNode }) {
   return (
-    <div className="flex h-full min-h-0">
-      <div className="min-w-0 flex-1 overflow-y-auto">{main}</div>
+    <div className="flex h-full min-h-0 gap-3">
+      <div className="bg-card shadow-card min-w-0 flex-1 overflow-hidden rounded-[20px]">
+        <div className="h-full overflow-y-auto">{main}</div>
+      </div>
       {readout && (
         <aside
           aria-label="讀數"
-          className="border-card-border bg-card shrink-0 overflow-y-auto border-l"
+          className="flex shrink-0 flex-col gap-3 overflow-y-auto"
           style={{ width: READOUT_WIDTH }}
         >
           {readout}
@@ -87,23 +90,22 @@ export function MainView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {toolbar && (
-        <div className="border-card-border bg-sunken flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b px-3 py-1.5">
-          {toolbar}
-        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-4 pb-3">{toolbar}</div>
       )}
-      <div className={cn('flex min-h-0 flex-1 flex-col', scroll && 'overflow-y-auto p-4')}>
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col',
+          scroll ? 'overflow-y-auto px-5 pb-5' : 'px-3 pb-3',
+        )}
+      >
         {children}
       </div>
-      {footer && (
-        <div className="border-card-border text-muted shrink-0 border-t px-3 py-1.5 text-xs">
-          {footer}
-        </div>
-      )}
+      {footer && <div className="text-muted shrink-0 px-5 pb-4 text-xs">{footer}</div>}
     </div>
   )
 }
 
-/** 內容區塊（主檢視或讀數欄裡）：細線標題列＋內容。 */
+/** 內容區塊（主檢視裡）：標題列＋內容。 */
 export function Section({
   title,
   children,
@@ -117,8 +119,8 @@ export function Section({
 }) {
   return (
     <section className={cn('mb-5', className)}>
-      <div className="border-card-border mb-2 flex min-h-6 items-center justify-between gap-2 border-b pb-1">
-        <h2 className="text-ink-2 text-[11px] font-semibold tracking-wider">{title}</h2>
+      <div className="mb-2 flex min-h-6 items-center justify-between gap-2">
+        <h2 className="text-[14px] font-semibold">{title}</h2>
         {aside}
       </div>
       {children}
@@ -126,7 +128,7 @@ export function Section({
   )
 }
 
-/** 讀數欄裡的一個區塊：上方細線分隔、內距一致。 */
+/** 讀數欄裡的一張卡。 */
 export function ReadoutBlock({
   title,
   children,
@@ -137,10 +139,10 @@ export function ReadoutBlock({
   aside?: ReactNode
 }) {
   return (
-    <section className="border-card-border border-b px-3 py-3 last:border-b-0">
+    <section className="bg-card shadow-card shrink-0 rounded-[20px] p-4">
       {title && (
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h2 className="text-muted text-[11px] font-semibold tracking-wider">{title}</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-[14px] font-semibold">{title}</h2>
           {aside}
         </div>
       )}

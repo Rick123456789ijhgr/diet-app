@@ -66,7 +66,7 @@ export function ImageSourcePanel({
         ) : (
           <label
             htmlFor={fileId}
-            className="border-card-border hover:bg-hover flex cursor-pointer flex-col items-center gap-1 rounded-[3px] border border-dashed px-3 py-5 text-center text-sm"
+            className="border-card-border hover:bg-hover flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center text-sm"
           >
             <ImagePlus className="text-muted size-6" aria-hidden />
             {source.file.size > 0 ? (
@@ -174,14 +174,14 @@ function SceneInput({
         aria-label={field.label}
         value={String(value)}
         onChange={(e) => onChange(e.target.value)}
-        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-[3px] border px-2 text-xs focus-visible:outline-none readout w-full"
+        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none readout w-full"
       />
     ) : field.kind === 'select' ? (
       <select
         aria-label={field.label}
         value={String(value)}
         onChange={(e) => onChange(e.target.value)}
-        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-[3px] border px-2 text-xs focus-visible:outline-none"
+        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
       >
         {field.options!.map((o) => (
           <option key={o}>{o}</option>

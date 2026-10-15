@@ -4,7 +4,7 @@
 import { useState, type ReactNode } from 'react'
 
 /**
- * 系列色：經色盲模擬驗證的固定順序（藍、橘、青綠、黃、洋紅、綠、紫、紅），深淺色各有一組，
+ * 系列色：經色盲模擬驗證的固定順序（橘、藍、青綠、黃、洋紅、綠、紫、紅），深淺色各有一組，
  * 定義在 index.css。依序取用、不循環；超過 8 個系列應合併為「其他」或分圖。
  */
 export const PALETTE = Array.from({ length: 8 }, (_, i) => `var(--series-${i + 1})`)
@@ -214,7 +214,7 @@ export function BarList({
                   y={cy - 8}
                   width={r.value * width}
                   height={16}
-                  rx={2}
+                  rx={8}
                   className="fill-primary"
                 />
                 {r.low != null && r.high != null && (
@@ -349,7 +349,7 @@ export function Heatmap({
                   y={top + i * 26 + 1}
                   width={cell - 2}
                   height={24}
-                  rx={3}
+                  rx={6}
                   fill={rate == null ? 'var(--hover)' : 'var(--primary)'}
                   fillOpacity={rate == null ? 1 : 0.12 + rate * 0.88}
                 >
@@ -447,7 +447,7 @@ export function ChartLegend({ items }: { items: { color: string; label: ReactNod
     <p className="text-muted mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
       {items.map((i, k) => (
         <span key={k} className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-[2px]" style={{ background: i.color }} />
+          <span className="inline-block size-2.5 rounded-full" style={{ background: i.color }} />
           {i.label}
         </span>
       ))}

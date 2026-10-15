@@ -143,7 +143,7 @@ export function SweepPage() {
           aria-label="退化種類"
           value={axisKey}
           onChange={(e) => setAxis(e.target.value)}
-          className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-[3px] border px-2 text-xs focus-visible:outline-none"
+          className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
         >
           {SWEEP_AXES.map((a) => (
             <option key={a.key} value={a.key}>
@@ -371,15 +371,15 @@ function Thumbs({ thumbs, axisLabel }: { thumbs: Thumb[]; axisLabel: string }) {
     <ReadoutBlock title="退化樣本">
       <div className="space-y-2">
         {thumbs.map((t) => (
-          <figure key={t.image_id} className="border-card-border rounded-[3px] border">
-            <div className="viewport-grid rounded-t-[2px]">
+          <figure key={t.image_id} className="bg-sunken overflow-hidden rounded-2xl">
+            <div className="viewport-grid">
               <img
                 src={artifactUrl(t.image_id)}
                 alt={`${axisLabel} ${Number(t.level.toPrecision(3))} 的影像`}
                 className="h-28 w-full object-contain"
               />
             </div>
-            <figcaption className="text-muted border-card-border readout border-t px-2 py-1 text-[11px]">
+            <figcaption className="text-muted tabular px-3 py-1.5 text-xs">
               {axisLabel} = {Number(t.level.toPrecision(3))}
             </figcaption>
           </figure>

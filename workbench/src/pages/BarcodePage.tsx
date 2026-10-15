@@ -351,10 +351,10 @@ export function BarcodePage() {
                   <Section key={label} title={label}>
                     {hit ? (
                       <>
-                        <pre className="bg-sunken border-card-border readout rounded-[3px] border p-2 text-xs whitespace-pre-wrap">
+                        <pre className="bg-sunken border-card-border readout rounded-lg border p-2 text-xs whitespace-pre-wrap">
                           {hexPreview(fromBase64(hit.raw))}
                         </pre>
-                        <pre className="bg-sunken border-card-border readout mt-1 rounded-[3px] border p-2 text-xs whitespace-pre-wrap">
+                        <pre className="bg-sunken border-card-border readout mt-1 rounded-lg border p-2 text-xs whitespace-pre-wrap">
                           {asciiPreview(fromBase64(hit.raw))}
                         </pre>
                       </>
@@ -398,7 +398,7 @@ export function BarcodePage() {
                           aria-label="嘗試"
                           value={shownAttempt}
                           onChange={(e) => setAttempt(Number(e.target.value))}
-                          className="border-card-border bg-card h-7 rounded-[3px] border px-2 text-xs"
+                          className="border-card-border bg-card h-7 rounded-lg border px-2 text-xs"
                         >
                           {r.data.attempts.map((a, i) => (
                             <option key={i} value={i}>

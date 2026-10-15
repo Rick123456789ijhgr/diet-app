@@ -143,17 +143,19 @@ export function BatchPage() {
 
   const panel = (
     <Tabs defaultValue="folder">
-      <TabsList className="bg-card sticky top-0 z-10">
-        <TabsTrigger value="folder">{withIcon(FolderOpen, '資料夾')}</TabsTrigger>
-        <TabsTrigger value="params">
-          參數
-          {Object.keys(config).length > 0 && (
-            <Badge tone="primary">{Object.keys(config).length}</Badge>
-          )}
-        </TabsTrigger>
-        <TabsTrigger value="io">匯出入</TabsTrigger>
-      </TabsList>
-      <TabsContent value="folder" className="p-3">
+      <div className="bg-card sticky top-0 z-10 p-3 pb-2">
+        <TabsList>
+          <TabsTrigger value="folder">{withIcon(FolderOpen, '資料夾')}</TabsTrigger>
+          <TabsTrigger value="params">
+            參數
+            {Object.keys(config).length > 0 && (
+              <Badge tone="primary">{Object.keys(config).length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="io">匯出入</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="folder" className="px-4 pt-2 pb-4">
         <form
           className="space-y-3 text-sm"
           onSubmit={(e) => {
@@ -168,7 +170,7 @@ export function BatchPage() {
               value={folder}
               onChange={(e) => setFolder(e.target.value)}
               placeholder="..\research\data\splits\dev"
-              className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-[3px] border px-2 text-xs focus-visible:outline-none"
+              className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
             />
           </label>
           <p className="text-muted text-xs">
@@ -184,7 +186,7 @@ export function BatchPage() {
                 max={5000}
                 value={limit}
                 onChange={(e) => setLimit(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
-                className="border-card-border bg-sunken readout h-6 w-20 rounded-[3px] border px-1.5 text-right"
+                className="border-card-border bg-sunken readout h-6 w-20 rounded-lg border px-1.5 text-right"
               />
             </label>
             <label className="flex items-center gap-2 text-xs">
@@ -209,10 +211,10 @@ export function BatchPage() {
           )}
         </form>
       </TabsContent>
-      <TabsContent value="params" className="p-3">
+      <TabsContent value="params" className="px-4 pt-2 pb-4">
         {quality && <ParamForm schema={quality} overrides={config} onChange={setConfig} />}
       </TabsContent>
-      <TabsContent value="io" className="p-3">
+      <TabsContent value="io" className="px-4 pt-2 pb-4">
         {quality && <ConfigIO schema={quality} overrides={config} onImport={setConfig} />}
       </TabsContent>
     </Tabs>
@@ -224,9 +226,9 @@ export function BatchPage() {
   const table = (
     <table className="w-full text-[13px]" aria-label="每張影像的品質檢查結果">
       <thead className="bg-card sticky top-0">
-        <tr className="text-muted border-line-strong border-b text-left text-[11px]">
+        <tr className="text-muted bg-sunken text-left text-xs">
           {['檔案', '模糊分數', '過暗', '過亮', '短邊', '通過', '警告'].map((c) => (
-            <th key={c} className="px-2 py-1.5 font-medium">
+            <th key={c} className="px-2 py-2 font-medium first:rounded-l-xl last:rounded-r-xl">
               {c}
             </th>
           ))}
@@ -288,14 +290,14 @@ export function BatchPage() {
       <div className="flex h-full min-h-0 flex-col">
         {running && (
           <div
-            className="bg-hover h-[3px] shrink-0"
+            className="bg-card mx-1 mb-3 h-1.5 shrink-0 overflow-hidden rounded-full"
             role="progressbar"
             aria-label="處理進度"
             aria-valuenow={rows.length}
             aria-valuemax={total}
           >
             <div
-              className="bg-primary h-full transition-all"
+              className="bg-primary h-full rounded-full transition-all"
               style={{ width: `${total ? (rows.length / total) * 100 : 0}%` }}
             />
           </div>
@@ -397,7 +399,7 @@ export function BatchPage() {
                       <div
                         className={cn(
                           'overflow-auto',
-                          selected ? 'border-card-border max-h-[40%] shrink-0 border-b' : 'flex-1',
+                          selected ? 'max-h-[40%] shrink-0' : 'flex-1',
                         )}
                       >
                         {table}
@@ -405,7 +407,7 @@ export function BatchPage() {
                       {selected ? (
                         <Detail row={selected} config={ranWith ?? config} />
                       ) : (
-                        <p className="text-muted border-card-border shrink-0 border-t px-3 py-1.5 text-xs">
+                        <p className="text-muted shrink-0 px-1 pt-3 text-xs">
                           點選一列即可在下方檢視該影像。
                         </p>
                       )}
@@ -433,7 +435,7 @@ function Detail({ row, config }: { row: Row; config: ConfigOverride }) {
   const shown = view === 'original' ? image.data : rendered.data?.image
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-card-border bg-sunken flex shrink-0 items-center justify-between gap-2 border-b px-3 py-1.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-1 py-2.5">
         <h3 className="readout truncate text-xs font-medium">{row.file}</h3>
         <Segmented
           label="單張檢視"
@@ -447,7 +449,7 @@ function Detail({ row, config }: { row: Row; config: ConfigOverride }) {
         />
       </div>
       {image.error || rendered.error ? (
-        <div className="p-3">
+        <div className="px-4 pt-2 pb-4">
           <ErrorBox error={image.error ?? rendered.error} />
         </div>
       ) : !shown ? (

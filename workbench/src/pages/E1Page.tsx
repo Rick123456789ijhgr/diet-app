@@ -150,11 +150,13 @@ export function E1Page() {
 
   const panel = (
     <Tabs defaultValue="runs">
-      <TabsList className="bg-card sticky top-0 z-10">
-        <TabsTrigger value="runs">執行結果</TabsTrigger>
-        <TabsTrigger value="quick">快速執行</TabsTrigger>
-      </TabsList>
-      <TabsContent value="runs" className="space-y-3 p-3 text-sm">
+      <div className="bg-card sticky top-0 z-10 p-3 pb-2">
+        <TabsList>
+          <TabsTrigger value="runs">執行結果</TabsTrigger>
+          <TabsTrigger value="quick">快速執行</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="runs" className="space-y-3 px-4 pt-2 pb-4 text-sm">
         <label className="flex flex-col gap-1">
           <span className="text-muted text-xs">結果資料夾（空白為預設）</span>
           <input
@@ -162,7 +164,7 @@ export function E1Page() {
             value={root}
             onChange={(e) => setRoot(e.target.value)}
             placeholder={list.data?.root ?? 'research/experiments/e1_barcode/runs'}
-            className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-[3px] border px-2 text-xs focus-visible:outline-none"
+            className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
           />
         </label>
         <Select
@@ -193,7 +195,7 @@ export function E1Page() {
           </>
         )}
       </TabsContent>
-      <TabsContent value="quick" className="space-y-3 p-3 text-sm">
+      <TabsContent value="quick" className="space-y-3 px-4 pt-2 pb-4 text-sm">
         <p className="text-muted text-xs">
           以合成條碼產生資料（寫到
           e1_barcode/synthetic/）並執行選取的實驗組，結果存到「執行結果」的資料夾。
@@ -211,7 +213,7 @@ export function E1Page() {
                   aria-pressed={on}
                   onClick={() => setPicked(on ? arms.filter((x) => x !== a) : [...arms, a])}
                   className={cn(
-                    'readout rounded-[3px] border px-2 py-0.5 text-xs',
+                    'readout rounded-lg border px-2 py-0.5 text-xs',
                     on
                       ? 'border-primary bg-primary-soft text-primary-ink'
                       : 'border-card-border text-muted hover:bg-hover',
@@ -232,7 +234,7 @@ export function E1Page() {
             max={20}
             value={nCodes}
             onChange={(e) => setNCodes(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-            className="border-card-border bg-sunken readout h-6 w-16 rounded-[3px] border px-1.5 text-right"
+            className="border-card-border bg-sunken readout h-6 w-16 rounded-lg border px-1.5 text-right"
           />
         </label>
         {stream.status === 'running' ? (
@@ -250,7 +252,7 @@ export function E1Page() {
                   ? `執行中 ${progress.done} / ${progress.total}`
                   : '產生合成資料中…'}
               </div>
-              <div className="bg-hover h-[3px] overflow-hidden">
+              <div className="bg-hover h-1.5 overflow-hidden rounded-full">
                 <div
                   className="bg-primary h-full transition-all"
                   style={{
@@ -339,7 +341,7 @@ function Select({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={options.length === 0}
-        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-[3px] border px-2 text-xs focus-visible:outline-none"
+        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
       >
         {options.length === 0 && <option>{empty}</option>}
         {options.map((o) => (
@@ -364,14 +366,14 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
       {misreads > 0 && (
         <div
           role="alert"
-          className="border-card-border border-l-danger-mark bg-danger-soft/60 text-danger border-b border-l-[3px] px-3 py-2.5 text-xs"
+          className="bg-danger-soft text-danger shrink-0 rounded-[20px] px-4 py-3 text-xs"
         >
           共有 {misreads}{' '}
           次誤讀（檢查碼正確但內容錯誤）：會被當成另一個商品，比漏讀更危險。請在「失敗影像」檢視。
         </div>
       )}
       {data.meta.include_test && (
-        <div className="border-card-border border-l-warn-mark bg-warn-soft/60 text-warn flex items-start gap-1.5 border-b border-l-[3px] px-3 py-2.5 text-xs">
+        <div className="bg-warn-soft text-warn flex shrink-0 items-start gap-1.5 rounded-[20px] px-4 py-3 text-xs">
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           此執行納入測試集（正式實驗），失敗影像不提供檢視。
         </div>
@@ -527,7 +529,7 @@ function Failures({ data }: { data: Run }) {
     : []
   return (
     <>
-      <div className="border-card-border flex shrink-0 flex-wrap items-end gap-3 border-b px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-end gap-3 px-1 pb-3">
         <Select
           label="實驗組"
           value={arm}
@@ -544,7 +546,7 @@ function Failures({ data }: { data: Run }) {
                 aria-pressed={on}
                 onClick={() => setKinds(on ? kinds.filter((x) => x !== k) : [...kinds, k])}
                 className={cn(
-                  'h-7 rounded-[3px] border px-2 text-xs',
+                  'h-7 rounded-lg border px-2 text-xs',
                   on
                     ? 'border-danger/50 bg-danger-soft text-danger'
                     : 'border-card-border text-muted',
@@ -560,17 +562,15 @@ function Failures({ data }: { data: Run }) {
         <EmptyState>這個實驗組沒有符合條件的失敗影像。</EmptyState>
       ) : (
         <>
-          <div
-            className={cn(
-              'overflow-auto',
-              selected ? 'border-card-border max-h-[38%] shrink-0 border-b' : 'flex-1',
-            )}
-          >
+          <div className={cn('overflow-auto', selected ? 'max-h-[38%] shrink-0' : 'flex-1')}>
             <table className="w-full text-[13px]" aria-label="失敗影像清單">
               <thead className="bg-card sticky top-0">
-                <tr className="text-muted border-line-strong border-b text-left text-[11px]">
+                <tr className="text-muted bg-sunken text-left text-xs">
                   {['影像', '結果', '真值', '解出', '成功階', ...data.tags].map((c) => (
-                    <th key={c} className="px-2 py-1.5 font-medium">
+                    <th
+                      key={c}
+                      className="px-2 py-2 font-medium first:rounded-l-xl last:rounded-r-xl"
+                    >
                       {c}
                     </th>
                   ))}
@@ -609,7 +609,7 @@ function Failures({ data }: { data: Run }) {
             </table>
           </div>
           {selected ? (
-            <div className="grid min-h-0 flex-1 lg:grid-cols-[3fr_2fr]">
+            <div className="grid min-h-0 flex-1 pt-3 lg:grid-cols-[3fr_2fr]">
               {data.meta.include_test ? (
                 <EmptyState icon={<Lock className="size-6" aria-hidden />}>
                   測試集已鎖定，不提供影像檢視。
@@ -617,7 +617,7 @@ function Failures({ data }: { data: Run }) {
               ) : (
                 <FailureImage path={selected.image} id={selected.id} />
               )}
-              <div className="border-card-border overflow-auto border-l px-3 pb-3">
+              <div className="overflow-auto pl-4">
                 <DataTable
                   label="這張影像每一階的嘗試紀錄"
                   columns={Object.keys(attempts[0] ?? {}).filter((c) => c !== 'id' && c !== 'arm')}
@@ -630,7 +630,7 @@ function Failures({ data }: { data: Run }) {
               </div>
             </div>
           ) : (
-            <p className="text-muted border-card-border shrink-0 border-t px-3 py-1.5 text-xs">
+            <p className="text-muted shrink-0 px-1 pt-3 text-xs">
               點選表格列以檢視影像與每一階的嘗試。
             </p>
           )}
@@ -644,7 +644,7 @@ function FailureImage({ path, id }: { path: string; id: string }) {
   const image = useLocalImage(path)
   if (image.error)
     return (
-      <div className="p-3">
+      <div className="px-4 pt-2 pb-4">
         <ErrorBox error={image.error} />
       </div>
     )
