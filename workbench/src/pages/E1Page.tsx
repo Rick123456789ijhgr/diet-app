@@ -16,12 +16,11 @@ import { useEffect, useState } from 'react'
 import { api, artifactUrl, unwrap } from '@/api/client'
 import { BarList, Heatmap, StackedBars } from '@/components/charts'
 import { ImageViewer } from '@/components/ImageViewer'
-import { EmptyState, PageHeader, Section, Workspace } from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
 import {
   Badge,
   Button,
-  Card,
   Segmented,
   Tabs,
   TabsContent,
@@ -151,11 +150,13 @@ export function E1Page() {
 
   const panel = (
     <Tabs defaultValue="runs">
-      <TabsList className="mb-4">
-        <TabsTrigger value="runs">執行結果</TabsTrigger>
-        <TabsTrigger value="quick">快速執行</TabsTrigger>
-      </TabsList>
-      <TabsContent value="runs" className="space-y-3 text-sm">
+      <div className="bg-card sticky top-0 z-10 p-3 pb-2">
+        <TabsList>
+          <TabsTrigger value="runs">執行結果</TabsTrigger>
+          <TabsTrigger value="quick">快速執行</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="runs" className="space-y-3 px-4 pt-2 pb-4 text-sm">
         <label className="flex flex-col gap-1">
           <span className="text-muted text-xs">結果資料夾（空白為預設）</span>
           <input
@@ -163,7 +164,7 @@ export function E1Page() {
             value={root}
             onChange={(e) => setRoot(e.target.value)}
             placeholder={list.data?.root ?? 'research/experiments/e1_barcode/runs'}
-            className="border-card-border bg-card h-8 rounded-md border px-2"
+            className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
           />
         </label>
         <Select
@@ -194,7 +195,7 @@ export function E1Page() {
           </>
         )}
       </TabsContent>
-      <TabsContent value="quick" className="space-y-3 text-sm">
+      <TabsContent value="quick" className="space-y-3 px-4 pt-2 pb-4 text-sm">
         <p className="text-muted text-xs">
           以合成條碼產生資料（寫到
           e1_barcode/synthetic/）並執行選取的實驗組，結果存到「執行結果」的資料夾。
@@ -212,9 +213,9 @@ export function E1Page() {
                   aria-pressed={on}
                   onClick={() => setPicked(on ? arms.filter((x) => x !== a) : [...arms, a])}
                   className={cn(
-                    'rounded-full border px-2.5 py-0.5 text-xs',
+                    'readout rounded-lg border px-2 py-0.5 text-xs',
                     on
-                      ? 'border-primary bg-primary-soft text-primary'
+                      ? 'border-primary bg-primary-soft text-primary-ink'
                       : 'border-card-border text-muted hover:bg-hover',
                   )}
                 >
@@ -233,7 +234,7 @@ export function E1Page() {
             max={20}
             value={nCodes}
             onChange={(e) => setNCodes(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-            className="border-card-border bg-card h-7 w-16 rounded-md border px-2 text-right"
+            className="border-card-border bg-sunken readout h-6 w-16 rounded-lg border px-1.5 text-right"
           />
         </label>
         {stream.status === 'running' ? (
@@ -273,7 +274,7 @@ export function E1Page() {
           </Button>
         )}
         {stream.status === 'done' && (
-          <p className="text-primary text-xs">完成，已切換到新的執行結果。</p>
+          <p className="text-ok text-xs">完成，已切換到新的執行結果。</p>
         )}
         {stream.error ? <ErrorBox error={stream.error} /> : null}
       </TabsContent>
@@ -281,13 +282,22 @@ export function E1Page() {
   )
 
   return (
-    <Workspace panel={panel}>
-      <PageHeader
-        title="E1 條碼消融"
-        description="各實驗組的成功率與信賴區間、依拍攝條件分組、成功階與失敗影像（research/experiments/e1_barcode）。"
-      />
+    <Workspace
+      panel={panel}
+      title="E1 條碼消融"
+      description="各實驗組的成功率與信賴區間、依拍攝條件分組、成功階與失敗影像（research/experiments/e1_barcode）。"
+      aside={
+        stream.status === 'running' && (
+          <Badge tone="primary" aria-live="polite">
+            快速執行中…
+          </Badge>
+        )
+      }
+    >
       {list.error ? (
-        <ErrorBox error={list.error} />
+        <div className="p-4">
+          <ErrorBox error={list.error} />
+        </div>
       ) : !current ? (
         <EmptyState icon={<FlaskConical className="size-8" aria-hidden />}>
           {list.isLoading
@@ -295,7 +305,9 @@ export function E1Page() {
             : '尚無執行結果：在左側「快速執行」，或在終端機執行 make e1-synthetic。'}
         </EmptyState>
       ) : run.error ? (
-        <ErrorBox error={run.error} />
+        <div className="p-4">
+          <ErrorBox error={run.error} />
+        </div>
       ) : !data || !base ? (
         <EmptyState>載入中…</EmptyState>
       ) : (
@@ -329,7 +341,7 @@ function Select({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={options.length === 0}
-        className="border-card-border bg-card h-8 rounded-md border px-2"
+        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
       >
         {options.length === 0 && <option>{empty}</option>}
         {options.map((o) => (
@@ -349,48 +361,62 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
   const overall = data.overall[base] ?? []
   const misreads = overall.reduce((a, r) => a + r.misread, 0)
   const git = data.meta.git
-  return (
+  const readout = (
     <>
-      <MetricGrid>
-        <Metric label="影像" value={String(data.meta.items)} />
-        <Metric label="實驗組" value={String(data.arms.length)} />
-        <Metric label="耗時" value={`${data.meta.duration_s.toFixed(1)} s`} />
-        <Metric
-          label="版本"
-          value={String(git.commit ?? '?').slice(0, 8)}
-          delta={git.dirty ? '有未提交變更' : '乾淨'}
-          help="執行時的 git commit；有未提交變更表示結果可能無法由該版本重現。"
-        />
-      </MetricGrid>
-      {data.meta.include_test && (
-        <p className="text-accent mb-3 flex items-center gap-1.5 text-sm">
-          <Lock className="size-4" aria-hidden />
-          此執行納入測試集（正式實驗），失敗影像不提供檢視。
-        </p>
-      )}
       {misreads > 0 && (
-        <p
+        <div
           role="alert"
-          className="border-danger/40 bg-danger-soft text-danger mb-3 rounded-lg border px-4 py-2 text-sm"
+          className="bg-danger-soft text-danger shrink-0 rounded-[20px] px-4 py-3 text-xs"
         >
           共有 {misreads}{' '}
           次誤讀（檢查碼正確但內容錯誤）：會被當成另一個商品，比漏讀更危險。請在「失敗影像」檢視。
-        </p>
+        </div>
       )}
-      <Section title="檢視">
-        <Segmented
-          label="檢視"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'overall', label: withIcon(BarChart3, '整體成功率') },
-            { value: 'group', label: withIcon(Grid3x3, '依條件分組') },
-            { value: 'rung', label: withIcon(Layers, '成功階') },
-            { value: 'fail', label: withIcon(ImageOff, '失敗影像') },
-          ]}
-          className="mb-3"
-        />
-        <Card className="p-3">
+      {data.meta.include_test && (
+        <div className="bg-warn-soft text-warn flex shrink-0 items-start gap-1.5 rounded-[20px] px-4 py-3 text-xs">
+          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          此執行納入測試集（正式實驗），失敗影像不提供檢視。
+        </div>
+      )}
+      <ReadoutBlock title="這次執行">
+        <MetricGrid>
+          <Metric label="影像" value={String(data.meta.items)} />
+          <Metric label="實驗組" value={String(data.arms.length)} />
+          <Metric label="耗時" value={`${data.meta.duration_s.toFixed(1)} s`} />
+          <Metric
+            label="版本"
+            value={String(git.commit ?? '?').slice(0, 8)}
+            delta={git.dirty ? '有未提交變更' : '乾淨'}
+            help="執行時的 git commit；有未提交變更表示結果可能無法由該版本重現。"
+          />
+        </MetricGrid>
+      </ReadoutBlock>
+      <ReadoutBlock title="基準實驗組">
+        <p className="readout text-[13px]">{base}</p>
+        <p className="text-muted mt-1 text-xs">McNemar 檢定的比較對象，可在左側切換。</p>
+      </ReadoutBlock>
+    </>
+  )
+  return (
+    <Split
+      readout={readout}
+      main={
+        <MainView
+          scroll={tab !== 'fail'}
+          toolbar={
+            <Segmented
+              label="檢視"
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'overall', label: withIcon(BarChart3, '整體成功率') },
+                { value: 'group', label: withIcon(Grid3x3, '依條件分組') },
+                { value: 'rung', label: withIcon(Layers, '成功階') },
+                { value: 'fail', label: withIcon(ImageOff, '失敗影像') },
+              ]}
+            />
+          }
+        >
           {tab === 'overall' ? (
             <>
               <BarList
@@ -465,9 +491,9 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
           ) : (
             <Failures data={data} />
           )}
-        </Card>
-      </Section>
-    </>
+        </MainView>
+      }
+    />
   )
 }
 
@@ -503,7 +529,7 @@ function Failures({ data }: { data: Run }) {
     : []
   return (
     <>
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-end gap-3 px-1 pb-3">
         <Select
           label="實驗組"
           value={arm}
@@ -520,8 +546,10 @@ function Failures({ data }: { data: Run }) {
                 aria-pressed={on}
                 onClick={() => setKinds(on ? kinds.filter((x) => x !== k) : [...kinds, k])}
                 className={cn(
-                  'rounded-full border px-2.5 py-0.5 text-xs',
-                  on ? 'border-danger bg-danger-soft text-danger' : 'border-card-border text-muted',
+                  'h-7 rounded-lg border px-2 text-xs',
+                  on
+                    ? 'border-danger/50 bg-danger-soft text-danger'
+                    : 'border-card-border text-muted',
                 )}
               >
                 {outcomeText(k)}
@@ -534,12 +562,15 @@ function Failures({ data }: { data: Run }) {
         <EmptyState>這個實驗組沒有符合條件的失敗影像。</EmptyState>
       ) : (
         <>
-          <div className="max-h-64 overflow-auto">
-            <table className="w-full text-sm" aria-label="失敗影像清單">
+          <div className={cn('overflow-auto', selected ? 'max-h-[38%] shrink-0' : 'flex-1')}>
+            <table className="w-full text-[13px]" aria-label="失敗影像清單">
               <thead className="bg-card sticky top-0">
-                <tr className="text-muted border-card-border border-b text-left text-xs">
+                <tr className="text-muted bg-sunken text-left text-xs">
                   {['影像', '結果', '真值', '解出', '成功階', ...data.tags].map((c) => (
-                    <th key={c} className="py-2 pr-3 font-medium">
+                    <th
+                      key={c}
+                      className="px-2 py-2 font-medium first:rounded-l-xl last:rounded-r-xl"
+                    >
                       {c}
                     </th>
                   ))}
@@ -553,20 +584,22 @@ function Failures({ data }: { data: Run }) {
                     aria-selected={selected?.id === f.id}
                     className={cn(
                       'border-card-border tabular cursor-pointer border-b last:border-0',
-                      selected?.id === f.id ? 'bg-primary-soft' : 'hover:bg-hover',
+                      selected?.id === f.id
+                        ? 'bg-primary-soft shadow-[inset_3px_0_0_var(--primary)]'
+                        : 'hover:bg-hover',
                     )}
                   >
-                    <td className="py-1.5 pr-3 font-mono text-xs">{f.id}</td>
-                    <td className="pr-3">
+                    <td className="readout px-2 py-1 text-xs">{f.id}</td>
+                    <td className="px-2">
                       <Badge tone={f.outcome === 'missed' ? 'accent' : 'danger'}>
                         {outcomeText(f.outcome)}
                       </Badge>
                     </td>
-                    <td className="pr-3 font-mono text-xs">{f.truth || '（負樣本）'}</td>
-                    <td className="pr-3 font-mono text-xs">{f.decoded || '—'}</td>
-                    <td className="pr-3">{f.success_rung ? rungText(f.success_rung) : '—'}</td>
+                    <td className="readout px-2 text-xs">{f.truth || '（負樣本）'}</td>
+                    <td className="readout px-2 text-xs">{f.decoded || '—'}</td>
+                    <td className="px-2">{f.success_rung ? rungText(f.success_rung) : '—'}</td>
                     {data.tags.map((t) => (
-                      <td key={t} className="pr-3 text-xs">
+                      <td key={t} className="px-2 text-xs">
                         {f[t]}
                       </td>
                     ))}
@@ -576,7 +609,7 @@ function Failures({ data }: { data: Run }) {
             </table>
           </div>
           {selected ? (
-            <div className="border-card-border mt-4 grid gap-4 border-t pt-4 lg:grid-cols-[3fr_2fr]">
+            <div className="grid min-h-0 flex-1 pt-3 lg:grid-cols-[3fr_2fr]">
               {data.meta.include_test ? (
                 <EmptyState icon={<Lock className="size-6" aria-hidden />}>
                   測試集已鎖定，不提供影像檢視。
@@ -584,18 +617,22 @@ function Failures({ data }: { data: Run }) {
               ) : (
                 <FailureImage path={selected.image} id={selected.id} />
               )}
-              <DataTable
-                label="這張影像每一階的嘗試紀錄"
-                columns={Object.keys(attempts[0] ?? {}).filter((c) => c !== 'id' && c !== 'arm')}
-                rows={attempts.map((a) =>
-                  Object.entries(a)
-                    .filter(([k]) => k !== 'id' && k !== 'arm')
-                    .map(([k, v]) => (k === 'rung' ? rungText(v) : v)),
-                )}
-              />
+              <div className="overflow-auto pl-4">
+                <DataTable
+                  label="這張影像每一階的嘗試紀錄"
+                  columns={Object.keys(attempts[0] ?? {}).filter((c) => c !== 'id' && c !== 'arm')}
+                  rows={attempts.map((a) =>
+                    Object.entries(a)
+                      .filter(([k]) => k !== 'id' && k !== 'arm')
+                      .map(([k, v]) => (k === 'rung' ? rungText(v) : v)),
+                  )}
+                />
+              </div>
             </div>
           ) : (
-            <p className="text-muted mt-3 text-xs">點選表格列以檢視影像與每一階的嘗試。</p>
+            <p className="text-muted shrink-0 px-1 pt-3 text-xs">
+              點選表格列以檢視影像與每一階的嘗試。
+            </p>
           )}
         </>
       )}
@@ -605,10 +642,16 @@ function Failures({ data }: { data: Run }) {
 
 function FailureImage({ path, id }: { path: string; id: string }) {
   const image = useLocalImage(path)
-  if (image.error) return <ErrorBox error={image.error} />
+  if (image.error)
+    return (
+      <div className="px-4 pt-2 pb-4">
+        <ErrorBox error={image.error} />
+      </div>
+    )
   if (!image.data) return <EmptyState>載入中…</EmptyState>
   return (
     <ImageViewer
+      fill
       src={artifactUrl(image.data.image_id)}
       width={image.data.width}
       height={image.data.height}

@@ -13,7 +13,7 @@ import {
 import { ConfigIO } from '@/components/ConfigIO'
 import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { ImageViewer } from '@/components/ImageViewer'
-import { EmptyState, PageHeader, Section, Workspace } from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { FOUND, Quad, TRUTH } from '@/components/overlays'
 import { ParamForm } from '@/components/ParamForm'
 import {
@@ -28,7 +28,7 @@ import {
 } from '@/components/results'
 import { StepsTable } from '@/components/StepsTable'
 import { ToolPanel } from '@/components/ToolPanel'
-import { Badge, Card, Segmented } from '@/components/ui/primitives'
+import { Badge, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass } from '@/hooks/useConfigSchemas'
@@ -111,18 +111,18 @@ export function LabelPage() {
   )
 
   return (
-    <Workspace panel={panel}>
-      <PageHeader
-        title="營養標示"
-        description="定位表格框並透視校正，再處理反光與增強對比；各段可在「參數」個別關閉。"
-        aside={
-          (pipeline.pending || analysis.busy) && (
-            <Badge tone="primary" aria-live="polite">
-              計算中…
-            </Badge>
-          )
-        }
-      />
+    <Workspace
+      panel={panel}
+      title="營養標示"
+      description="定位表格框並透視校正，再處理反光與增強對比；各段可在「參數」個別關閉。"
+      aside={
+        (pipeline.pending || analysis.busy) && (
+          <Badge tone="primary" aria-live="polite">
+            計算中…
+          </Badge>
+        )
+      }
+    >
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!label.schema}>
         {({ data: r, roundTripMs, config: used }, img) => {
           const current = valuesOf(used as ConfigOverride)
@@ -130,142 +130,158 @@ export function LabelPage() {
           const errors = quadErrors(r.quad, truth)
           const glareMax = current('glare_max_ratio') as number
           const pct = (v: number) => `${(v * 100).toFixed(2)}%`
-          return (
+          const readout = (
             <>
               <StatusCard
                 tone={r.warnings.length ? 'warn' : 'ok'}
                 title={r.warnings.length ? '有警告' : '處理完成'}
-                badges={<WarningBadges codes={r.warnings} tone="accent" />}
+                badges={r.warnings.length > 0 && <WarningBadges codes={r.warnings} tone="accent" />}
                 detail={[
                   img.description,
                   `輸入 ${img.width}×${img.height} px → 輸出 ${r.image.width}×${r.image.height} px`,
                   `往返 ${roundTripMs.toFixed(0)} ms`,
                 ]}
               />
-              <MetricGrid>
-                <Metric
-                  label="定位方法"
-                  value={
-                    current('enable_rectify') === false
-                      ? '未啟用'
-                      : r.quad_method
-                        ? (QUAD_METHOD_TEXT[r.quad_method] ?? r.quad_method)
-                        : '找不到'
-                  }
-                  help="先找最大的凸四邊形輪廓；失敗時改用 HoughLinesP 求外側四條直線的交點。"
-                />
-                <Metric
-                  label="四角平均誤差"
-                  value={errors ? `${mean(errors).toFixed(1)} px` : '—'}
-                  delta={
-                    errors
-                      ? mean(errors) < 10
-                        ? '符合驗收（< 10 px）'
-                        : '超過驗收（10 px）'
-                      : undefined
-                  }
-                  good={errors ? mean(errors) < 10 : undefined}
-                  help="與合成影像真實四角的平均距離（原圖像素）；上傳照片或旋轉、縮小後沒有真值。"
-                />
-                <Metric
-                  label="光斑比例"
-                  value={r.glare_ratio < 0 ? '未啟用' : pct(r.glare_ratio)}
-                  delta={
-                    r.glare_ratio < 0
-                      ? undefined
-                      : `${r.glare_ratio - glareMax >= 0 ? '+' : '−'}${pct(Math.abs(r.glare_ratio - glareMax))} 相對上限`
-                  }
-                  good={r.glare_ratio < 0 ? undefined : r.glare_ratio <= glareMax}
-                  help={`校正後影像中被判為光斑的面積比例；超過 ${pct(glareMax)} 時不修補、改為警告重拍。`}
-                />
-              </MetricGrid>
-              <Section title="檢視">
-                <Segmented
-                  label="檢視"
-                  value={view}
-                  onChange={setView}
-                  options={VIEWS}
-                  className="mb-3"
-                />
-                <Card className="p-3">
-                  {view === 'located' ? (
+              <ReadoutBlock title="指標">
+                <MetricGrid>
+                  <Metric
+                    wide
+                    label="定位方法"
+                    value={
+                      current('enable_rectify') === false
+                        ? '未啟用'
+                        : r.quad_method
+                          ? (QUAD_METHOD_TEXT[r.quad_method] ?? r.quad_method)
+                          : '找不到'
+                    }
+                    help="先找最大的凸四邊形輪廓；失敗時改用 HoughLinesP 求外側四條直線的交點。"
+                  />
+                  <Metric
+                    label="四角平均誤差"
+                    value={errors ? `${mean(errors).toFixed(1)} px` : '—'}
+                    delta={
+                      errors
+                        ? mean(errors) < 10
+                          ? '符合驗收（< 10 px）'
+                          : '超過驗收（10 px）'
+                        : undefined
+                    }
+                    good={errors ? mean(errors) < 10 : undefined}
+                    help="與合成影像真實四角的平均距離（原圖像素）；上傳照片或旋轉、縮小後沒有真值。"
+                  />
+                  <Metric
+                    label="光斑比例"
+                    value={r.glare_ratio < 0 ? '未啟用' : pct(r.glare_ratio)}
+                    delta={
+                      r.glare_ratio < 0
+                        ? undefined
+                        : `${r.glare_ratio - glareMax >= 0 ? '+' : '−'}${pct(Math.abs(r.glare_ratio - glareMax))} 相對上限`
+                    }
+                    good={r.glare_ratio < 0 ? undefined : r.glare_ratio <= glareMax}
+                    help={`校正後影像中被判為光斑的面積比例；超過 ${pct(glareMax)} 時不修補、改為警告重拍。`}
+                  />
+                </MetricGrid>
+              </ReadoutBlock>
+              {errors && (
+                <ReadoutBlock title="四角誤差">
+                  <DataTable
+                    label="四角各自的誤差"
+                    columns={['角', '誤差（px）']}
+                    rows={errors.map((e, i) => [CORNER_NAMES[i], e.toFixed(2)])}
+                  />
+                </ReadoutBlock>
+              )}
+            </>
+          )
+          const isImage = view !== 'steps'
+          return (
+            <Split
+              readout={readout}
+              main={
+                <MainView
+                  scroll={!isImage}
+                  toolbar={
                     <>
-                      <ImageViewer
-                        src={artifactUrl(img.image_id)}
-                        width={img.width}
-                        height={img.height}
-                        alt="找到的表格四角"
-                        overlay={(px) => (
-                          <>
-                            {truth && <Quad points={truth} color={TRUTH} px={px} dashed />}
-                            <Quad
-                              points={r.quad}
-                              color={FOUND}
-                              px={px}
-                              label={r.quad_method ? QUAD_METHOD_TEXT[r.quad_method] : undefined}
-                            />
-                          </>
-                        )}
-                      />
+                      <Segmented label="檢視" value={view} onChange={setView} options={VIEWS} />
+                      <span className="flex-1" />
+                      {view === 'output' && (
+                        <a
+                          href={artifactUrl(r.image.artifact_id)}
+                          download="workbench_label.png"
+                          className="text-primary-ink inline-flex items-center gap-1 text-xs hover:underline"
+                        >
+                          <Download className="size-3.5" aria-hidden />
+                          下載 PNG
+                        </a>
+                      )}
+                    </>
+                  }
+                  footer={
+                    view === 'located' ? (
                       <Legend
                         items={[
                           { color: FOUND, label: '找到的四角（實心圓為左上角）' },
                           { color: TRUTH, label: '真實四角（合成影像，虛線）' },
                         ]}
                       />
-                      {errors && (
-                        <DataTable
-                          label="四角各自的誤差"
-                          columns={['角', '誤差（px）']}
-                          rows={errors.map((e, i) => [CORNER_NAMES[i], e.toFixed(2)])}
-                        />
+                    ) : view === 'edges' ? (
+                      `縮小到短邊 ${current('detect_short_side')} px 後的 Canny 邊緣（門檻 ${current('canny_low')}／${current('canny_high')}，已膨脹 3×3）；輪廓與直線都在這張圖上找。`
+                    ) : view === 'glare' && rendered.data?.data?.enabled !== false ? (
+                      `紅色為光斑：亮度 ≥ ${current('glare_v_min')} 且飽和度 ≤ ${current('glare_s_max')}，再擴張 ${current('glare_dilate_px')} px；疊在校正後、修補前的影像上。`
+                    ) : undefined
+                  }
+                >
+                  {view === 'located' ? (
+                    <ImageViewer
+                      fill
+                      src={artifactUrl(img.image_id)}
+                      width={img.width}
+                      height={img.height}
+                      alt="找到的表格四角"
+                      overlay={(px) => (
+                        <>
+                          {truth && <Quad points={truth} color={TRUTH} px={px} dashed />}
+                          <Quad
+                            points={r.quad}
+                            color={FOUND}
+                            px={px}
+                            label={r.quad_method ? QUAD_METHOD_TEXT[r.quad_method] : undefined}
+                          />
+                        </>
                       )}
-                    </>
+                    />
                   ) : view === 'output' ? (
-                    <>
-                      <ImageViewer
-                        src={artifactUrl(r.image.artifact_id)}
-                        width={r.image.width}
-                        height={r.image.height}
-                        alt="前處理後的營養標示"
-                      />
-                      <a
-                        href={artifactUrl(r.image.artifact_id)}
-                        download="workbench_label.png"
-                        className="text-primary mt-2 inline-flex items-center gap-1 text-xs hover:underline"
-                      >
-                        <Download className="size-3.5" aria-hidden />
-                        下載 PNG
-                      </a>
-                    </>
+                    <ImageViewer
+                      fill
+                      src={artifactUrl(r.image.artifact_id)}
+                      width={r.image.width}
+                      height={r.image.height}
+                      alt="前處理後的營養標示"
+                    />
                   ) : view === 'steps' ? (
                     <StepsTable steps={r.steps} />
                   ) : rendered.error ? (
-                    <ErrorBox error={rendered.error} />
+                    <div className="p-4">
+                      <ErrorBox error={rendered.error} />
+                    </div>
                   ) : !rendered.data ? (
                     <EmptyState>載入中…</EmptyState>
                   ) : view === 'glare' && rendered.data.data?.enabled === false ? (
-                    <p className="text-muted text-sm">光斑步驟未啟用（參數「步驟開關」）。</p>
+                    <EmptyState>光斑步驟未啟用（參數「步驟開關」）。</EmptyState>
                   ) : rendered.data.image ? (
-                    <>
-                      <ImageViewer
-                        src={artifactUrl(rendered.data.image.image_id)}
-                        width={rendered.data.image.width}
-                        height={rendered.data.image.height}
-                        alt={view === 'edges' ? '定位用的 Canny 邊緣圖' : '光斑遮罩'}
-                      />
-                      <p className="text-muted mt-2 text-xs">
-                        {view === 'edges'
-                          ? `縮小到短邊 ${current('detect_short_side')} px 後的 Canny 邊緣（門檻 ${current('canny_low')}／${current('canny_high')}，已膨脹 3×3）；輪廓與直線都在這張圖上找。`
-                          : `紅色為光斑：亮度 ≥ ${current('glare_v_min')} 且飽和度 ≤ ${current('glare_s_max')}，再擴張 ${current('glare_dilate_px')} px；疊在校正後、修補前的影像上。`}
-                      </p>
-                    </>
+                    <ImageViewer
+                      fill
+                      src={artifactUrl(rendered.data.image.image_id)}
+                      width={rendered.data.image.width}
+                      height={rendered.data.image.height}
+                      alt={view === 'edges' ? '定位用的 Canny 邊緣圖' : '光斑遮罩'}
+                    />
                   ) : (
                     <EmptyState>沒有影像</EmptyState>
                   )}
-                </Card>
-              </Section>
-            </>
+                </MainView>
+              }
+            />
           )
         }}
       </AnalysisFrame>

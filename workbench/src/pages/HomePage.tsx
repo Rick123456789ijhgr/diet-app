@@ -1,47 +1,157 @@
-import { ChevronRight } from 'lucide-react'
+// 總覽：問候語、重點數字卡（第一張為橘色）、各模組的工具，以及使用規則。
+import { ArrowUpRight, FlaskConical, Hash, Lock, ScrollText } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 
-import { Badge, Card } from '@/components/ui/primitives'
+import { Badge } from '@/components/ui/primitives'
+import { useConfigSchemas } from '@/hooks/useConfigSchemas'
+import { cn } from '@/lib/cn'
 import { MODULES, modulePath, toolPath } from '@/nav'
 
+function greeting(hour: number) {
+  if (hour < 5) return '夜深了'
+  if (hour < 11) return '早安'
+  if (hour < 14) return '午安'
+  if (hour < 18) return '下午好'
+  return '晚安'
+}
+
 export function HomePage() {
+  const tools = MODULES.flatMap((m) => m.tools)
+  const ready = tools.filter((t) => t.ready).length
+  const started = MODULES.filter((m) => m.tools.length > 0).length
+  const schemas = useConfigSchemas()
+  const calibrate = schemas.data?.classes.flatMap((c) => c.fields.filter((f) => f.calibrate))
+
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <h1 className="text-lg font-semibold">開發工作台</h1>
-      <p className="text-muted mt-1 text-sm">
-        以合成影像或開發照片測試各模組、調整參數。開發工具只在本機開發模式啟用；不得讀取測試集。
-      </p>
-      <div className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
-        {MODULES.map((m) => (
-          <Card key={m.id} className="p-4">
-            <Link to={modulePath(m)} className="group flex items-start gap-3">
-              <m.icon className="text-primary mt-0.5 size-5 shrink-0" aria-hidden />
-              <div className="min-w-0 flex-1">
-                <div className="text-muted text-xs">{m.short}</div>
-                <div className="font-semibold group-hover:underline">{m.name}</div>
-                <p className="text-muted mt-1 text-sm">{m.description}</p>
-              </div>
-            </Link>
-            {m.tools.length > 0 && (
-              <ul className="border-card-border mt-3 border-t pt-2">
-                {m.tools.map((t) => (
-                  <li key={t.slug}>
-                    <Link
-                      to={toolPath(m, t)}
-                      className="hover:bg-hover flex items-center gap-2 rounded-md px-2 py-1.5 text-sm"
-                    >
-                      <t.icon className="text-muted size-4" aria-hidden />
-                      <span className="flex-1">{t.name}</span>
-                      {t.ready ? <Badge tone="primary">可用</Badge> : <Badge>階段 {t.stage}</Badge>}
-                      <ChevronRight className="text-muted size-4" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        ))}
+    <div className="h-full overflow-y-auto pr-3 pb-3">
+      <div className="px-1 pt-1 pb-5">
+        <h1 className="text-[30px] leading-tight font-semibold tracking-tight">
+          {greeting(new Date().getHours())}，歡迎回到開發工作台
+        </h1>
+        <p className="text-muted mt-1 text-[14px]">
+          以合成影像或開發照片測試各模組、調整參數。數字一律由 dietai 的確定性程式計算。
+        </p>
       </div>
+
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard hero label="可用工具" value={`${ready} / ${tools.length}`} note="模組一" />
+        <StatCard label="研究模組" value={`${started} / ${MODULES.length}`} note="已有工作台頁面" />
+        <StatCard
+          label="待校準門檻"
+          value={calibrate ? String(calibrate.length) : '…'}
+          note="只用 train／dev 校準"
+        />
+        <StatCard label="測試集" value="鎖定" note="splits/test" />
+      </div>
+
+      <div className="mt-3 grid gap-3 xl:grid-cols-[1fr_380px]">
+        <section className="bg-card shadow-card rounded-[20px] p-5">
+          <h2 className="mb-3 text-[16px] font-semibold">研究模組</h2>
+          <ul className="space-y-1">
+            {MODULES.map((m) => (
+              <li key={m.id} className="hover:bg-sunken group rounded-2xl px-3 py-2.5">
+                <Link to={modulePath(m)} className="flex items-start gap-3">
+                  <span className="bg-sunken group-hover:bg-card flex size-9 shrink-0 items-center justify-center rounded-full">
+                    <m.icon className="size-[18px]" aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{m.name}</span>
+                      <span className="text-muted text-xs">{m.short}</span>
+                      {m.tools.length === 0 && <Badge>規劃中</Badge>}
+                    </div>
+                    <p className="text-muted mt-0.5 text-xs">{m.description}</p>
+                  </div>
+                  <ArrowUpRight
+                    className="text-muted size-4 opacity-0 transition-opacity group-hover:opacity-100"
+                    aria-hidden
+                  />
+                </Link>
+                {m.tools.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5 pl-12">
+                    {m.tools.map((t) => (
+                      <Link
+                        key={t.slug}
+                        to={toolPath(m, t)}
+                        className="bg-sunken group-hover:bg-card hover:!bg-ink hover:text-on-ink inline-flex items-center gap-1.5 rounded-full py-1 pr-1 pl-2.5 text-xs transition-colors"
+                      >
+                        <t.icon className="size-3.5" aria-hidden />
+                        {t.name}
+                        {t.ready ? <Badge tone="ok">可用</Badge> : <Badge>階段 {t.stage}</Badge>}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="bg-card shadow-card rounded-[20px] p-5">
+          <h2 className="mb-3 text-[16px] font-semibold">使用規則</h2>
+          <div className="space-y-2">
+            <Rule icon={<Lock className="size-4" />} title="測試集鎖定">
+              拒絕讀取 <code className="font-mono text-xs">splits/test</code>；調門檻只用
+              train／dev。
+            </Rule>
+            <Rule icon={<FlaskConical className="size-4" />} title="門檻待校準">
+              這裡調出的數值僅供觀察；改預設值請匯出 JSON，附校準依據後在 PR 修改{' '}
+              <code className="font-mono text-xs">config.py</code>。
+            </Rule>
+            <Rule icon={<Hash className="size-4" />} title="數字由程式決定">
+              分數全部來自 <code className="font-mono text-xs">dietai</code> 的確定性程式，不採用
+              LLM 輸出的數字。
+            </Rule>
+            <Rule icon={<ScrollText className="size-4" />} title="任務書">
+              <code className="font-mono text-xs">docs/tasks/m1-preprocess.md</code>
+            </Rule>
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  note,
+  hero,
+}: {
+  label: string
+  value: string
+  note: string
+  hero?: boolean
+}) {
+  return (
+    <div className={cn('shadow-card rounded-[20px] p-5', hero ? 'hero-card' : 'bg-card')}>
+      <div className={cn('text-[13px]', hero ? 'text-white/85' : 'text-muted')}>{label}</div>
+      <div className="tabular mt-3 text-[30px] leading-none font-semibold tracking-tight">
+        {value}
+      </div>
+      <div className="mt-3">
+        <span
+          className={cn(
+            'inline-flex h-6 items-center rounded-full px-2.5 text-xs',
+            hero ? 'bg-white/20 text-white' : 'bg-sunken text-ink-2',
+          )}
+        >
+          {note}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function Rule({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+  return (
+    <div className="bg-sunken rounded-2xl px-4 py-3">
+      <div className="flex items-center gap-2 font-semibold">
+        {icon}
+        {title}
+      </div>
+      <p className="text-ink-2 mt-1 text-xs leading-relaxed">{children}</p>
     </div>
   )
 }

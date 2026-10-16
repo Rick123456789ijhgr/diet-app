@@ -7,13 +7,12 @@ import { artifactUrl, overrideBody, type ConfigOverride } from '@/api/client'
 import { BarList, ValueHistogram } from '@/components/charts'
 import { ConfigIO } from '@/components/ConfigIO'
 import { ImageViewer } from '@/components/ImageViewer'
-import { EmptyState, PageHeader, Section, Workspace } from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
 import { ErrorBox, Metric, MetricGrid } from '@/components/results'
 import {
   Badge,
   Button,
-  Card,
   Segmented,
   Tabs,
   TabsContent,
@@ -144,17 +143,19 @@ export function BatchPage() {
 
   const panel = (
     <Tabs defaultValue="folder">
-      <TabsList className="mb-4">
-        <TabsTrigger value="folder">{withIcon(FolderOpen, '資料夾')}</TabsTrigger>
-        <TabsTrigger value="params">
-          參數
-          {Object.keys(config).length > 0 && (
-            <Badge tone="accent">{Object.keys(config).length}</Badge>
-          )}
-        </TabsTrigger>
-        <TabsTrigger value="io">匯出入</TabsTrigger>
-      </TabsList>
-      <TabsContent value="folder">
+      <div className="bg-card sticky top-0 z-10 p-3 pb-2">
+        <TabsList>
+          <TabsTrigger value="folder">{withIcon(FolderOpen, '資料夾')}</TabsTrigger>
+          <TabsTrigger value="params">
+            參數
+            {Object.keys(config).length > 0 && (
+              <Badge tone="primary">{Object.keys(config).length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="io">匯出入</TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="folder" className="px-4 pt-2 pb-4">
         <form
           className="space-y-3 text-sm"
           onSubmit={(e) => {
@@ -169,7 +170,7 @@ export function BatchPage() {
               value={folder}
               onChange={(e) => setFolder(e.target.value)}
               placeholder="..\research\data\splits\dev"
-              className="border-card-border bg-card focus-visible:border-primary h-8 rounded-md border px-2 focus-visible:outline-none"
+              className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
             />
           </label>
           <p className="text-muted text-xs">
@@ -185,7 +186,7 @@ export function BatchPage() {
                 max={5000}
                 value={limit}
                 onChange={(e) => setLimit(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
-                className="border-card-border bg-card h-7 w-20 rounded-md border px-2 text-right"
+                className="border-card-border bg-sunken readout h-6 w-20 rounded-lg border px-1.5 text-right"
               />
             </label>
             <label className="flex items-center gap-2 text-xs">
@@ -210,10 +211,10 @@ export function BatchPage() {
           )}
         </form>
       </TabsContent>
-      <TabsContent value="params">
+      <TabsContent value="params" className="px-4 pt-2 pb-4">
         {quality && <ParamForm schema={quality} overrides={config} onChange={setConfig} />}
       </TabsContent>
-      <TabsContent value="io">
+      <TabsContent value="io" className="px-4 pt-2 pb-4">
         {quality && <ConfigIO schema={quality} overrides={config} onImport={setConfig} />}
       </TabsContent>
     </Tabs>
@@ -222,89 +223,168 @@ export function BatchPage() {
   const total = start?.type === 'start' ? start.total : 0
   const changed = ranWith !== null && JSON.stringify(ranWith) !== JSON.stringify(config)
 
+  const table = (
+    <table className="w-full text-[13px]" aria-label="每張影像的品質檢查結果">
+      <thead className="bg-card sticky top-0">
+        <tr className="text-muted bg-sunken text-left text-xs">
+          {['檔案', '模糊分數', '過暗', '過亮', '短邊', '通過', '警告'].map((c) => (
+            <th key={c} className="px-2 py-2 font-medium first:rounded-l-xl last:rounded-r-xl">
+              {c}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.slice(0, MAX_TABLE_ROWS).map((r) => (
+          <tr
+            key={r.index}
+            onClick={() => r.error === null && setSelected(r)}
+            aria-selected={selected?.index === r.index}
+            className={cn(
+              'border-card-border tabular cursor-pointer border-b last:border-0',
+              selected?.index === r.index
+                ? 'bg-primary-soft shadow-[inset_3px_0_0_var(--primary)]'
+                : 'hover:bg-hover',
+            )}
+          >
+            <td className="px-2 py-1">{r.file}</td>
+            {r.error !== null ? (
+              <td colSpan={6} className="text-danger px-2 py-1 text-xs">
+                {r.error}
+              </td>
+            ) : (
+              <>
+                <td className="readout px-2 text-xs">{r.blur_score?.toFixed(0)}</td>
+                <td className="readout px-2 text-xs">{pct(r.dark_ratio ?? 0)}</td>
+                <td className="readout px-2 text-xs">{pct(r.bright_ratio ?? 0)}</td>
+                <td className="readout px-2 text-xs">{r.short_side}</td>
+                <td className={cn('px-2', r.passed ? 'text-ok' : 'text-danger')}>
+                  {r.passed ? '通過' : '未通過'}
+                </td>
+                <td className="px-2 text-xs">
+                  {(r.warnings ?? []).map(warningText).join('、') || '—'}
+                </td>
+              </>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+
   return (
-    <Workspace panel={panel}>
-      <PageHeader
-        title="資料夾批次"
-        description="對資料夾內的照片批次執行品質檢查，看目前門檻下的通過率與分數分布；點選表格列可檢視單張。"
-      />
-      {stream.error ? <ErrorBox error={stream.error} className="mb-4" /> : null}
-      {stream.status === 'idle' ? (
-        <EmptyState icon={<FolderOpen className="size-8" aria-hidden />}>
-          在左側「資料夾」輸入路徑後按「執行」。
-        </EmptyState>
-      ) : (
-        <>
-          {running && (
+    <Workspace
+      panel={panel}
+      title="資料夾批次"
+      description="對資料夾內的照片批次執行品質檢查，看目前門檻下的通過率與分數分布；點選表格列可檢視單張。"
+      aside={
+        running ? (
+          <Badge tone="primary" aria-live="polite">
+            處理中 {rows.length} / {total} 張
+          </Badge>
+        ) : changed ? (
+          <Badge tone="warn">參數已修改，按「執行」以新的參數重新計算。</Badge>
+        ) : undefined
+      }
+    >
+      <div className="flex h-full min-h-0 flex-col">
+        {running && (
+          <div
+            className="bg-card mx-1 mb-3 h-1.5 shrink-0 overflow-hidden rounded-full"
+            role="progressbar"
+            aria-label="處理進度"
+            aria-valuenow={rows.length}
+            aria-valuemax={total}
+          >
             <div
-              className="mb-4"
-              role="progressbar"
-              aria-valuenow={rows.length}
-              aria-valuemax={total}
-            >
-              <div className="text-muted mb-1 text-xs">
-                處理中 {rows.length} / {total} 張
-              </div>
-              <div className="bg-hover h-1.5 overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-full transition-all"
-                  style={{ width: `${total ? (rows.length / total) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {changed && !running && (
-            <p className="text-accent mb-3 text-xs">參數已修改，按「執行」以新的參數重新計算。</p>
-          )}
-          {start && total === 0 ? (
-            <EmptyState>資料夾中沒有影像。</EmptyState>
-          ) : (
-            <>
-              <MetricGrid>
-                <Metric label="張數" value={String(summary?.count ?? rows.length)} />
-                <Metric
-                  label="通過率"
-                  value={summary?.pass_rate != null ? pct(summary.pass_rate) : '—'}
-                />
-                {Object.entries(summary?.warning_counts ?? {}).map(([code, n]) => (
-                  <Metric key={code} label={warningText(code)} value={String(n)} />
-                ))}
-                {summary && summary.failed > 0 && (
-                  <Metric label="讀取失敗" value={String(summary.failed)} good={false} />
-                )}
-              </MetricGrid>
-              <Section title="檢視">
-                <Segmented
-                  label="檢視"
-                  value={view}
-                  onChange={setView}
-                  options={[
-                    { value: 'table', label: withIcon(Table, '每張結果') },
-                    { value: 'dist', label: withIcon(BarChart3, '分數分布') },
-                    { value: 'warn', label: withIcon(TriangleAlert, '警告次數') },
-                  ]}
-                  className="mb-3"
-                />
-                <Card className="p-3">
-                  {view === 'dist' ? (
+              className="bg-primary h-full rounded-full transition-all"
+              style={{ width: `${total ? (rows.length / total) * 100 : 0}%` }}
+            />
+          </div>
+        )}
+        {stream.error ? (
+          <div className="border-card-border shrink-0 border-b p-3">
+            <ErrorBox error={stream.error} />
+          </div>
+        ) : null}
+        {stream.status === 'idle' ? (
+          <EmptyState icon={<FolderOpen className="size-8" aria-hidden />}>
+            在左側「資料夾」輸入路徑後按「執行」。
+          </EmptyState>
+        ) : start && total === 0 ? (
+          <EmptyState>資料夾中沒有影像。</EmptyState>
+        ) : (
+          <div className="min-h-0 flex-1">
+            <Split
+              readout={
+                <ReadoutBlock title="彙整">
+                  <MetricGrid>
+                    <Metric label="張數" value={String(summary?.count ?? rows.length)} />
+                    <Metric
+                      label="通過率"
+                      value={summary?.pass_rate != null ? pct(summary.pass_rate) : '—'}
+                    />
+                    {Object.entries(summary?.warning_counts ?? {}).map(([code, n]) => (
+                      <Metric key={code} label={warningText(code)} value={String(n)} />
+                    ))}
+                    {summary && summary.failed > 0 && (
+                      <Metric label="讀取失敗" value={String(summary.failed)} good={false} />
+                    )}
+                  </MetricGrid>
+                </ReadoutBlock>
+              }
+              main={
+                <MainView
+                  scroll={view !== 'table'}
+                  toolbar={
                     <>
                       <Segmented
-                        label="指標"
-                        value={dist}
-                        onChange={setDist}
-                        options={(Object.keys(DIST) as DistKey[]).map((k) => ({
-                          value: k,
-                          label: DIST[k].label,
-                        }))}
-                        className="mb-2"
+                        label="檢視"
+                        value={view}
+                        onChange={setView}
+                        options={[
+                          { value: 'table', label: withIcon(Table, '每張結果') },
+                          { value: 'dist', label: withIcon(BarChart3, '分數分布') },
+                          { value: 'warn', label: withIcon(TriangleAlert, '警告次數') },
+                        ]}
                       />
-                      <ValueHistogram
-                        label={`${DIST[dist].label}的分布與目前門檻`}
-                        xLabel={DIST[dist].label}
-                        values={ok.map((r) => r[dist] ?? 0)}
-                        threshold={threshold(DIST[dist].threshold)}
-                      />
+                      {view === 'dist' && (
+                        <Segmented
+                          label="指標"
+                          value={dist}
+                          onChange={setDist}
+                          options={(Object.keys(DIST) as DistKey[]).map((k) => ({
+                            value: k,
+                            label: DIST[k].label,
+                          }))}
+                        />
+                      )}
+                      <span className="flex-1" />
+                      {view === 'table' && (
+                        <button
+                          type="button"
+                          onClick={() => downloadCsv(rows)}
+                          className="text-primary-ink inline-flex items-center gap-1 text-xs hover:underline"
+                        >
+                          <Download className="size-3.5" aria-hidden />
+                          下載 CSV
+                        </button>
+                      )}
                     </>
+                  }
+                  footer={
+                    view === 'table' && rows.length > MAX_TABLE_ROWS
+                      ? `只顯示前 ${MAX_TABLE_ROWS} 張；完整結果請下載 CSV。`
+                      : undefined
+                  }
+                >
+                  {view === 'dist' ? (
+                    <ValueHistogram
+                      label={`${DIST[dist].label}的分布與目前門檻`}
+                      xLabel={DIST[dist].label}
+                      values={ok.map((r) => r[dist] ?? 0)}
+                      threshold={threshold(DIST[dist].threshold)}
+                    />
                   ) : view === 'warn' ? (
                     <BarList
                       label="各警告的張數"
@@ -316,86 +396,29 @@ export function BatchPage() {
                     />
                   ) : (
                     <>
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-muted text-xs">點選一列即可在下方檢視該影像。</span>
-                        <button
-                          type="button"
-                          onClick={() => downloadCsv(rows)}
-                          className="text-primary inline-flex items-center gap-1 text-xs hover:underline"
-                        >
-                          <Download className="size-3.5" aria-hidden />
-                          下載 CSV
-                        </button>
+                      <div
+                        className={cn(
+                          'overflow-auto',
+                          selected ? 'max-h-[40%] shrink-0' : 'flex-1',
+                        )}
+                      >
+                        {table}
                       </div>
-                      <div className="max-h-80 overflow-auto">
-                        <table className="w-full text-sm" aria-label="每張影像的品質檢查結果">
-                          <thead className="bg-card sticky top-0">
-                            <tr className="text-muted border-card-border border-b text-left text-xs">
-                              {['檔案', '模糊分數', '過暗', '過亮', '短邊', '通過', '警告'].map(
-                                (c) => (
-                                  <th key={c} className="py-2 pr-3 font-medium">
-                                    {c}
-                                  </th>
-                                ),
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.slice(0, MAX_TABLE_ROWS).map((r) => (
-                              <tr
-                                key={r.index}
-                                onClick={() => r.error === null && setSelected(r)}
-                                aria-selected={selected?.index === r.index}
-                                className={cn(
-                                  'border-card-border tabular cursor-pointer border-b last:border-0',
-                                  selected?.index === r.index
-                                    ? 'bg-primary-soft'
-                                    : 'hover:bg-hover',
-                                )}
-                              >
-                                <td className="py-1.5 pr-3">{r.file}</td>
-                                {r.error !== null ? (
-                                  <td colSpan={6} className="text-danger py-1.5 text-xs">
-                                    {r.error}
-                                  </td>
-                                ) : (
-                                  <>
-                                    <td className="pr-3">{r.blur_score?.toFixed(0)}</td>
-                                    <td className="pr-3">{pct(r.dark_ratio ?? 0)}</td>
-                                    <td className="pr-3">{pct(r.bright_ratio ?? 0)}</td>
-                                    <td className="pr-3">{r.short_side}</td>
-                                    <td
-                                      className={cn(
-                                        'pr-3',
-                                        r.passed ? 'text-primary' : 'text-danger',
-                                      )}
-                                    >
-                                      {r.passed ? '通過' : '未通過'}
-                                    </td>
-                                    <td className="text-xs">
-                                      {(r.warnings ?? []).map(warningText).join('、') || '—'}
-                                    </td>
-                                  </>
-                                )}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      {rows.length > MAX_TABLE_ROWS && (
-                        <p className="text-muted mt-2 text-xs">
-                          只顯示前 {MAX_TABLE_ROWS} 張；完整結果請下載 CSV。
+                      {selected ? (
+                        <Detail row={selected} config={ranWith ?? config} />
+                      ) : (
+                        <p className="text-muted shrink-0 px-1 pt-3 text-xs">
+                          點選一列即可在下方檢視該影像。
                         </p>
                       )}
-                      {selected && <Detail row={selected} config={ranWith ?? config} />}
                     </>
                   )}
-                </Card>
-              </Section>
-            </>
-          )}
-        </>
-      )}
+                </MainView>
+              }
+            />
+          </div>
+        )}
+      </div>
     </Workspace>
   )
 }
@@ -411,9 +434,9 @@ function Detail({ row, config }: { row: Row; config: ConfigOverride }) {
   )
   const shown = view === 'original' ? image.data : rendered.data?.image
   return (
-    <div className="border-card-border mt-4 border-t pt-4">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{row.file}</h3>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-2 px-1 py-2.5">
+        <h3 className="readout truncate text-xs font-medium">{row.file}</h3>
         <Segmented
           label="單張檢視"
           value={view}
@@ -426,11 +449,14 @@ function Detail({ row, config }: { row: Row; config: ConfigOverride }) {
         />
       </div>
       {image.error || rendered.error ? (
-        <ErrorBox error={image.error ?? rendered.error} />
+        <div className="px-4 pt-2 pb-4">
+          <ErrorBox error={image.error ?? rendered.error} />
+        </div>
       ) : !shown ? (
         <EmptyState>載入中…</EmptyState>
       ) : (
         <ImageViewer
+          fill
           src={artifactUrl(shown.image_id)}
           width={shown.width}
           height={shown.height}

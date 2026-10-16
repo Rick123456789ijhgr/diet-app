@@ -1,18 +1,13 @@
 // 輕量 SVG 圖表：折線、長條（含信賴區間）、堆疊長條、熱度圖、分箱直方圖。
-// 顏色只用主題變數與 PALETTE（靛藍、紫、天藍、粉、灰階，不用綠與橘），支援深色模式。
+// 顏色只用主題變數與 PALETTE，支援深色模式。
 // 數值由後端計算；這裡只負責畫圖（直方圖的分箱屬於畫圖）。
 import { useState, type ReactNode } from 'react'
 
-export const PALETTE = [
-  '#4f46e5', // 靛藍
-  '#8b5cf6', // 紫
-  '#0ea5e9', // 天藍
-  '#ec4899', // 粉
-  '#64748b', // 灰
-  '#a5b4fc', // 淺靛藍
-  '#c4b5fd', // 淺紫
-  '#1e3a8a', // 深藍
-]
+/**
+ * 系列色：經色盲模擬驗證的固定順序（橘、藍、青綠、黃、洋紅、綠、紫、紅），深淺色各有一組，
+ * 定義在 index.css。依序取用、不循環；超過 8 個系列應合併為「其他」或分圖。
+ */
+export const PALETTE = Array.from({ length: 8 }, (_, i) => `var(--series-${i + 1})`)
 
 const W = 640
 const PAD = { left: 52, right: 16, top: 16, bottom: 36 }
@@ -219,7 +214,7 @@ export function BarList({
                   y={cy - 8}
                   width={r.value * width}
                   height={16}
-                  rx={3}
+                  rx={8}
                   className="fill-primary"
                 />
                 {r.low != null && r.high != null && (
@@ -354,7 +349,7 @@ export function Heatmap({
                   y={top + i * 26 + 1}
                   width={cell - 2}
                   height={24}
-                  rx={3}
+                  rx={6}
                   fill={rate == null ? 'var(--hover)' : 'var(--primary)'}
                   fillOpacity={rate == null ? 1 : 0.12 + rate * 0.88}
                 >
@@ -424,7 +419,7 @@ export function ValueHistogram({
             y={y(c)}
             width={Math.max(1, x(lo + step) - x(lo) - 2)}
             height={height - PAD.bottom - y(c)}
-            className={hover === i ? 'fill-accent' : 'fill-primary'}
+            className={hover === i ? 'fill-primary-ink' : 'fill-primary'}
             onMouseEnter={() => setHover(i)}
             onMouseLeave={() => setHover(null)}
           >
@@ -452,7 +447,7 @@ export function ChartLegend({ items }: { items: { color: string; label: ReactNod
     <p className="text-muted mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
       {items.map((i, k) => (
         <span key={k} className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-sm" style={{ background: i.color }} />
+          <span className="inline-block size-2.5 rounded-full" style={{ background: i.color }} />
           {i.label}
         </span>
       ))}

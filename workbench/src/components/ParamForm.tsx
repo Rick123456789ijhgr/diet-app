@@ -37,7 +37,7 @@ export function ParamForm({
       </div>
       {[...groups].map(([group, fields]) => (
         <fieldset key={group} className="space-y-3">
-          <legend className="text-muted mb-1 text-xs font-semibold">{groupText(group)}</legend>
+          <legend className="text-ink mb-1.5 text-xs font-semibold">{groupText(group)}</legend>
           {fields.map((f) => (
             <FieldRow
               key={f.name}
@@ -70,7 +70,7 @@ function FieldRow({
   const id = `param-${field.name}`
   const label = (
     <div className="flex min-w-0 items-center gap-1.5">
-      {changed && <span className="bg-accent size-1.5 shrink-0 rounded-full" aria-hidden />}
+      {changed && <span className="bg-primary size-1.5 shrink-0 rounded-full" aria-hidden />}
       <label htmlFor={id} className="truncate text-sm">
         {field.label}
       </label>
@@ -106,7 +106,7 @@ function FieldRow({
   const num = value as number
   const hasRange = field.min !== undefined && field.max !== undefined
   return (
-    <div className={cn('space-y-1.5', error && 'bg-danger-soft -mx-2 rounded-md px-2 py-1')}>
+    <div className={cn('space-y-1.5', error && 'bg-danger-soft -mx-2 rounded-lg px-2 py-1')}>
       <div className="flex items-center justify-between gap-2">
         {label}
         <div className="flex items-center gap-2">

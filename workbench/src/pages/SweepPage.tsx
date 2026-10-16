@@ -8,11 +8,11 @@ import { LineChart, PALETTE, StackedBars } from '@/components/charts'
 import { ConfigIO } from '@/components/ConfigIO'
 import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { LadderControls } from '@/components/LadderControls'
-import { EmptyState, PageHeader, Section, Workspace } from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
 import { ToolPanel } from '@/components/ToolPanel'
-import { Badge, Card, DraftNumberInput, Segmented } from '@/components/ui/primitives'
+import { Badge, DraftNumberInput, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass, useConfigSchemas } from '@/hooks/useConfigSchemas'
@@ -143,7 +143,7 @@ export function SweepPage() {
           aria-label="退化種類"
           value={axisKey}
           onChange={(e) => setAxis(e.target.value)}
-          className="border-card-border bg-card h-8 rounded-md border px-2"
+          className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
         >
           {SWEEP_AXES.map((a) => (
             <option key={a.key} value={a.key}>
@@ -296,87 +296,96 @@ export function SweepPage() {
       : undefined
 
   return (
-    <Workspace panel={panel}>
-      <PageHeader
-        title="參數掃描"
-        description="一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；條碼比較只用原圖與逐步升級的成功率。"
-        aside={
-          <div className="flex items-center gap-2">
-            {(pipeline.pending || analysis.busy) && (
-              <Badge tone="primary" aria-live="polite">
-                計算中…
-              </Badge>
-            )}
-            <Segmented
-              label="評估對象"
-              value={target}
-              onChange={switchTarget}
-              options={[
-                { value: 'quality', label: withIcon(ScanSearch, '品質檢查') },
-                { value: 'barcode', label: withIcon(Barcode, '條碼解碼') },
-              ]}
+    <Workspace
+      panel={panel}
+      title="參數掃描"
+      description="一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；條碼比較只用原圖與逐步升級的成功率。"
+      aside={
+        <div className="flex items-center gap-2">
+          {(pipeline.pending || analysis.busy) && (
+            <Badge tone="primary" aria-live="polite">
+              計算中…
+            </Badge>
+          )}
+          <Segmented
+            label="評估對象"
+            value={target}
+            onChange={switchTarget}
+            options={[
+              { value: 'quality', label: withIcon(ScanSearch, '品質檢查') },
+              { value: 'barcode', label: withIcon(Barcode, '條碼解碼') },
+            ]}
+          />
+        </div>
+      }
+    >
+      <div className="flex h-full min-h-0 flex-col">
+        {analysis.query.error && (
+          <div className="border-card-border shrink-0 border-b p-3">
+            <ErrorBox
+              error={analysis.query.error}
+              hint={analysis.configError ? '請在左側參數修正標紅的欄位。' : undefined}
             />
           </div>
-        }
-      />
-      {analysis.query.error && (
-        <ErrorBox
-          error={analysis.query.error}
-          className="mb-4"
-          hint={analysis.configError ? '請在左側參數修正標紅的欄位。' : undefined}
-        />
-      )}
-      {!qualityResult && !barcodeResult ? (
-        !analysis.query.error && <EmptyState>計算中…</EmptyState>
-      ) : (
-        <div className={cn('transition-opacity', analysis.stale && 'opacity-60')}>
-          {qualityResult && quality ? (
-            <QualityResultView
-              r={qualityResult}
-              // 標籤用算出這份結果的退化種類，而不是畫面上最新選的
-              axisLabel={axisOf(qualityResult.axis).label}
-              metric={metric}
-              setMetric={setMetric}
-              view={view}
-              setView={setView}
-              threshold={(name) =>
-                // 門檻用算出這條曲線的那組參數，而不是畫面上最新的參數
-                valueOf(
-                  quality.fields.find((f) => f.name === name)!,
-                  (analysis.shown?.config as { config?: ConfigOverride } | undefined)?.config ?? {},
-                ) as number
-              }
-            />
-          ) : barcodeResult ? (
-            <BarcodeResultView
-              r={barcodeResult}
-              axisLabel={axisOf(barcodeResult.axis).label}
-              view={view}
-              setView={setView}
-            />
-          ) : null}
-        </div>
-      )}
+        )}
+        {!qualityResult && !barcodeResult ? (
+          !analysis.query.error && <EmptyState>計算中…</EmptyState>
+        ) : (
+          <div className={cn('min-h-0 flex-1 transition-opacity', analysis.stale && 'opacity-60')}>
+            {qualityResult && quality ? (
+              <QualityResultView
+                r={qualityResult}
+                // 標籤用算出這份結果的退化種類，而不是畫面上最新選的
+                axisLabel={axisOf(qualityResult.axis).label}
+                metric={metric}
+                setMetric={setMetric}
+                view={view}
+                setView={setView}
+                threshold={(name) =>
+                  // 門檻用算出這條曲線的那組參數，而不是畫面上最新的參數
+                  valueOf(
+                    quality.fields.find((f) => f.name === name)!,
+                    (analysis.shown?.config as { config?: ConfigOverride } | undefined)?.config ??
+                      {},
+                  ) as number
+                }
+              />
+            ) : barcodeResult ? (
+              <BarcodeResultView
+                r={barcodeResult}
+                axisLabel={axisOf(barcodeResult.axis).label}
+                view={view}
+                setView={setView}
+              />
+            ) : null}
+          </div>
+        )}
+      </div>
     </Workspace>
   )
 }
 
+/** 最弱、中間、最強三個等級的縮圖（讀數欄，直向排列）。 */
 function Thumbs({ thumbs, axisLabel }: { thumbs: Thumb[]; axisLabel: string }) {
   return (
-    <div className="mb-3 flex flex-wrap justify-center gap-4">
-      {thumbs.map((t) => (
-        <figure key={t.image_id} className="text-center">
-          <img
-            src={artifactUrl(t.image_id)}
-            alt={`${axisLabel} ${Number(t.level.toPrecision(3))} 的影像`}
-            className="bg-hover h-32 rounded-md object-contain"
-          />
-          <figcaption className="text-muted tabular mt-1 text-xs">
-            {axisLabel} = {Number(t.level.toPrecision(3))}
-          </figcaption>
-        </figure>
-      ))}
-    </div>
+    <ReadoutBlock title="退化樣本">
+      <div className="space-y-2">
+        {thumbs.map((t) => (
+          <figure key={t.image_id} className="bg-sunken overflow-hidden rounded-2xl">
+            <div className="viewport-grid">
+              <img
+                src={artifactUrl(t.image_id)}
+                alt={`${axisLabel} ${Number(t.level.toPrecision(3))} 的影像`}
+                className="h-28 w-full object-contain"
+              />
+            </div>
+            <figcaption className="text-muted tabular px-3 py-1.5 text-xs">
+              {axisLabel} = {Number(t.level.toPrecision(3))}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </ReadoutBlock>
   )
 }
 
@@ -400,29 +409,52 @@ function QualityResultView({
   const m = METRICS[metric]
   const isRatio = metric === 'dark_ratio' || metric === 'bright_ratio'
   return (
-    <>
-      <MetricGrid>
-        {Object.entries(r.triggers).map(([code, level]) => (
-          <Metric
-            key={code}
-            label={warningText(code)}
-            value={level === null ? '未觸發' : `≥ ${Number(level.toPrecision(3))}`}
-            help={`${axisLabel}達到此等級時首次出現「${warningText(code)}」。`}
-          />
-        ))}
-      </MetricGrid>
-      <Section title="檢視">
-        <Segmented
-          label="檢視"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'chart', label: withIcon(ChartLine, '指標曲線') },
-            { value: 'table', label: withIcon(Table, '明細') },
-          ]}
-          className="mb-3"
-        />
-        <Card className="p-3">
+    <Split
+      readout={
+        <>
+          <ReadoutBlock title="首次觸發的等級">
+            <MetricGrid>
+              {Object.entries(r.triggers).map(([code, level]) => (
+                <Metric
+                  key={code}
+                  label={warningText(code)}
+                  value={level === null ? '未觸發' : `≥ ${Number(level.toPrecision(3))}`}
+                  help={`${axisLabel}達到此等級時首次出現「${warningText(code)}」。`}
+                />
+              ))}
+            </MetricGrid>
+          </ReadoutBlock>
+          <Thumbs thumbs={r.thumbs} axisLabel={axisLabel} />
+        </>
+      }
+      main={
+        <MainView
+          scroll
+          toolbar={
+            <>
+              <Segmented
+                label="檢視"
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: 'chart', label: withIcon(ChartLine, '指標曲線') },
+                  { value: 'table', label: withIcon(Table, '明細') },
+                ]}
+              />
+              {view !== 'table' && (
+                <Segmented
+                  label="圖表指標"
+                  value={metric}
+                  onChange={setMetric}
+                  options={(Object.keys(METRICS) as MetricKey[]).map((k) => ({
+                    value: k,
+                    label: METRICS[k].label,
+                  }))}
+                />
+              )}
+            </>
+          }
+        >
           {view === 'table' ? (
             <DataTable
               label="每個退化等級的品質檢查結果"
@@ -439,17 +471,6 @@ function QualityResultView({
             />
           ) : (
             <>
-              <Thumbs thumbs={r.thumbs} axisLabel={axisLabel} />
-              <Segmented
-                label="圖表指標"
-                value={metric}
-                onChange={setMetric}
-                options={(Object.keys(METRICS) as MetricKey[]).map((k) => ({
-                  value: k,
-                  label: METRICS[k].label,
-                }))}
-                className="mb-2"
-              />
               <LineChart
                 label={`${m.label}隨${axisLabel}變化的折線圖`}
                 xLabel={axisLabel}
@@ -475,9 +496,9 @@ function QualityResultView({
               />
             </>
           )}
-        </Card>
-      </Section>
-    </>
+        </MainView>
+      }
+    />
   )
 }
 
@@ -497,39 +518,50 @@ function BarcodeResultView({
   const gain = r.overall.ladder - r.overall.raw
   const rungs = [...new Set(r.rung_counts.map((c) => c.rung))]
   return (
-    <>
-      <MetricGrid>
-        <Metric
-          label="只用原圖"
-          value={pct(r.overall.raw)}
-          delta={fail(r.first_failure.raw)}
-          help="所有等級與樣本的整體成功率；首次失敗為成功率首次低於 100% 的等級。"
-        />
-        <Metric
-          label="逐步升級"
-          value={pct(r.overall.ladder)}
-          delta={fail(r.first_failure.ladder)}
-        />
-        <Metric
-          label="提升"
-          value={`${gain >= 0 ? '+' : '−'}${pct(Math.abs(gain))}`}
-          good={gain > 0 ? true : gain < 0 ? false : undefined}
-          delta="逐步升級減只用原圖"
-        />
-      </MetricGrid>
-      <Section title="檢視">
-        <Segmented
-          label="檢視"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'chart', label: withIcon(TrendingUp, '成功率') },
-            { value: 'rung', label: withIcon(Layers, '成功階') },
-            { value: 'table', label: withIcon(Table, '明細') },
-          ]}
-          className="mb-3"
-        />
-        <Card className="p-3">
+    <Split
+      readout={
+        <>
+          <ReadoutBlock title="整體成功率">
+            <MetricGrid>
+              <Metric
+                label="只用原圖"
+                value={pct(r.overall.raw)}
+                delta={fail(r.first_failure.raw)}
+                help="所有等級與樣本的整體成功率；首次失敗為成功率首次低於 100% 的等級。"
+              />
+              <Metric
+                label="逐步升級"
+                value={pct(r.overall.ladder)}
+                delta={fail(r.first_failure.ladder)}
+              />
+              <Metric
+                label="提升"
+                value={`${gain >= 0 ? '+' : '−'}${pct(Math.abs(gain))}`}
+                good={gain > 0 ? true : gain < 0 ? false : undefined}
+                delta="逐步升級減只用原圖"
+                wide
+              />
+            </MetricGrid>
+          </ReadoutBlock>
+          <Thumbs thumbs={r.thumbs} axisLabel={axisLabel} />
+        </>
+      }
+      main={
+        <MainView
+          scroll
+          toolbar={
+            <Segmented
+              label="檢視"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'chart', label: withIcon(TrendingUp, '成功率') },
+                { value: 'rung', label: withIcon(Layers, '成功階') },
+                { value: 'table', label: withIcon(Table, '明細') },
+              ]}
+            />
+          }
+        >
           {view === 'table' ? (
             <DataTable
               label="每個等級與樣本的解碼結果"
@@ -545,7 +577,7 @@ function BarcodeResultView({
             />
           ) : view === 'rung' ? (
             rungs.length === 0 ? (
-              <p className="text-muted text-sm">逐步升級沒有任何成功的樣本。</p>
+              <EmptyState>逐步升級沒有任何成功的樣本。</EmptyState>
             ) : (
               <StackedBars
                 label="各等級中逐步升級成功於哪一階的樣本數"
@@ -561,7 +593,6 @@ function BarcodeResultView({
             )
           ) : (
             <>
-              <Thumbs thumbs={r.thumbs} axisLabel={axisLabel} />
               <LineChart
                 label={`兩種方法的成功率隨${axisLabel}變化`}
                 xLabel={axisLabel}
@@ -578,8 +609,8 @@ function BarcodeResultView({
               />
             </>
           )}
-        </Card>
-      </Section>
-    </>
+        </MainView>
+      }
+    />
   )
 }

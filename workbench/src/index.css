@@ -3,51 +3,120 @@
 /* 深色模式以 <html class="dark"> 切換（見 index.html 與 ThemeToggle） */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* 色系：靛藍主色、紫輔色；狀態色只用靛藍（正常）與紅（異常），不使用綠與橘 */
+/*
+ * 柔和卡片風（參考 Finexy／Wink 儀表板）：
+ * - 淺灰畫布上的白色大圓角卡片（20px），幾乎不用陰影；導覽與分段按鈕都是膠囊形。
+ * - 主要按鈕與選中的導覽為黑色；強調色為橘（primary：滑桿、焦點、重點數字卡）。
+ * - 狀態色 ok／warn／danger 一律搭配圖示與文字，不單靠顏色；趨勢以綠／紅小膠囊標示。
+ * - 圖表系列色（series-1…8）為經色盲驗證的固定順序（橘在第一），依序取用、不循環（見 charts.tsx）。
+ */
 :root {
-  --canvas: #f1f3f7;
+  --canvas: #efefed;
   --card: #ffffff;
-  --card-border: #e7eaf0;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --hover: #f3f4f8;
-  --primary: #4f46e5;
-  --primary-soft: #eef0ff;
-  --accent: #8b5cf6;
+  --sunken: #f5f5f4;
+  --card-border: #ebebea;
+  --line-strong: #d6d6d3;
+  --ink: #141414;
+  --ink-2: #4a4a48;
+  --muted: #74736f;
+  --hover: #f1f1f0;
+  --on-ink: #ffffff;
+  --primary: #f05a28;
+  --primary-ink: #c2410c;
+  --primary-soft: #fff0ea;
+  --primary-grad: linear-gradient(135deg, #f26b3a 0%, #ea4c1d 100%);
+  --ok: #15803d;
+  --ok-mark: #22c55e;
+  --ok-soft: #e8f7ed;
+  --warn: #a16207;
+  --warn-mark: #eab308;
+  --warn-soft: #fdf5d8;
   --danger: #dc2626;
+  --danger-mark: #ef4444;
   --danger-soft: #fdecec;
-  --shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 14px -6px rgb(15 23 42 / 0.08);
+  --viewport: #f3f3f2;
+  --viewport-dot: #dcdcd9;
+  --overlay-halo: rgb(255 255 255 / 0.9);
+  --shadow: 0 1px 2px rgb(20 20 20 / 0.03);
+  --series-1: #eb6834;
+  --series-2: #2a78d6;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  color-scheme: light;
 }
 
 .dark {
-  --canvas: #0b0d12;
-  --card: #151922;
-  --card-border: #232838;
-  --ink: #e6e9f2;
-  --muted: #94a3b8;
-  --hover: #1e2330;
-  --primary: #818cf8;
-  --primary-soft: #23264a;
-  --accent: #a78bfa;
+  --canvas: #0c0c0d;
+  --card: #18181a;
+  --sunken: #202022;
+  --card-border: #29292c;
+  --line-strong: #3a3a3e;
+  --ink: #f2f2f0;
+  --ink-2: #c4c4c0;
+  --muted: #8e8d89;
+  --hover: #242427;
+  --on-ink: #141414;
+  --primary: #f26b3a;
+  --primary-ink: #ff8a5c;
+  --primary-soft: #3a1d12;
+  --primary-grad: linear-gradient(135deg, #f26b3a 0%, #d9481a 100%);
+  --ok: #4ade80;
+  --ok-mark: #22c55e;
+  --ok-soft: #12261a;
+  --warn: #facc15;
+  --warn-mark: #eab308;
+  --warn-soft: #2b2410;
   --danger: #f87171;
-  --danger-soft: #3a1d22;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --danger-mark: #ef4444;
+  --danger-soft: #331a1a;
+  --viewport: #111112;
+  --viewport-dot: #26262a;
+  --overlay-halo: rgb(15 15 16 / 0.85);
+  --shadow: none;
+  --series-1: #d95926;
+  --series-2: #3987e5;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  color-scheme: dark;
 }
 
 @theme inline {
   --color-canvas: var(--canvas);
   --color-card: var(--card);
+  --color-sunken: var(--sunken);
   --color-card-border: var(--card-border);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-hover: var(--hover);
+  --color-on-ink: var(--on-ink);
   --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
   --color-primary-soft: var(--primary-soft);
-  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-ok-mark: var(--ok-mark);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-mark: var(--warn-mark);
+  --color-warn-soft: var(--warn-soft);
   --color-danger: var(--danger);
+  --color-danger-mark: var(--danger-mark);
   --color-danger-soft: var(--danger-soft);
+  --color-viewport: var(--viewport);
   --shadow-card: var(--shadow);
-  --font-sans: 'Noto Sans TC', ui-sans-serif, system-ui, 'Microsoft JhengHei', sans-serif;
+  --font-sans:
+    'Inter', 'Noto Sans TC', ui-sans-serif, system-ui, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+  --font-mono:
+    'Cascadia Mono', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
 }
 
 html,
@@ -60,10 +129,31 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-sans);
+  font-size: 13px;
   -webkit-font-smoothing: antialiased;
 }
 
 /* 數字對齊，方便比較 */
-.tabular {
+.tabular,
+.readout {
   font-variant-numeric: tabular-nums;
+}
+
+/* 重點數字卡（橘色漸層） */
+.hero-card {
+  background: var(--primary-grad);
+  color: #fff;
+}
+
+/* 影像檢視區：淺色點陣底（深色模式為深底） */
+.viewport-grid {
+  background-color: var(--viewport);
+  background-image: radial-gradient(var(--viewport-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* 細捲軸 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }

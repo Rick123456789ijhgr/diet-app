@@ -23,24 +23,32 @@ export function ToolPanel({
 }) {
   return (
     <Tabs defaultValue="image">
-      <TabsList className="mb-4">
-        <TabsTrigger value="image">
-          <ImageIcon className="size-4" aria-hidden />
-          {imageLabel}
-        </TabsTrigger>
-        <TabsTrigger value="params">
-          <SlidersHorizontal className="size-4" aria-hidden />
-          {paramsLabel}
-          {changed > 0 && <Badge tone="accent">{changed}</Badge>}
-        </TabsTrigger>
-        <TabsTrigger value="io">
-          <ArrowLeftRight className="size-4" aria-hidden />
-          匯出入
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="image">{image}</TabsContent>
-      <TabsContent value="params">{params}</TabsContent>
-      <TabsContent value="io">{io}</TabsContent>
+      <div className="bg-card sticky top-0 z-10 p-3 pb-2">
+        <TabsList>
+          <TabsTrigger value="image">
+            <ImageIcon className="size-3.5" aria-hidden />
+            {imageLabel}
+          </TabsTrigger>
+          <TabsTrigger value="params">
+            <SlidersHorizontal className="size-3.5" aria-hidden />
+            {paramsLabel}
+            {changed > 0 && <Badge tone="primary">{changed}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="io">
+            <ArrowLeftRight className="size-3.5" aria-hidden />
+            匯出入
+          </TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="image" className="px-4 pt-2 pb-4">
+        {image}
+      </TabsContent>
+      <TabsContent value="params" className="px-4 pt-2 pb-4">
+        {params}
+      </TabsContent>
+      <TabsContent value="io" className="px-4 pt-2 pb-4">
+        {io}
+      </TabsContent>
     </Tabs>
   )
 }

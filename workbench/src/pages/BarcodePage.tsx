@@ -17,7 +17,14 @@ import { ConfigIO } from '@/components/ConfigIO'
 import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { ImageViewer } from '@/components/ImageViewer'
 import { LadderControls } from '@/components/LadderControls'
-import { EmptyState, PageHeader, Section, Workspace } from '@/components/layout/Workspace'
+import {
+  EmptyState,
+  MainView,
+  ReadoutBlock,
+  Section,
+  Split,
+  Workspace,
+} from '@/components/layout/Workspace'
 import { FOUND, Quad } from '@/components/overlays'
 import { ParamForm } from '@/components/ParamForm'
 import {
@@ -30,7 +37,7 @@ import {
   WarningBadges,
 } from '@/components/results'
 import { ToolPanel } from '@/components/ToolPanel'
-import { Badge, Card, Segmented } from '@/components/ui/primitives'
+import { Badge, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass, useConfigSchemas } from '@/hooks/useConfigSchemas'
@@ -186,29 +193,29 @@ export function BarcodePage() {
   ]
 
   return (
-    <Workspace panel={panel}>
-      <PageHeader
-        title="條碼與發票 QR"
-        description="逐步升級：依序嘗試原圖、灰階、二值化、去雜訊、旋轉校正、多尺度、銳化，第一次成功即停止。"
-        aside={
-          <div className="flex items-center gap-2">
-            {(pipeline.pending || analysis.busy) && (
-              <Badge tone="primary" aria-live="polite">
-                計算中…
-              </Badge>
-            )}
-            <Segmented
-              label="模式"
-              value={mode}
-              onChange={switchMode}
-              options={[
-                { value: 'barcode', label: withIcon(Barcode, '商品條碼') },
-                { value: 'invoice', label: withIcon(QrCode, '電子發票 QR') },
-              ]}
-            />
-          </div>
-        }
-      />
+    <Workspace
+      panel={panel}
+      title="條碼與發票 QR"
+      description="逐步升級：依序嘗試原圖、灰階、二值化、去雜訊、旋轉校正、多尺度、銳化，第一次成功即停止。"
+      aside={
+        <div className="flex items-center gap-2">
+          {(pipeline.pending || analysis.busy) && (
+            <Badge tone="primary" aria-live="polite">
+              計算中…
+            </Badge>
+          )}
+          <Segmented
+            label="模式"
+            value={mode}
+            onChange={switchMode}
+            options={[
+              { value: 'barcode', label: withIcon(Barcode, '商品條碼') },
+              { value: 'invoice', label: withIcon(QrCode, '電子發票 QR') },
+            ]}
+          />
+        </div>
+      }
+    >
       <AnalysisFrame
         pipeline={pipeline}
         analysis={analysis}
@@ -224,7 +231,7 @@ export function BarcodePage() {
               ? r.data.hits.map((h) => h.text)
               : ([r.data.left && 'L', r.data.right && 'R'].filter(Boolean) as string[])
           const base = baseline.shown?.data
-          return (
+          const readout = (
             <>
               {r.mode === 'barcode' ? (
                 <>
@@ -232,12 +239,14 @@ export function BarcodePage() {
                     tone={r.data.success ? 'ok' : 'bad'}
                     title={r.data.success ? '解碼成功' : '解碼失敗'}
                     badges={
-                      <>
-                        {r.data.success_rung && (
-                          <Badge tone="primary">{rungText(r.data.success_rung)}</Badge>
-                        )}
-                        <WarningBadges codes={r.data.warnings} />
-                      </>
+                      (r.data.success_rung || r.data.warnings.length > 0) && (
+                        <>
+                          {r.data.success_rung && (
+                            <Badge tone="primary">{rungText(r.data.success_rung)}</Badge>
+                          )}
+                          <WarningBadges codes={r.data.warnings} />
+                        </>
+                      )
                     }
                     detail={[
                       img.description,
@@ -246,160 +255,173 @@ export function BarcodePage() {
                       `只用原圖：${base?.mode === 'barcode' ? (base.data.success ? '成功' : '失敗') : '…'}`,
                     ]}
                   />
-                  <MetricGrid>
-                    <Metric
-                      label="成功於"
-                      value={r.data.success_index >= 0 ? `第 ${r.data.success_index + 1} 次` : '—'}
-                    />
-                    <Metric label="嘗試次數" value={String(r.data.attempts.length)} />
-                    <Metric
-                      label="條碼內容"
-                      value={r.data.hits[0]?.text ?? '—'}
-                      help="檢查碼錯誤的 EAN-13 不算成功（可在「階梯參數 → 驗證」關閉）。"
-                    />
-                  </MetricGrid>
+                  <ReadoutBlock title="指標">
+                    <MetricGrid>
+                      <Metric
+                        label="成功於"
+                        value={
+                          r.data.success_index >= 0 ? `第 ${r.data.success_index + 1} 次` : '—'
+                        }
+                      />
+                      <Metric label="嘗試次數" value={String(r.data.attempts.length)} />
+                      <Metric
+                        wide
+                        label="條碼內容"
+                        value={r.data.hits[0]?.text ?? '—'}
+                        help="檢查碼錯誤的 EAN-13 不算成功（可在「階梯參數 → 驗證」關閉）。"
+                      />
+                    </MetricGrid>
+                  </ReadoutBlock>
                 </>
               ) : (
                 <>
                   <StatusCard
                     tone={r.data.left && r.data.right ? 'ok' : 'warn'}
                     title={r.data.left && r.data.right ? '找到左右兩碼' : '結果不完整'}
-                    badges={<WarningBadges codes={r.data.warnings} tone="accent" />}
+                    badges={
+                      r.data.warnings.length > 0 && (
+                        <WarningBadges codes={r.data.warnings} tone="accent" />
+                      )
+                    }
                     detail={[
                       img.description,
                       `${img.width}×${img.height} px`,
                       `往返 ${roundTripMs.toFixed(0)} ms`,
                     ]}
                   />
-                  <MetricGrid>
-                    {(
-                      [
-                        ['左碼', r.data.left],
-                        ['右碼', r.data.right],
-                      ] as const
-                    ).map(([label, hit]) => (
-                      <Metric
-                        key={label}
-                        label={label}
-                        value={hit ? `${fromBase64(hit.raw).length} bytes` : '未找到'}
-                      />
-                    ))}
-                    <Metric label="嘗試次數" value={String(r.data.attempts.length)} />
-                  </MetricGrid>
-                </>
-              )}
-              <Section title="檢視">
-                <Segmented
-                  label="檢視"
-                  value={view}
-                  onChange={setView}
-                  options={views}
-                  className="mb-3"
-                />
-                <Card className="p-3">
-                  {view === 'hits' ? (
-                    <>
-                      <ImageViewer
-                        src={artifactUrl(img.image_id)}
-                        width={img.width}
-                        height={img.height}
-                        alt="原圖與偵測到的條碼四角"
-                        overlay={(px) =>
-                          hits.map((h, i) => (
-                            <Quad
-                              key={i}
-                              points={h.corners}
-                              color={FOUND}
-                              label={labels[i]}
-                              px={px}
-                            />
-                          ))
-                        }
-                      />
-                      {hits.length > 0 && (
-                        <DataTable
-                          label="解碼結果"
-                          columns={['#', '格式', '內容', '位元組']}
-                          rows={hits.map((h, i) => [
-                            labels[i] ?? i + 1,
-                            h.format,
-                            <span className="font-mono text-xs break-all">{h.text}</span>,
-                            fromBase64(h.raw).length,
-                          ])}
-                        />
-                      )}
-                    </>
-                  ) : view === 'steps' ? (
-                    <AttemptsTable attempts={r.data.attempts} />
-                  ) : view === 'bytes' && r.mode === 'invoice' ? (
-                    <div className="space-y-4">
+                  <ReadoutBlock title="指標">
+                    <MetricGrid>
                       {(
                         [
                           ['左碼', r.data.left],
                           ['右碼', r.data.right],
                         ] as const
                       ).map(([label, hit]) => (
-                        <div key={label}>
-                          <h3 className="mb-1 text-sm font-semibold">{label}</h3>
-                          {hit ? (
-                            <>
-                              <pre className="bg-hover rounded-md p-2 font-mono text-xs whitespace-pre-wrap">
-                                {hexPreview(fromBase64(hit.raw))}
-                              </pre>
-                              <pre className="bg-hover mt-1 rounded-md p-2 font-mono text-xs whitespace-pre-wrap">
-                                {asciiPreview(fromBase64(hit.raw))}
-                              </pre>
-                            </>
-                          ) : (
-                            <p className="text-muted text-xs">未找到</p>
-                          )}
-                        </div>
+                        <Metric
+                          key={label}
+                          label={label}
+                          value={hit ? `${fromBase64(hit.raw).length} bytes` : '未找到'}
+                        />
                       ))}
-                      <p className="text-muted text-xs">
-                        只顯示原始位元組；中文解碼與欄位解析由之後的發票模組負責。
-                      </p>
-                    </div>
-                  ) : (
+                      <Metric label="嘗試次數" value={String(r.data.attempts.length)} />
+                    </MetricGrid>
+                  </ReadoutBlock>
+                </>
+              )}
+              {hits.length > 0 && (
+                <ReadoutBlock title="解碼結果">
+                  <DataTable
+                    label="解碼結果"
+                    columns={['#', '格式', '內容', '位元組']}
+                    rows={hits.map((h, i) => [
+                      labels[i] === h.text ? i + 1 : (labels[i] ?? i + 1),
+                      h.format,
+                      <span className="readout text-xs break-all">{h.text}</span>,
+                      fromBase64(h.raw).length,
+                    ])}
+                  />
+                </ReadoutBlock>
+              )}
+            </>
+          )
+          const main =
+            view === 'hits' ? (
+              <ImageViewer
+                fill
+                src={artifactUrl(img.image_id)}
+                width={img.width}
+                height={img.height}
+                alt="原圖與偵測到的條碼四角"
+                overlay={(px) =>
+                  hits.map((h, i) => (
+                    <Quad key={i} points={h.corners} color={FOUND} label={labels[i]} px={px} />
+                  ))
+                }
+              />
+            ) : view === 'steps' ? (
+              <AttemptsTable attempts={r.data.attempts} />
+            ) : view === 'bytes' && r.mode === 'invoice' ? (
+              <div className="space-y-4">
+                {(
+                  [
+                    ['左碼', r.data.left],
+                    ['右碼', r.data.right],
+                  ] as const
+                ).map(([label, hit]) => (
+                  <Section key={label} title={label}>
+                    {hit ? (
+                      <>
+                        <pre className="bg-sunken border-card-border readout rounded-lg border p-2 text-xs whitespace-pre-wrap">
+                          {hexPreview(fromBase64(hit.raw))}
+                        </pre>
+                        <pre className="bg-sunken border-card-border readout mt-1 rounded-lg border p-2 text-xs whitespace-pre-wrap">
+                          {asciiPreview(fromBase64(hit.raw))}
+                        </pre>
+                      </>
+                    ) : (
+                      <p className="text-muted text-xs">未找到</p>
+                    )}
+                  </Section>
+                ))}
+                <p className="text-muted text-xs">
+                  只顯示原始位元組；中文解碼與欄位解析由之後的發票模組負責。
+                </p>
+              </div>
+            ) : variant.error ? (
+              <div className="p-4">
+                <ErrorBox error={variant.error} />
+              </div>
+            ) : !variant.data ? (
+              <EmptyState>載入中…</EmptyState>
+            ) : variant.data.image ? (
+              <ImageViewer
+                fill
+                src={artifactUrl(variant.data.image.image_id)}
+                width={variant.data.image.width}
+                height={variant.data.image.height}
+                alt="送進解碼器的影像版本"
+              />
+            ) : (
+              <EmptyState>此階已略過（{formatParams(variant.data.data?.params)}）。</EmptyState>
+            )
+          return (
+            <Split
+              readout={readout}
+              main={
+                <MainView
+                  scroll={view === 'steps' || view === 'bytes'}
+                  toolbar={
                     <>
-                      <select
-                        aria-label="嘗試"
-                        value={shownAttempt}
-                        onChange={(e) => setAttempt(Number(e.target.value))}
-                        className="border-card-border bg-card mb-3 h-8 rounded-md border px-2 text-sm"
-                      >
-                        {r.data.attempts.map((a, i) => (
-                          <option key={i} value={i}>
-                            #{i + 1} {rungText(a.rung)}
-                          </option>
-                        ))}
-                      </select>
-                      {variant.error ? (
-                        <ErrorBox error={variant.error} />
-                      ) : !variant.data ? (
-                        <EmptyState>載入中…</EmptyState>
-                      ) : variant.data.image ? (
-                        <>
-                          <ImageViewer
-                            src={artifactUrl(variant.data.image.image_id)}
-                            width={variant.data.image.width}
-                            height={variant.data.image.height}
-                            alt="送進解碼器的影像版本"
-                          />
-                          <p className="text-muted mt-2 text-xs">
-                            送進解碼器的影像：{variant.data.image.width}×{variant.data.image.height}{' '}
-                            px · 參數 {formatParams(variant.data.data?.params)}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-muted text-sm">
-                          此階已略過（{formatParams(variant.data.data?.params)}）。
-                        </p>
+                      <Segmented label="檢視" value={view} onChange={setView} options={views} />
+                      {view === 'rung' && (
+                        <select
+                          aria-label="嘗試"
+                          value={shownAttempt}
+                          onChange={(e) => setAttempt(Number(e.target.value))}
+                          className="border-card-border bg-card h-7 rounded-lg border px-2 text-xs"
+                        >
+                          {r.data.attempts.map((a, i) => (
+                            <option key={i} value={i}>
+                              #{i + 1} {rungText(a.rung)}
+                            </option>
+                          ))}
+                        </select>
                       )}
                     </>
-                  )}
-                </Card>
-              </Section>
-            </>
+                  }
+                  footer={
+                    view === 'rung' && variant.data?.image ? (
+                      <>
+                        送進解碼器的影像：{variant.data.image.width}×{variant.data.image.height} px
+                        · 參數 {formatParams(variant.data.data?.params)}
+                      </>
+                    ) : undefined
+                  }
+                >
+                  {main}
+                </MainView>
+              }
+            />
           )
         }}
       </AnalysisFrame>

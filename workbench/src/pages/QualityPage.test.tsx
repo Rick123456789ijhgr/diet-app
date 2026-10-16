@@ -108,10 +108,15 @@ describe('品質檢查頁', () => {
 })
 
 describe('外框', () => {
-  it('左欄列出模組，尚無工具的模組顯示說明', async () => {
+  it('左側列出所有模組，尚無工具的模組顯示說明', async () => {
     renderAt('/coldstart')
-    expect(await screen.findByRole('complementary', { name: '模組' })).toHaveTextContent('冷啟動')
     expect(await screen.findByText('冷啟動上傳尚無工具。')).toBeInTheDocument()
+    const rail = screen.getByRole('navigation', { name: '模組清單' })
+    expect(within(rail).getAllByRole('link')).toHaveLength(7)
+    expect(within(rail).getByRole('link', { name: '冷啟動上傳' })).toHaveAttribute(
+      'href',
+      '/coldstart',
+    )
   })
 
   it('總覽列出各模組的工具', () => {

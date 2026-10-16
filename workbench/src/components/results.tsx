@@ -1,10 +1,10 @@
-// 工具頁結果區的共用元件：分析框架（載入、錯誤、淡化）、狀態列、指標卡、錯誤框。
+// 工具頁結果區的共用元件：分析框架（載入、錯誤、淡化）、狀態、讀數格、錯誤框、圖例、表格。
 import { CircleAlert, CircleCheck, ImageIcon, TriangleAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { ApiError, type ImageRef } from '@/api/client'
 import { EmptyState } from '@/components/layout/Workspace'
-import { Badge, Card } from '@/components/ui/primitives'
+import { Badge } from '@/components/ui/primitives'
 import type { ImagePipeline } from '@/hooks/useImagePipeline'
 import type { Analysis, Timed } from '@/hooks/useAnalysis'
 import { useLastDefined } from '@/hooks/useLastDefined'
@@ -46,30 +46,41 @@ export function AnalysisFrame<T>({
   }
   if (!pair || !ready) {
     const err = fatal ?? query.error
-    return err ? <ErrorBox error={err} /> : <EmptyState>載入中…</EmptyState>
+    return err ? (
+      <div className="p-4">
+        <ErrorBox error={err} />
+      </div>
+    ) : (
+      <EmptyState>載入中…</EmptyState>
+    )
   }
   const other = fatal ?? (query.error && !configError ? query.error : undefined)
   return (
-    <>
-      {other && <ErrorBox error={other} className="mb-4" />}
-      {configError && (
-        <ErrorBox error={configError} className="mb-4" hint="請在左側參數修正標紅的欄位。" />
+    <div className="flex h-full min-h-0 flex-col">
+      {(other || configError) && (
+        <div className="shrink-0 space-y-2 pb-3">
+          {other && <ErrorBox error={other} />}
+          {configError && <ErrorBox error={configError} hint="請在左側參數修正標紅的欄位。" />}
+        </div>
       )}
       <div
         className={cn(
-          'transition-opacity',
+          'min-h-0 flex-1 transition-opacity',
           (stale || pair.image !== image || pair.result !== shown) && 'opacity-60',
         )}
       >
         {children(pair.result, pair.image)}
       </div>
-    </>
+    </div>
   )
 }
 
 export type Tone = 'ok' | 'warn' | 'bad'
 
-/** 結果狀態列：圖示、標題、徽章（警告等）、右側說明。 */
+/**
+ * 結果狀態（讀數欄最上方的一張卡）：圖示＋標題，下方為徽章與逐行說明。
+ * 狀態一律有圖示與文字，不單靠顏色。
+ */
 export function StatusCard({
   tone,
   title,
@@ -82,25 +93,34 @@ export function StatusCard({
   detail: string[]
 }) {
   const Icon = tone === 'ok' ? CircleCheck : tone === 'warn' ? TriangleAlert : CircleAlert
-  const color = tone === 'ok' ? 'text-primary' : tone === 'warn' ? 'text-accent' : 'text-danger'
   return (
-    <Card
-      className={cn(
-        'mb-4 flex flex-wrap items-center gap-3 px-4 py-3',
-        tone === 'ok'
-          ? 'border-primary/40'
-          : tone === 'warn'
-            ? 'border-accent/40'
-            : 'border-danger/40',
-      )}
-    >
-      <Icon className={cn('size-5', color)} aria-hidden />
-      <span className={cn('font-semibold', color)} role="status">
-        {title}
-      </span>
-      {badges}
-      <span className="text-muted tabular ml-auto text-xs">{detail.join(' · ')}</span>
-    </Card>
+    <div className="bg-card shadow-card shrink-0 rounded-[20px] p-4">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-full',
+            tone === 'ok'
+              ? 'bg-ok-soft text-ok'
+              : tone === 'warn'
+                ? 'bg-warn-soft text-warn'
+                : 'bg-danger-soft text-danger',
+          )}
+        >
+          <Icon className="size-[18px]" aria-hidden />
+        </span>
+        <span className="text-[16px] font-semibold" role="status">
+          {title}
+        </span>
+      </div>
+      {badges && <div className="mt-3 flex flex-wrap gap-1">{badges}</div>}
+      <ul className="text-muted mt-3 space-y-0.5 text-xs">
+        {detail.map((d) => (
+          <li key={d} className="tabular break-all">
+            {d}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -123,41 +143,59 @@ export function WarningBadges({
   )
 }
 
+/** 讀數小卡的排列：讀數欄裡兩欄、主檢視裡依寬度增加欄數。 */
 export function MetricGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="mb-5 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">{children}</div>
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">{children}</div>
   )
 }
 
-/** 指標卡；good 為 undefined 時說明文字不上色。 */
+/**
+ * 一張讀數小卡：標籤、大數字，下方為與門檻的差距（綠 ✓／紅 ✕ 小膠囊）；
+ * good 為 undefined 時差距不上色。
+ */
 export function Metric({
   label,
   value,
   delta,
   good,
   help,
+  wide,
 }: {
   label: string
   value: string
   delta?: string
   good?: boolean
   help?: string
+  /** 佔滿整列（條碼內容等較長的值） */
+  wide?: boolean
 }) {
   return (
-    <Card className="px-4 py-3" title={help}>
-      <div className="text-muted text-xs">{label}</div>
-      <div className="tabular mt-1 truncate text-2xl font-semibold">{value}</div>
+    <div
+      className={cn('bg-sunken min-w-0 rounded-2xl px-3 py-2.5', wide && 'col-span-full')}
+      title={help}
+    >
+      <div className="text-muted truncate text-xs">{label}</div>
+      <div className="tabular mt-1 truncate text-[20px] leading-snug font-semibold tracking-tight">
+        {value}
+      </div>
       {delta && (
-        <div
-          className={cn(
-            'tabular mt-1 text-xs',
-            good === undefined ? 'text-muted' : good ? 'text-primary' : 'text-danger',
+        <div className="mt-1 flex min-w-0 items-start gap-1.5 text-[11px]" title={delta}>
+          {good !== undefined && (
+            <span
+              className={cn(
+                'inline-flex h-4.5 shrink-0 items-center rounded-full px-1.5 font-medium',
+                good ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger',
+              )}
+              aria-hidden
+            >
+              {good ? '✓' : '✕'}
+            </span>
           )}
-        >
-          {delta}
+          <span className="text-muted tabular leading-[18px]">{delta}</span>
         </div>
       )}
-    </Card>
+    </div>
   )
 }
 
@@ -172,13 +210,7 @@ export function ErrorBox({
 }) {
   const e = error instanceof ApiError ? error : undefined
   return (
-    <div
-      role="alert"
-      className={cn(
-        'border-danger/40 bg-danger-soft rounded-lg border px-4 py-3 text-sm',
-        className,
-      )}
-    >
+    <div role="alert" className={cn('bg-danger-soft rounded-2xl px-4 py-3 text-[13px]', className)}>
       <div className="text-danger font-semibold">
         {e ? errorText(e.code) : '發生錯誤'}
         {e?.field && `（${e.field}）`}
@@ -197,7 +229,7 @@ export function Legend({ items }: { items: { color: string; label: string }[] })
     <p className="text-muted mt-2 flex flex-wrap gap-4 text-xs">
       {items.map((i) => (
         <span key={i.label} className="inline-flex items-center gap-1.5">
-          <span className="inline-block size-2.5 rounded-sm" style={{ background: i.color }} />
+          <span className="inline-block size-2.5 rounded-full" style={{ background: i.color }} />
           {i.label}
         </span>
       ))}
@@ -216,11 +248,11 @@ export function DataTable({
   rows: ReactNode[][]
 }) {
   return (
-    <table className="mt-3 w-full text-sm" aria-label={label}>
+    <table className="mt-3 w-full text-[13px]" aria-label={label}>
       <thead>
-        <tr className="text-muted border-card-border border-b text-left text-xs">
+        <tr className="text-muted bg-sunken text-left text-xs">
           {columns.map((c) => (
-            <th key={c} className="py-2 pr-3 font-medium">
+            <th key={c} className="px-2 py-2 font-medium first:rounded-l-xl last:rounded-r-xl">
               {c}
             </th>
           ))}
@@ -230,7 +262,7 @@ export function DataTable({
         {rows.map((r, i) => (
           <tr key={i} className="border-card-border border-b last:border-0">
             {r.map((cell, j) => (
-              <td key={j} className="tabular py-1.5 pr-3 align-top">
+              <td key={j} className="tabular px-2 py-2 align-top">
                 {cell}
               </td>
             ))}

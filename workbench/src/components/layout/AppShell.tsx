@@ -1,12 +1,16 @@
-// 外框：左側直欄（模組）＋頂部列（模組名稱與頁面膠囊）＋內容區。
+// 外框（柔和卡片風）：左側浮動圖示欄（深淺色切換＋模組）、頂部列（標誌、頁面膠囊、服務狀態）、內容區。
+import { useQuery } from '@tanstack/react-query'
 import { Moon, Sun } from 'lucide-react'
 import { useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router'
+import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
+import { api, ApiError, unwrap } from '@/api/client'
+import { Hint } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
+import { errorText } from '@/lib/text'
 import { HOME, locate, MODULES, modulePath, toolPath } from '@/nav'
 
-export const TOPBAR_HEIGHT = 56
+export const TOPBAR_HEIGHT = 64
 
 export function AppShell() {
   const { module, tool } = locate(useLocation().pathname)
@@ -14,34 +18,41 @@ export function AppShell() {
     <div className="flex h-full">
       <Rail activeId={module.id} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header
-          className="border-card-border bg-card/80 flex shrink-0 items-center gap-4 border-b px-5 backdrop-blur"
-          style={{ height: TOPBAR_HEIGHT }}
-        >
-          <div className="min-w-0">
-            <div className="text-muted text-xs">{module.id ? module.short : '開發工作台'}</div>
-            <div className="truncate text-sm font-semibold">{module.name}</div>
+        <header className="flex shrink-0 items-center gap-3 pr-3" style={{ height: TOPBAR_HEIGHT }}>
+          <Link
+            to="/"
+            className="bg-card shadow-card flex h-11 shrink-0 items-center gap-2 rounded-full pr-4 pl-1.5"
+            aria-label="開發工作台總覽"
+          >
+            <img src="/icon.svg" alt="" className="size-8" />
+            <span className="text-[14px] font-semibold tracking-tight">開發工作台</span>
+          </Link>
+          <div className="flex min-w-0 flex-1 justify-center">
+            {module.tools.length > 0 && (
+              <nav
+                aria-label="頁面"
+                className="bg-card shadow-card flex min-w-0 gap-0.5 overflow-x-auto rounded-full p-1"
+              >
+                {module.tools.map((t) => (
+                  <NavLink
+                    key={t.slug}
+                    to={toolPath(module, t)}
+                    className={cn(
+                      'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition-colors',
+                      t.slug === tool?.slug
+                        ? 'bg-ink text-on-ink font-medium'
+                        : 'text-ink-2 hover:bg-hover hover:text-ink',
+                      !t.ready && t.slug !== tool?.slug && 'opacity-50',
+                    )}
+                  >
+                    <t.icon className="size-3.5" aria-hidden />
+                    {t.name}
+                  </NavLink>
+                ))}
+              </nav>
+            )}
           </div>
-          {module.tools.length > 0 && (
-            <nav aria-label="頁面" className="flex min-w-0 gap-1 overflow-x-auto">
-              {module.tools.map((t) => (
-                <NavLink
-                  key={t.slug}
-                  to={toolPath(module, t)}
-                  className={cn(
-                    'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors',
-                    t.slug === tool?.slug
-                      ? 'bg-primary text-white'
-                      : 'text-muted hover:bg-hover hover:text-ink',
-                    !t.ready && t.slug !== tool?.slug && 'opacity-60',
-                  )}
-                >
-                  <t.icon className="size-4" aria-hidden />
-                  {t.name}
-                </NavLink>
-              ))}
-            </nav>
-          )}
+          <ServiceStatus />
         </header>
         <main className="min-h-0 flex-1">
           <Outlet />
@@ -51,39 +62,77 @@ export function AppShell() {
   )
 }
 
+/** 左側浮動圖示欄：深淺色切換、各模組（選中為黑色圓）。 */
 function Rail({ activeId }: { activeId: string }) {
   return (
-    <aside
-      aria-label="模組"
-      className="border-card-border bg-card flex w-[84px] shrink-0 flex-col items-center gap-1 border-r py-3"
-    >
-      <img src="/icon.svg" alt="" className="mb-2 size-9" />
-      {[HOME, ...MODULES].map((m) => (
-        <NavLink
-          key={m.id || 'home'}
-          to={modulePath(m)}
-          title={m.name}
-          className={cn(
-            'flex w-[68px] flex-col items-center gap-1 rounded-xl py-2 text-[11px] transition-colors',
-            m.id === activeId
-              ? 'bg-primary-soft text-primary font-semibold'
-              : 'text-muted hover:bg-hover hover:text-ink',
-          )}
-        >
-          <m.icon className="size-5" aria-hidden />
-          {m.short}
-        </NavLink>
-      ))}
-      <div className="flex-1" />
+    <aside aria-label="模組" className="flex w-[76px] shrink-0 flex-col items-center gap-3 py-3">
       <ThemeToggle />
+      <nav
+        aria-label="模組清單"
+        className="bg-card shadow-card mt-6 flex flex-col items-center gap-1 rounded-full p-1.5"
+      >
+        {[HOME, ...MODULES].map((m) => (
+          <Hint key={m.id || 'home'} text={m.id ? `${m.short}・${m.name}` : m.name} side="right">
+            <NavLink
+              to={modulePath(m)}
+              aria-label={m.name}
+              className={cn(
+                'flex size-10 items-center justify-center rounded-full transition-colors',
+                m.id === activeId
+                  ? 'bg-ink text-on-ink'
+                  : 'text-ink-2 hover:bg-hover hover:text-ink',
+              )}
+            >
+              <m.icon className="size-[18px]" aria-hidden />
+            </NavLink>
+          </Hint>
+        ))}
+      </nav>
     </aside>
   )
 }
 
+/** 服務狀態：定期經 Go 向 Python 取設定結構，顯示整條鏈路是否正常。 */
+function ServiceStatus() {
+  const health = useQuery({
+    queryKey: ['health'],
+    queryFn: ({ signal }) =>
+      unwrap(api.GET('/workbench/v1/dev/config-schemas', { signal })).then(() => Date.now()),
+    refetchInterval: 15_000,
+    retry: false,
+  })
+  const err = health.error
+  const state = health.isPending ? 'pending' : err ? 'down' : 'up'
+  const detail =
+    state === 'up'
+      ? '瀏覽器 → Go → Python 都正常；本機開發模式，測試集已鎖定。'
+      : state === 'down'
+        ? `無法連線：${err instanceof ApiError ? errorText(err.code) : '請確認服務已啟動'}`
+        : '連線中…'
+  return (
+    <Hint text={detail} side="bottom">
+      <span
+        role="status"
+        aria-label={detail}
+        className="bg-card shadow-card text-ink-2 flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-xs"
+      >
+        <span
+          className={cn(
+            'size-2 rounded-full',
+            state === 'up' ? 'bg-ok-mark' : state === 'down' ? 'bg-danger-mark' : 'bg-line-strong',
+          )}
+          aria-hidden
+        />
+        {state === 'up' ? '服務正常' : state === 'down' ? '服務中斷' : '連線中…'}
+      </span>
+    </Hint>
+  )
+}
+
+/** 深淺色切換：上下兩顆圓鈕，選中的一顆加底色。 */
 function ThemeToggle() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
-  const toggle = () => {
-    const next = !dark
+  const set = (next: boolean) => {
     document.documentElement.classList.toggle('dark', next)
     try {
       localStorage.setItem('wb.theme', next ? 'dark' : 'light')
@@ -93,13 +142,27 @@ function ThemeToggle() {
     setDark(next)
   }
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      aria-label={dark ? '切換為淺色' : '切換為深色'}
-      className="text-muted hover:bg-hover hover:text-ink rounded-lg p-2"
-    >
-      {dark ? <Sun className="size-5" /> : <Moon className="size-5" />}
-    </button>
+    <div className="bg-card shadow-card flex flex-col gap-1 rounded-full p-1.5">
+      {(
+        [
+          [false, Sun, '切換為淺色'],
+          [true, Moon, '切換為深色'],
+        ] as const
+      ).map(([value, Icon, label]) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => set(value)}
+          aria-label={label}
+          aria-pressed={dark === value}
+          className={cn(
+            'flex size-10 items-center justify-center rounded-full transition-colors',
+            dark === value ? 'bg-sunken text-ink' : 'text-muted hover:text-ink',
+          )}
+        >
+          <Icon className="size-[18px]" />
+        </button>
+      ))}
+    </div>
   )
 }

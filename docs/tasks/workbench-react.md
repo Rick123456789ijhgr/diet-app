@@ -273,7 +273,7 @@ message JsonResponse { string json = 1; }
 ## 3. 共通約定
 
 - **前端**：Vite＋React＋TypeScript（strict）、Tailwind、shadcn/ui 風格元件（以 Radix 撰寫於 `components/ui/`，不使用 CLI）、TanStack Query、React Router、openapi-fetch。圖表：階段 1 的直方圖以 SVG 自繪；參數掃描等需要互動圖表時（階段 3）再引入 Vega-Lite。型別以 openapi-typescript 由 `openapi/workbench.yaml` 產生到 `workbench/src/api/gen/`。
-- **版面**：左側直欄＝模組（總覽、模組一到五、冷啟動），頂部膠囊＝模組內頁面；工具頁為左控制面板（影像／參數／匯出入分頁）＋右結果，兩欄固定一個畫面高、各自捲動。模組與頁面註冊表在 `workbench/src/nav.ts`。介面只寫中文（警告代碼等維持英文代碼，由前端對應中文）。色系：靛藍主色、紫輔色，不使用綠與橘。
+- **版面**（2026-10-16 改為柔和卡片風，見 `workbench/CLAUDE.md`）：左側浮動圖示欄＝深淺色切換＋模組（總覽、模組一到五、冷啟動），頂部列＝標誌＋模組內頁面膠囊＋服務狀態；工具頁為三張卡：左控制面板（影像／參數／匯出入分頁）、中間主檢視（工具列＋撐滿的影像或圖表）、右側讀數（狀態與指標），固定一個畫面高、各自捲動。模組與頁面註冊表在 `workbench/src/nav.ts`。介面只寫中文（警告代碼等維持英文代碼，由前端對應中文）。色系：白色大圓角卡片、黑色主要按鈕、橘色強調；狀態用綠／琥珀／紅並搭配圖示與文字；圖表用經色盲驗證的系列色。
 - **即時調參**：滑桿停止約 150 ms 後送出請求，並取消尚未回來的舊請求；結果區保留舊結果並淡化，直到新結果回來。
 - **Go**：`internal/workbench`（handler → service，service 依賴 `AIClient` 介面）；`internal/platform/aiclient` 實作 gRPC 連線；handler 不寫業務邏輯，日誌帶 `request_id` 並透傳給 Python（gRPC metadata）。
 - **Python**：`server/` 只做 proto ↔ dietai 轉換；設定 JSON 經 `dietai.devtools.configs` 建成 dataclass 並驗證，錯誤回 `INVALID_ARGUMENT`（附欄位名稱）。

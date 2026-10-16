@@ -65,14 +65,14 @@ export function ConfigIO({
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder='{"class": "QualityConfig", "values": {...}} 或 {"blur_min": 150}'
-          className="border-card-border bg-card focus-visible:border-primary h-28 w-full rounded-md border p-2 font-mono text-xs focus-visible:outline-none"
+          className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-28 w-full rounded-lg border p-2 text-xs focus-visible:outline-none"
         />
         <Button size="sm" variant="primary" disabled={!text.trim()} onClick={doImport}>
           <FileUp className="size-3.5" aria-hidden />
           匯入
         </Button>
         {message && (
-          <p className={message.ok ? 'text-primary text-xs' : 'text-danger text-xs'} role="status">
+          <p className={message.ok ? 'text-ok text-xs' : 'text-danger text-xs'} role="status">
             {message.text}
           </p>
         )}
@@ -85,7 +85,7 @@ function CodeBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <div className="relative">
-      <pre className="bg-hover max-h-60 overflow-auto rounded-md p-2 pr-9 font-mono text-xs whitespace-pre-wrap">
+      <pre className="bg-sunken border-card-border readout max-h-60 overflow-auto rounded-lg border p-2 pr-9 text-xs whitespace-pre-wrap">
         {text}
       </pre>
       <button
