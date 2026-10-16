@@ -80,7 +80,7 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 | 檔案 | 內容 |
 | --- | --- |
 | `run.json` | 實驗紀錄：時間、git commit 與是否有未提交變更、Python 與套件版本、manifest 路徑與 sha256、合成資料參數與種子、每個實驗組的完整設定（含預設值） |
-| `results.csv` | 每張影像 × 每個實驗組一列：`outcome`、成功階、嘗試次數、耗時、解出的文字、標籤欄 |
+| `results.csv` | 每張影像 × 每個實驗組一列：`outcome`、成功階（`success_rung`；`min_agree` > 1 時為湊滿票數的階）、救回階（`first_rung`，第一次解出採用內容的階）、嘗試次數、耗時、解出的文字、標籤欄 |
 | `attempts.csv` | 每次階梯嘗試一列：階、參數、耗時、結果數、檢查碼錯誤數 |
 | `summary.md`／`summary*.csv` | `analyze.py` 的彙整（`run.py` 結束時也會先寫一份 `summary.md`） |
 

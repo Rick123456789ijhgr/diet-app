@@ -143,6 +143,8 @@ def read_image(path: str | Path) -> Image:
     找不到檔案丟 ``FileNotFoundError``，無法解碼丟 ``ValueError``。
     """
     data = Path(path).read_bytes()
+    if not data:  # 空緩衝區會讓 cv2.imdecode 丟 cv2.error，而不是回傳 None
+        raise ValueError(f"影像檔是空的：{path}")
     img = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError(f"無法解碼影像：{path}")

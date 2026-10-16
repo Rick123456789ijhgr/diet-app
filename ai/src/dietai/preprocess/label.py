@@ -74,17 +74,19 @@ def locate_label_quad(img: Image, cfg: LabelConfig = LabelConfig()) -> Quad | No
 def rectify(img: Image, quad: npt.ArrayLike, cfg: LabelConfig = LabelConfig()) -> Image:
     """以單應性轉換把 ``quad`` 圍出的區域拉成正視的矩形。
 
-    四角先以 ``ops.order_quad`` 排序，因此順序不拘。輸出寬為上下兩邊較長者、
-    高為左右兩邊較長者；長邊超過 ``cfg.rectify_max_side`` 時等比縮小。
+    四角先以 ``ops.order_quad`` 排序，因此順序不拘。四角視為角落像素的中心（OpenCV 慣例），
+    對應到輸出的 ``(0, 0)``–``(w − 1, h − 1)``，四條邊上的像素都保留在輸出內。
+    輸出寬為上下兩邊較長者加 1、高為左右兩邊較長者加 1（像素數）；長邊超過
+    ``cfg.rectify_max_side`` 時等比縮小。
     """
     ops.validate_image(img)
     q = ops.order_quad(quad)
     tl, tr, br, bl = q
     width = max(float(np.linalg.norm(tr - tl)), float(np.linalg.norm(br - bl)))
     height = max(float(np.linalg.norm(bl - tl)), float(np.linalg.norm(br - tr)))
-    shrink = min(1.0, cfg.rectify_max_side / max(width, height, 1.0))
-    w, h = max(1, round(width * shrink)), max(1, round(height * shrink))
-    dst = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
+    shrink = min(1.0, (cfg.rectify_max_side - 1) / max(width, height, 1.0))
+    w, h = max(2, round(width * shrink) + 1), max(2, round(height * shrink) + 1)
+    dst = np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], dtype=np.float32)
     m = cv2.getPerspectiveTransform(q, dst)
     out = cv2.warpPerspective(
         img, m, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE
@@ -179,6 +181,9 @@ def preprocess_label(img: Image, cfg: LabelConfig = LabelConfig()) -> LabelResul
                     "hough_threshold": cfg.hough_threshold,
                     "hough_min_line_ratio": cfg.hough_min_line_ratio,
                     "hough_max_gap": cfg.hough_max_gap,
+                    "hough_collinear_ratio": cfg.hough_collinear_ratio,
+                    "hough_min_side_gap_ratio": cfg.hough_min_side_gap_ratio,
+                    "hough_corner_margin_ratio": cfg.hough_corner_margin_ratio,
                 },
             )
         )
@@ -299,6 +304,9 @@ def _quad_from_contours(edges: Image, cfg: LabelConfig, area: tuple[float, float
     return None
 
 
+# 共線容許距離的下限：HoughLinesP 的距離解析度 1 像素，加上邊緣圖 3×3 膨脹的寬度
+_MIN_COLLINEAR_PX = 2.0
+
 # 直線：(點, 單位方向向量)
 _Line = tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
 
@@ -307,7 +315,8 @@ def _quad_from_lines(edges: Image, cfg: LabelConfig, area: tuple[float, float]) 
     """HoughLinesP 備援：取最外側的上、下、左、右邊線求四個交點。
 
     線段依方向分為近水平與近垂直兩組。每組以線段延長後在影像中心處的位置排序，
-    取兩端最外側的線段，收集與它共線（端點距離在短邊 0.5% 內）的所有線段擬合一條直線；
+    取兩端最外側的線段，收集與它共線（端點距離在 ``cfg.hough_collinear_ratio`` 內）的所有線段
+    擬合一條直線；
     只收共線者是為了不把粗外框內側的另一條邊混進來，虛線外框的各段則會被收在一起。
     """
     h, w = edges.shape
@@ -325,7 +334,7 @@ def _quad_from_lines(edges: Image, cfg: LabelConfig, area: tuple[float, float]) 
     dx, dy = segs[:, 2] - segs[:, 0], segs[:, 3] - segs[:, 1]
     horizontal = np.abs(dx) >= np.abs(dy)
     center = np.array([w / 2, h / 2])
-    tol = max(2.0, 0.005 * min(h, w))
+    tol = max(_MIN_COLLINEAR_PX, cfg.hough_collinear_ratio * min(h, w))
     sides: list[_Line] = []
     for mask, axis in ((horizontal, 1), (~horizontal, 0)):
         group = segs[mask]
@@ -333,7 +342,7 @@ def _quad_from_lines(edges: Image, cfg: LabelConfig, area: tuple[float, float]) 
             return None
         lines = [_fit_line(g[None, :]) for g in group]
         pos = np.array([_coord_at(line, center, axis) for line in lines])
-        if pos.max() - pos.min() < 0.1 * min(h, w):  # 只有一條邊，沒有對邊
+        if pos.max() - pos.min() < cfg.hough_min_side_gap_ratio * min(h, w):  # 只有一條邊
             return None
         for extreme in (int(np.argmin(pos)), int(np.argmax(pos))):
             near = [_distance(lines[extreme], g) <= tol for g in group]
@@ -344,7 +353,7 @@ def _quad_from_lines(edges: Image, cfg: LabelConfig, area: tuple[float, float]) 
     if any(c is None for c in corners):
         return None
     quad = ops.order_quad(np.array(corners))
-    margin = 0.05 * max(h, w)
+    margin = cfg.hough_corner_margin_ratio * max(h, w)
     inside = bool(((quad >= -margin) & (quad <= np.array([w, h]) + margin)).all())
     contour = quad.reshape(-1, 1, 2)
     if not inside or not cv2.isContourConvex(contour):

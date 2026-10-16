@@ -6,7 +6,8 @@
 
 判定規則（``judge``）：
 
-- 有真值（正樣本）：階梯成功且任一結果的文字等於真值 → ``correct``；
+- 有真值（正樣本）：階梯成功且任一結果的文字等於真值 → ``correct``；比對前 12 位與 13 位數字
+  一律補成 GTIN-13（UPC-A ``012345678905`` 與真值 ``0012345678905`` 視為相同）；
   成功但文字都不符 → ``misread``（階梯會在誤讀時停止，這是真實行為）；失敗 → ``missed``。
 - 無真值（負樣本）：有任何結果 → ``false_positive``，否則 ``true_negative``。
 - 影像讀取或處理丟出例外 → ``error``，不計入成功率。
@@ -17,6 +18,7 @@ from __future__ import annotations
 import csv
 import json
 import platform
+import re
 import statistics
 import subprocess
 import sys
@@ -44,6 +46,7 @@ RESULTS_FILE = "results.csv"
 ATTEMPTS_FILE = "attempts.csv"
 META_FILE = "run.json"
 _ARM_KEYS = frozenset({"name", "description", "decoder", "zxing", "ladder"})
+_GTIN_12_13 = re.compile(r"[0-9]{12,13}")
 _PACKAGES = ("dietai", "numpy", "opencv-python-headless", "zxing-cpp", "pyzbar")
 
 
@@ -158,9 +161,14 @@ def judge(result: LadderResult, truth: str) -> Outcome:
         return Outcome.FALSE_POSITIVE if result.hits else Outcome.TRUE_NEGATIVE
     if not result.success:
         return Outcome.MISSED
-    if any(h.text == truth for h in result.hits):
+    if any(_gtin13(h.text) == _gtin13(truth) for h in result.hits):
         return Outcome.CORRECT
     return Outcome.MISREAD
+
+
+def _gtin13(code: str) -> str:
+    """12 位（UPC-A）與 13 位數字補成 GTIN-13；其他內容（EAN-8、QR 等）原樣回傳。"""
+    return code.zfill(13) if _GTIN_12_13.fullmatch(code) else code
 
 
 def evaluate(
@@ -210,12 +218,15 @@ def run_experiment(
     ``out_dir`` 已存在且非空時丟 ``FileExistsError``（實驗結果不覆寫）。
     是否排除測試集由 ``read_manifest`` 決定；manifest 含測試集而 ``include_test`` 未設為
     ``True`` 時丟 ``ValueError``（避免誤用），設定值記錄在 ``run.json``。
+    manifest 沒有任何影像（例如全部是測試集而被排除）時丟 ``ValueError``，不建立資料夾。
     ``decoder_factory`` 供測試替換解碼器。
     """
     if not include_test and any(i.is_test for i in manifest.items):
         raise ValueError("manifest 含測試集，但未標記 include_test（正式實驗）")
     if not arms:
         raise ValueError("沒有任何實驗組設定")
+    if not manifest.items:
+        raise ValueError(f"manifest 沒有可執行的影像（排除測試集 {manifest.excluded_test} 張）")
     clash = set(manifest.tag_columns) & set(RESULT_COLUMNS)
     if clash:
         raise ValueError(f"manifest 的標籤欄與結果欄同名：{sorted(clash)}")
@@ -246,7 +257,7 @@ def run_experiment(
             try:
                 img = read_image(item.image)
                 ops.validate_image(img)
-            except (OSError, ValueError) as e:
+            except Exception as e:  # 含 cv2.error；單張讀檔失敗不中斷整批
                 load_error = f"{type(e).__name__}: {e}"
             for arm, decoder in zip(arms, decoders, strict=True):
                 base = {"id": item.id, "arm": arm.name, "truth": item.truth, "split": item.split}
@@ -318,6 +329,7 @@ RESULT_COLUMNS = (
     "outcome",
     "success_rung",
     "success_index",
+    "first_rung",
     "attempts",
     "elapsed_ms",
     "decoded",
@@ -340,11 +352,27 @@ ATTEMPT_COLUMNS = (
 )
 
 
+def first_rung(res: LadderResult) -> Rung | None:
+    """第一次解出採用內容的那一階；失敗時為 ``None``。
+
+    ``min_agree`` 為 1 時等於 ``success_rung``；大於 1 時 ``success_rung`` 是「湊滿票數」的階，
+    這裡回傳最早解出同一個（格式, 內容）的階，即救回這張影像的步驟。
+    """
+    if not res.success:
+        return None
+    accepted = {(h.format, h.text) for h in res.hits}
+    for a in res.attempts:
+        if any((h.format, h.text) in accepted for h in a.hits):
+            return a.rung
+    return res.success_rung
+
+
 def _result_fields(outcome: Outcome, res: LadderResult) -> dict[str, Any]:
     return {
         "outcome": outcome.value,
         "success_rung": res.success_rung.value if res.success_rung else "",
         "success_index": "" if res.success_index is None else res.success_index,
+        "first_rung": first.value if (first := first_rung(res)) else "",
         "attempts": len(res.attempts),
         "elapsed_ms": f"{sum(a.elapsed_ms for a in res.attempts):.3f}",
         "decoded": "|".join(h.text for h in res.hits),
@@ -441,21 +469,30 @@ def summarize(
     return out
 
 
-def rescue_counts(rows: Sequence[Mapping[str, str]]) -> list[dict[str, Any]]:
-    """各實驗組「判定為 correct 時成功於哪一階」的次數（``arm``、``rung``、``count``），
-    組內依階梯順序排列。
+def rescue_counts(
+    rows: Sequence[Mapping[str, str]], arms: Sequence[Mapping[str, Any]] = ()
+) -> list[dict[str, Any]]:
+    """各實驗組「判定為 correct 時由哪一階救回」的次數（``arm``、``rung``、``count``）。
 
-    各階由原圖獨立產生，因此成功階就是「救回這張影像的步驟」。
+    各階由原圖獨立產生，因此第一次解出採用內容的階（``first_rung`` 欄）就是救回這張影像的
+    步驟；沒有此欄的舊執行結果改用 ``success_rung``（``min_agree`` 為 1 時兩者相同）。
+    ``arms`` 為 ``run.json`` 的 ``arms``，組內依該實驗組設定的階梯順序排列；未提供或
+    找不到該組時依 ``Rung`` 的定義順序。
     """
     counts: Counter[tuple[str, str]] = Counter(
-        (r["arm"], r["success_rung"]) for r in rows if r["outcome"] == Outcome.CORRECT
+        (r["arm"], r.get("first_rung") or r["success_rung"])
+        for r in rows
+        if r["outcome"] == Outcome.CORRECT
     )
     arm_order = list(dict.fromkeys(r["arm"] for r in rows))
+    rungs = {str(a["name"]): list(a.get("ladder", {}).get("rungs", ())) for a in arms}
+
+    def key(kv: tuple[tuple[str, str], int]) -> tuple[int, int]:
+        (arm, rung), _ = kv
+        return arm_order.index(arm), _rung_index(rung, rungs.get(arm) or [r.value for r in Rung])
+
     return [
-        {"arm": arm, "rung": rung, "count": n}
-        for (arm, rung), n in sorted(
-            counts.items(), key=lambda kv: (arm_order.index(kv[0][0]), _rung_index(kv[0][1]))
-        )
+        {"arm": arm, "rung": rung, "count": n} for (arm, rung), n in sorted(counts.items(), key=key)
     ]
 
 
@@ -483,7 +520,7 @@ def report_markdown(
     ]
     for tag in by:
         lines += ["", f"## 依 `{tag}` 分組", "", _table(summarize(rows, (tag,), baseline), (tag,))]
-    rescues = rescue_counts(rows)
+    rescues = rescue_counts(rows, meta.get("arms", ()))
     if rescues:
         lines += ["", "## 成功於哪一階 · Successful rung", "", "| arm | rung | count |"]
         lines += ["| --- | --- | ---: |"]
@@ -531,8 +568,7 @@ def _config_section(cls: type[Any], data: Any) -> Any:
     return cls(**data)
 
 
-def _rung_index(rung: str) -> int:
-    order = [r.value for r in Rung]
+def _rung_index(rung: str, order: Sequence[str]) -> int:
     return order.index(rung) if rung in order else len(order)
 
 

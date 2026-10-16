@@ -99,6 +99,9 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
 
     使用的設定欄位：``rungs``、``scales``、``binarize_*``、``sharpen_*``、
     ``denoise_ksize``、``deskew_min_deg``。多尺度階每個倍率產生一個版本。
+
+    為避免每次嘗試都複製整張影像，``raw`` 階的 ``image`` 就是輸入本身、``gray`` 階與其他階
+    共用同一份灰階；解碼器不會修改輸入，呼叫端也不得修改這些影像（需要時自行 ``copy()``）。
     """
     ops.validate_image(img)
     gray: Image | None = None
@@ -111,9 +114,9 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
 
     for rung in cfg.rungs:
         if rung is Rung.RAW:
-            yield Variant(rung, img.copy(), _IDENTITY)
+            yield Variant(rung, img, _IDENTITY)
         elif rung is Rung.GRAY:
-            yield Variant(rung, get_gray().copy(), _IDENTITY)
+            yield Variant(rung, get_gray(), _IDENTITY)
         elif rung is Rung.BINARIZE:
             params = {"block_size": cfg.binarize_block_size, "c": cfg.binarize_c}
             out = ops.adaptive_threshold(get_gray(), cfg.binarize_block_size, cfg.binarize_c)
@@ -212,7 +215,8 @@ def decode_with_ladder(
                 success=True,
                 success_rung=attempt.rung,
                 success_index=len(attempts) - 1,
-                image=variant.image,
+                # raw 階的版本就是輸入本身；回傳副本，避免呼叫端修改結果時改到輸入
+                image=img.copy() if variant.image is img else variant.image,
                 hits=confirmed,
                 attempts=tuple(attempts),
                 steps=attempts_to_steps(attempts),

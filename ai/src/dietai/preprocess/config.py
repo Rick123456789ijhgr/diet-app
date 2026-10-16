@@ -467,6 +467,40 @@ class LabelConfig:
         calibrate=True,
         group="locate",
     )
+    hough_collinear_ratio: float = param(
+        0.005,
+        "共線容許距離",
+        "Collinear tolerance",
+        "直線法取外框時，線段兩端到最外側直線的距離在（縮小後）短邊的此比例內才視為同一條邊"
+        "（至少 2 像素）；太大會把粗外框內側的另一條邊混進來。",
+        min=0.0,
+        max=0.1,
+        step=0.001,
+        calibrate=True,
+        group="locate",
+    )
+    hough_min_side_gap_ratio: float = param(
+        0.1,
+        "對邊最小間距",
+        "Min opposite-side gap",
+        "最外側兩條同向直線的間距低於（縮小後）短邊的此比例時，視為只找到一條邊、不採用直線法。",
+        min=0.0,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="locate",
+    )
+    hough_corner_margin_ratio: float = param(
+        0.05,
+        "交點出界容許",
+        "Corner margin",
+        "直線法的四個交點可超出影像邊界的距離，為（縮小後）長邊的比例；超出更多時不採用。",
+        min=0.0,
+        max=1.0,
+        step=0.01,
+        calibrate=True,
+        group="locate",
+    )
     rectify_max_side: int = param(
         2000,
         "校正輸出長邊上限",
@@ -584,6 +618,13 @@ class LabelConfig:
                 raise ValueError(f"{name} 必須介於 0 與 255")
         if self.hough_max_gap < 0 or self.glare_dilate_px < 0:
             raise ValueError("hough_max_gap 與 glare_dilate_px 不得為負")
+        for name in (
+            "hough_collinear_ratio",
+            "hough_min_side_gap_ratio",
+            "hough_corner_margin_ratio",
+        ):
+            if not 0.0 <= getattr(self, name) <= 1.0:
+                raise ValueError(f"{name} 必須介於 0 與 1")
         if self.clahe_clip <= 0:
             raise ValueError("clahe_clip 必須大於 0")
 
@@ -774,6 +815,17 @@ class FoodConfig:
         calibrate=True,
         group="plate",
     )
+    plate_min_contour_points: int = param(
+        20,
+        "盤緣最少輪廓點",
+        "Min contour points",
+        "輪廓點數少於此值時不擬合橢圓（cv2.fitEllipse 至少需要 5 點；點太少的擬合不穩定）。",
+        min=5,
+        max=500,
+        step=1,
+        calibrate=True,
+        group="plate",
+    )
     vlm_max_side: int = param(
         1024,
         "VLM 長邊",
@@ -820,5 +872,7 @@ class FoodConfig:
                 raise ValueError(f"{name} 必須介於 0（不含）與 1")
         if self.plate_max_residual <= 0:
             raise ValueError("plate_max_residual 必須大於 0")
+        if self.plate_min_contour_points < 5:
+            raise ValueError("plate_min_contour_points 至少為 5（cv2.fitEllipse 的下限）")
         if not 1 <= self.vlm_jpeg_quality <= 100:
             raise ValueError("vlm_jpeg_quality 必須介於 1 與 100")

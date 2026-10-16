@@ -300,6 +300,7 @@ def test_preprocess_food_rejects_bad_input(bad):
         {"min_dish_area_ratio": 0.5, "max_dish_area_ratio": 0.4},
         {"plate_canny_low": 200, "plate_canny_high": 100},
         {"plate_min_axis_ratio": 0.0},
+        {"plate_min_contour_points": 4},
         {"vlm_jpeg_quality": 0},
         {"morph_px": -1},
     ],
