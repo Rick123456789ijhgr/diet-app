@@ -31,7 +31,7 @@ where python >nul 2>nul || if not exist "ai\.venv\Scripts\python.exe" (
     set "MISSING=1"
 )
 where go >nul 2>nul || (
-    echo [缺少] Go 1.25 以上：winget install GoLang.Go
+    echo [缺少] Go 1.26 以上：winget install GoLang.Go
     set "MISSING=1"
 )
 where node >nul 2>nul || (

@@ -11,7 +11,7 @@
 
 ## 啟動
 
-需要 Python 3.11 以上、Go 1.25、Node.js 22。
+需要 Python 3.11 以上、Go 1.26 以上、Node.js 22。
 
 ```bash
 make workbench        # 建置前端，啟動 Python 與 Go，就緒後開啟 http://localhost:8080；Ctrl+C 全部停止
