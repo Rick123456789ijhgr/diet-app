@@ -2,7 +2,7 @@
 
 > 對應決策：`docs/adr/0003-workbench-react-go.md`
 > 使用方式：一次只做一個階段，一個階段一個 PR。規格草稿（第 2 節）經 Rick 審核同意後才寫入 `proto/`、`openapi/`、`db/migrations/`。
-> 審核紀錄：2026-10-13 Rick 同意第 2.1 至 2.3 節（含第 2.5 節的修正）；第 2.4 節待階段 5 前審核。
+> 審核紀錄：2026-10-13 Rick 同意第 2.1 至 2.3 節（含第 2.5 節的修正）；第 2.4 節由第 2.6 節取代；2026-10-16 Rick 同意第 2.6 節（D1–D6 與審核重點皆依建議，見 2.6.5）。
 
 ---
 
@@ -236,7 +236,7 @@ message JsonResponse { string json = 1; }
 - 開發工具路由由 `WORKBENCH_DEV_TOOLS=1` 開啟；未開啟時一律 404。線上部署時不開。
 - 登入：Cookie 為 HttpOnly、SameSite=Lax；線上部署時加 Secure（需 HTTPS）。
 
-### 2.4 資料表（`db/migrations/`，階段 5 才寫）
+### 2.4 資料表（`db/migrations/`，階段 5 才寫；已由 2.6 節取代）
 
 **白話說明**：冷啟動需要「使用者」「登入工作階段」「上傳草稿」「產品」「營養標示」「產品照片」六張表。**欄位須先與規劃書 6.1、9.2 對齊**；以下只是初稿，用來確認方向。
 
@@ -269,6 +269,158 @@ message JsonResponse { string json = 1; }
 - **冷啟動路由延到階段 5**：請求與回應欄位取決於 2.4 節資料表，屆時與資料表一起補進 `openapi/workbench.yaml`。登入三支路由已先寫入。
 - **JSON 為主的回應一律是物件**：`FreeJson`（掃描、批次、E1、直方圖、真值）限定為 JSON 物件，Python 回傳串列時須包一層，例如 `{"rows": [...]}`。
 - **Go 升到 1.25**：grpc-go 1.84 需要 Go 1.25；`api/Dockerfile` 一併改為 `golang:1.25`。
+
+### 2.6 階段 5 規格（2026-10-16 同意；取代 2.4 節）
+
+> 依 2.4 節初稿細化。**規劃書 6.1、9.2 不在 repo 中**（README 指向 `docs/`，實際沒有），以下尚未與之對齊；請提供這兩節，或確認先依本草稿實作、差異之後以新的 migration 補上。
+> 審核方式：逐項回覆「同意」或要改的地方。同意後才寫入 `db/migrations/`、`openapi/workbench.yaml`（`db/CLAUDE.md`：migration 須由人主導）。
+
+#### 2.6.1 待決定事項（附建議）
+
+| # | 問題 | 建議 | 其他選項 |
+| --- | --- | --- | --- |
+| D1 | 同一條碼已存在 | 擋下並顯示既有產品；由人選「補照片」（照片掛到既有產品）或「修正數值」（見 D2） | 一律擋下，第一版不能修改 |
+| D2 | 修正營養數值的歷史 | `nutrition_facts` 只新增不修改：修正時新增一版，舊版填 `superseded_at`；同一產品、同一基準只有一版有效 | 原地修改＋另建稽核表 |
+| D3 | 每份與每 100 公克（毫升） | 兩種基準都存，照標示原樣輸入；產品記錄淨重單位（g／ml）；程式檢查兩欄是否一致（每份 × 100 ÷ 份量），不一致時提示，不自動改 | 只存每 100，每份由程式換算 |
+| D4 | 本機開發要不要 Postgres 與 MinIO | 冷啟動頁需要，以 `deploy/docker-compose.yml` 啟動；`make workbench` 偵測不到資料庫時，冷啟動頁顯示「未連線資料庫」，開發工具頁照常可用 | 本機改存檔案系統（與線上行為不同，不建議） |
+| D5 | 建立組員帳號 | Go 管理指令 `go run ./cmd/wbuser add <帳號> <顯示名稱>`（密碼由終端機輸入），不開放註冊 | 第一個登入者自動成為管理者 |
+| D6 | 給 Python 讀的 `ai_*` view | 階段 5 不建；RAG 需要時另開 migration | 一併建立 `ai_products_v1` |
+
+#### 2.6.2 資料表（`db/migrations/000002_coldstart.up.sql`）
+
+**白話說明**：六張表。上傳先存成「草稿」，人確認後才建立產品與營養標示；營養數值只來自人工輸入（規則 1），前處理結果只用來輔助（例如條碼解碼結果預先填入，但仍須人確認）。照片原檔存 MinIO，資料庫只記位置與雜湊。
+
+```sql
+CREATE TABLE users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username      TEXT        NOT NULL UNIQUE CHECK (username ~ '^[a-z0-9_.-]{3,32}$'),
+    password_hash TEXT        NOT NULL,              -- argon2id（PHC 字串格式）
+    display_name  TEXT        NOT NULL,
+    disabled      BOOLEAN     NOT NULL DEFAULT false,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE sessions (
+    token_hash  BYTEA       PRIMARY KEY,            -- Cookie 中隨機 token 的 SHA-256；資料庫不存原值
+    user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at  TIMESTAMPTZ NOT NULL                -- 建立後 7 天；登出即刪除
+);
+CREATE INDEX sessions_expires_at_idx ON sessions (expires_at);
+
+CREATE TABLE products (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    barcode              TEXT        NOT NULL UNIQUE CHECK (barcode ~ '^[0-9]{8,14}$'),  -- 校驗碼由 Go 檢查
+    name                 TEXT        NOT NULL,
+    brand                TEXT,
+    net_content          NUMERIC(10,2) CHECK (net_content > 0),    -- 淨重或容量
+    content_unit         TEXT        NOT NULL CHECK (content_unit IN ('g', 'ml')),
+    serving_size         NUMERIC(10,2) CHECK (serving_size > 0),   -- 每份（單位同 content_unit）
+    servings_per_package NUMERIC(10,2) CHECK (servings_per_package > 0),
+    source               TEXT        NOT NULL CHECK (source IN ('coldstart')),
+    created_by           UUID        NOT NULL REFERENCES users(id),
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 台灣營養標示的八項必要欄位；數值為人工確認的真值，只新增不修改（D2）
+CREATE TABLE nutrition_facts (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id       UUID        NOT NULL REFERENCES products(id),
+    basis            TEXT        NOT NULL CHECK (basis IN ('per_serving', 'per_100')),  -- per_100 的單位見 products.content_unit
+    energy_kcal      NUMERIC(10,2) NOT NULL CHECK (energy_kcal >= 0),
+    protein_g        NUMERIC(10,2) NOT NULL CHECK (protein_g >= 0),
+    fat_g            NUMERIC(10,2) NOT NULL CHECK (fat_g >= 0),
+    saturated_fat_g  NUMERIC(10,2) NOT NULL CHECK (saturated_fat_g >= 0),
+    trans_fat_g      NUMERIC(10,2) NOT NULL CHECK (trans_fat_g >= 0),
+    carbohydrate_g   NUMERIC(10,2) NOT NULL CHECK (carbohydrate_g >= 0),
+    sugar_g          NUMERIC(10,2) NOT NULL CHECK (sugar_g >= 0),
+    sodium_mg        NUMERIC(10,2) NOT NULL CHECK (sodium_mg >= 0),
+    confirmed_by     UUID        NOT NULL REFERENCES users(id),
+    confirmed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    superseded_at    TIMESTAMPTZ,                     -- 被新版取代的時間；NULL 為有效版本
+    CHECK (saturated_fat_g + trans_fat_g <= fat_g),
+    CHECK (sugar_g <= carbohydrate_g)
+);
+CREATE UNIQUE INDEX nutrition_facts_current_idx
+    ON nutrition_facts (product_id, basis) WHERE superseded_at IS NULL;
+
+CREATE TABLE product_submissions (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    status        TEXT        NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'confirmed', 'rejected')),
+    draft         JSONB       NOT NULL DEFAULT '{}',  -- 人工輸入中的欄位（條碼、品名、份量、兩種基準的營養數值）
+    preprocess    JSONB       NOT NULL DEFAULT '{}',  -- 各照片的前處理摘要（品質警告、條碼解碼、標示四角）；只供參考
+    product_id    UUID        REFERENCES products(id),  -- 確認後（新建或補照片的既有產品）
+    created_by    UUID        NOT NULL REFERENCES users(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    confirmed_by  UUID        REFERENCES users(id),
+    confirmed_at  TIMESTAMPTZ,
+    CHECK ((status = 'confirmed') = (product_id IS NOT NULL AND confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL))
+);
+CREATE INDEX product_submissions_status_idx ON product_submissions (status, updated_at DESC);
+
+CREATE TABLE product_images (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    submission_id  UUID        NOT NULL REFERENCES product_submissions(id),
+    product_id     UUID        REFERENCES products(id),  -- 確認後填入
+    kind           TEXT        NOT NULL CHECK (kind IN ('front', 'barcode', 'label')),
+    object_key     TEXT        NOT NULL UNIQUE,     -- MinIO：coldstart/<submission_id>/<kind>-<sha256 前 16 碼>.<副檔名>
+    sha256         BYTEA       NOT NULL,
+    content_type   TEXT        NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png')),
+    width          INT         NOT NULL CHECK (width > 0),
+    height         INT         NOT NULL CHECK (height > 0),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX product_images_submission_kind_idx ON product_images (submission_id, kind);  -- 重傳同一種照片時取代
+```
+
+`down`：依相反順序 `DROP TABLE`。`gen_random_uuid()` 是 PostgreSQL 13 以上內建函式，不需要擴充套件。
+
+**審核重點**
+- `nutrition_facts` 的兩條 `CHECK`（飽和＋反式 ≤ 脂肪、糖 ≤ 碳水）是確定性規則，擋下明顯的輸入錯誤；標示本身因四捨五入而違反時，是否要放寬？
+- 「補照片」時，照片的 `submission_id` 指向新的那筆上傳、`product_id` 指向既有產品。
+- 條碼存標示上的數字原樣，不轉成 GTIN-14；UPC-A 與對應的 EAN-13（前面補 0）會被視為不同條碼，是否要統一？
+
+#### 2.6.3 冷啟動路由（`openapi/workbench.yaml`）
+
+與 2.3 節的表格相同（確認改為 `POST …/{id}/confirm`，見 2.5 節），以下補上欄位：
+
+| 路由 | 請求 | 回應 |
+| --- | --- | --- |
+| `POST /coldstart/submissions` | 無 | `201 Submission` |
+| `GET /coldstart/submissions?status=draft&limit=50` | — | `{ items: SubmissionSummary[] }`（id、狀態、條碼、品名、建立者、更新時間、三種照片是否已上傳） |
+| `GET /coldstart/submissions/{id}` | — | `Submission` |
+| `PUT /coldstart/submissions/{id}/images/{kind}` | multipart `file`（JPEG／PNG，上限 31 MB） | `Submission`（含該照片的前處理摘要）。Go 存 MinIO 後呼叫 `PreprocessService`：front→`CheckQuality`；barcode→`CheckQuality`＋`DecodeBarcode`；label→`CheckQuality`＋`PreprocessLabel` |
+| `GET /coldstart/submissions/{id}/images/{kind}` | — | 原圖（`image/jpeg`／`image/png`），供確認畫面顯示 |
+| `PUT /coldstart/submissions/{id}/draft` | `Draft` | `Submission`；只存不檢查完整性（草稿可缺欄位），型別錯誤回 400 |
+| `POST /coldstart/submissions/{id}/confirm` | `{ mode: "create" \| "add_images" \| "revise_nutrition", product_id? }` | `200 { submission, product }`；條碼已存在且 `mode=create` 時回 `409 BARCODE_EXISTS`（附既有產品）；欄位不完整回 `422 DRAFT_INCOMPLETE`（附缺少的欄位）；兩種基準的數值不一致回 `422 NUTRITION_INCONSISTENT`（附差異） |
+| `POST /coldstart/submissions/{id}/reject` | `{ reason }` | `Submission` |
+| `GET /coldstart/products/{barcode}` | — | `Product`（含有效的營養標示與照片清單）；不存在回 404 |
+
+- `Draft`：`barcode`、`name`、`brand`、`net_content`、`content_unit`、`serving_size`、`servings_per_package`、`nutrition: { per_serving: Nutrients, per_100: Nutrients }`；`Nutrients` 為八項數值，草稿中都可省略。
+- `Submission`：`id`、`status`、`draft`、`images: { front?, barcode?, label? }`（各含寬高、上傳時間、前處理摘要：品質警告、解碼結果、標示四角）、`product_id?`、建立者與時間。
+- 數值以 JSON number 傳送，Go 以 `NUMERIC` 存入；比較與顯示的捨入由 Go 決定（兩位小數）。
+- 冷啟動路由都要登入（`sessionCookie`），未登入回 401；不受 `WORKBENCH_DEV_TOOLS` 影響。
+- 同一筆上傳以 `updated_at` 做樂觀鎖：寫入請求帶 `If-Match`，不符回 `412`，避免兩位組員同時編輯互相覆蓋。
+
+#### 2.6.4 兩項規格調整（第 6 節，可與本節一起審）
+
+1. **`RenderView` 新增 `vlm_sizes` 檢視**：回傳 `data_json`：`{"sizes": [{"max_side", "bytes", "width", "height"}]}`。食物照片頁的 VLM 尺寸試算從 6 次 `/dev/food` 請求改成 1 次。
+2. **與真值比較改由後端計算**：`RenderView` 新增 `truth_compare` 檢視（`data_json`：營養標示的四角平均與最大誤差（px）、食物照片的盤數差與菜數差），取代前端 `lib/geometry.ts` 的計算，符合「數字由程式決定」，評測數字也與研究共用 `dietai.evaluation`。`PreprocessLabelResponse`、`PreprocessFoodResponse` 不變（正式流程沒有真值）。
+
+兩者都只新增 `view` 的值，不改 proto 欄位；`openapi/workbench.yaml` 的 `view` 列舉加兩個值。
+
+---
+
+#### 2.6.5 審核結果（2026-10-16）
+
+Rick 同意 D1–D6 皆依建議。審核重點的決定：
+
+1. **營養數值的兩條檢查不放在資料庫**：台灣標示有「低於門檻可標示為 0」的規定（例如反式脂肪 ≤ 0.3 g），標示本身就可能違反「飽和＋反式 ≤ 脂肪」「糖 ≤ 碳水」。改由 Go 在確認時檢查，違反時回 `422 NUTRITION_INCONSISTENT` 並列出差異；人確認標示確實如此後，以 `accept_warnings: true` 再送一次即照原樣存入。`nutrition_facts` 刪除這兩條 `CHECK`。每份與每 100 的一致性檢查（D3）同樣處理。
+2. **UPC-A 與 EAN-13 視為同一條碼**：`products` 新增 `gtin TEXT NOT NULL UNIQUE CHECK (gtin ~ '^[0-9]{14}$')`（標示數字補 0 到 14 碼，由 Go 計算並檢查校驗碼），`barcode` 存標示原樣、不設唯一。查詢與重複判斷一律用 `gtin`。
+3. **規劃書 6.1、9.2**：先依本節實作，差異之後以新的 migration 補上。
+
+---
 
 ## 3. 共通約定
 
