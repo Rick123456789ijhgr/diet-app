@@ -139,9 +139,10 @@ def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[El
     """以橢圓擬合偵測盤緣，回傳原圖座標的橢圓，依面積由大到小；找不到時回傳空的 tuple。
 
     在縮小後的灰階影像上做 Canny（``cfg.plate_canny_low``、``cfg.plate_canny_high``），
-    對每條輪廓以 ``cv2.fitEllipse`` 擬合，只保留：長軸不小於短邊的 ``cfg.plate_min_size_ratio``、
-    短長軸比不小於 ``cfg.plate_min_axis_ratio``、輪廓點正規化半徑的平均殘差不大於
-    ``cfg.plate_max_residual``、且輪廓涵蓋橢圓周至少 ``cfg.plate_min_coverage`` 者。
+    對點數不少於 ``cfg.plate_min_contour_points`` 的輪廓以 ``cv2.fitEllipse`` 擬合，只保留：
+    長軸不小於短邊的 ``cfg.plate_min_size_ratio``、短長軸比不小於 ``cfg.plate_min_axis_ratio``、
+    輪廓點正規化半徑的平均殘差不大於 ``cfg.plate_max_residual``、
+    且輪廓涵蓋橢圓周至少 ``cfg.plate_min_coverage`` 者。
     中心落在較大橢圓內部的候選（盤緣內圈、盤中食物、同一邊緣的兩側）不採用。
     """
     ops.validate_image(img)
@@ -154,7 +155,7 @@ def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[El
     min_major = cfg.plate_min_size_ratio * min(sh, sw)
     candidates: list[Ellipse] = []
     for contour in contours:
-        if len(contour) < 20:
+        if len(contour) < cfg.plate_min_contour_points:
             continue
         _, _, bw, bh = cv2.boundingRect(contour)
         if max(bw, bh) < min_major:
@@ -232,6 +233,7 @@ def preprocess_food(img: Image, cfg: FoodConfig = FoodConfig()) -> FoodResult:
                     "plate_min_axis_ratio": cfg.plate_min_axis_ratio,
                     "plate_max_residual": cfg.plate_max_residual,
                     "plate_min_coverage": cfg.plate_min_coverage,
+                    "plate_min_contour_points": cfg.plate_min_contour_points,
                 },
             )
         )

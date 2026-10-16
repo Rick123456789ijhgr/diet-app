@@ -133,10 +133,17 @@ def test_rectify_output_size_and_corner_order_invariance():
     shuffled = rectify(img, truth[[2, 0, 3, 1]])
     np.testing.assert_array_equal(out, shuffled)
     lw, lh = truth[1, 0] - truth[0, 0], truth[3, 1] - truth[0, 1]
-    assert out.shape[:2] == (round(lh), round(lw))
+    assert out.shape[:2] == (round(lh) + 1, round(lw) + 1)
     # 正視的標示經校正後應接近原本的表格（縮放到相同尺寸後比較）
     label = cv2.resize(nutrition_label(), (out.shape[1], out.shape[0]))
     assert np.abs(out.astype(int) - label.astype(int)).mean() < 15
+
+
+def test_rectify_keeps_pixels_on_every_edge():
+    # 四角在像素中心上的正視矩形：校正結果應與直接裁切完全相同，最右欄與最下列也不被截掉
+    img = np.random.default_rng(0).integers(0, 256, (120, 160, 3), dtype=np.uint8)
+    quad = np.array([[10, 20], [109, 20], [109, 79], [10, 79]], dtype=np.float32)
+    np.testing.assert_array_equal(rectify(img, quad), img[20:80, 10:110])
 
 
 def test_rectify_caps_long_side():
@@ -315,6 +322,9 @@ def test_rejects_invalid_image(bad):
         {"clahe_clip": 0.0},
         {"clahe_tile": 0},
         {"hough_max_gap": -1},
+        {"hough_collinear_ratio": -0.1},
+        {"hough_min_side_gap_ratio": 1.5},
+        {"hough_corner_margin_ratio": -1},
     ],
 )
 def test_config_rejects_invalid_values(kwargs):

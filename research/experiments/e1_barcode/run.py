@@ -48,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
         p.error(str(e))
     if manifest.excluded_test:
         print(f"測試集已鎖定：排除 {manifest.excluded_test} 張（正式實驗請加 --include-test）")
+    if not manifest.items:
+        p.error("manifest 沒有可執行的影像")
     out = new_run_dir(args.out, args.label)
     total = len(manifest.items) * len(arms)
     print(f"{len(manifest.items)} 張影像 × {len(arms)} 個實驗組 = {total} 次 → {out}")

@@ -8,6 +8,7 @@ import pytest
 from dietai.evaluation import (
     Arm,
     Outcome,
+    first_rung,
     judge,
     list_runs,
     load_arm,
@@ -63,6 +64,21 @@ def _ladder(responses, fake_decoder):
 )
 def test_judge(fake_decoder, responses, truth, expected):
     assert judge(_ladder(responses, fake_decoder), truth) is expected
+
+
+@pytest.mark.parametrize(
+    ("fmt", "text", "truth", "expected"),
+    [
+        (CodeFormat.UPCA, "012345678905", "0012345678905", Outcome.CORRECT),
+        (CodeFormat.EAN13, "0012345678905", "012345678905", Outcome.CORRECT),
+        (CodeFormat.UPCA, "012345678905", "012345678905", Outcome.CORRECT),
+        (CodeFormat.UPCA, "012345678905", "1012345678905", Outcome.MISREAD),
+        (CodeFormat.EAN8, "96385074", "0000096385074", Outcome.MISREAD),
+    ],
+)
+def test_judge_normalizes_upca_to_gtin13(fake_decoder, fmt, text, truth, expected):
+    hit = DecodeHit(fmt, text, text.encode(), CORNERS)
+    assert judge(_ladder([[hit]], fake_decoder), truth) is expected
 
 
 def test_judge_accepts_any_matching_hit(fake_decoder):
@@ -219,10 +235,12 @@ def test_run_experiment_never_overwrites(dataset, tmp_path):
 def test_unreadable_image_is_recorded_not_fatal(tmp_path, fake_decoder):
     write_image(tmp_path / "good.png", IMG)
     (tmp_path / "bad.png").write_bytes(b"broken")
+    (tmp_path / "empty.png").write_bytes(b"")  # cv2.imdecode 對空緩衝區丟 cv2.error
     rows = [
         {"image": "good.png", "truth": "4710088410108"},
         {"image": "bad.png", "truth": "4710088410108"},
         {"image": "missing.png", "truth": "4710088410108"},
+        {"image": "empty.png", "truth": "4710088410108"},
     ]
     manifest = read_manifest(write_manifest(tmp_path / "m.csv", rows))
     out = tmp_path / "run"
@@ -232,11 +250,12 @@ def test_unreadable_image_is_recorded_not_fatal(tmp_path, fake_decoder):
         out,
         decoder_factory=lambda arm: fake_decoder([[_hit("4710088410108")]]),
     )
-    assert summary.counts == {"correct": 1, "error": 2}
+    assert summary.counts == {"correct": 1, "error": 3}
     _, results = read_run(out)
     assert "ValueError" in results[1]["error"] and "FileNotFoundError" in results[2]["error"]
+    assert "ValueError" in results[3]["error"]
     s = summarize(results)[0]
-    assert (s["n"], s["correct"], s["errors"], s["rate"]) == (1, 1, 2, 1.0)
+    assert (s["n"], s["correct"], s["errors"], s["rate"]) == (1, 1, 3, 1.0)
 
 
 def test_run_experiment_refuses_unflagged_test_split(tmp_path, fake_decoder):
@@ -244,6 +263,15 @@ def test_run_experiment_refuses_unflagged_test_split(tmp_path, fake_decoder):
     manifest = read_manifest(write_manifest(tmp_path / "m.csv", rows), include_test=True)
     with pytest.raises(ValueError, match="include_test"):
         run_experiment(manifest, [Arm("a")], tmp_path / "run")
+
+
+def test_run_experiment_refuses_empty_manifest(tmp_path):
+    rows = [{"image": "a.png", "truth": "1", "split": "test"}]
+    manifest = read_manifest(write_manifest(tmp_path / "m.csv", rows))
+    assert not manifest.items and manifest.excluded_test == 1
+    with pytest.raises(ValueError, match="沒有可執行的影像"):
+        run_experiment(manifest, [Arm("a")], tmp_path / "run")
+    assert not (tmp_path / "run").exists()
 
 
 def test_tag_column_cannot_shadow_result_column(tmp_path):
@@ -323,6 +351,31 @@ def test_rescue_counts():
         {"arm": "new", "rung": "raw", "count": 1},
         {"arm": "new", "rung": "binarize", "count": 1},
     ]
+
+
+def test_rescue_counts_prefers_first_rung_and_arm_order():
+    rows = [
+        {**_row("1", "a", "correct", rung="gray"), "first_rung": "raw"},  # min_agree=2：raw 先解出
+        _row("2", "a", "correct", rung="denoise"),  # 舊結果沒有 first_rung
+        _row("3", "a", "correct", rung="sharpen"),
+    ]
+    arms = [{"name": "a", "ladder": {"rungs": ["raw", "denoise", "sharpen"]}}]
+    assert [r["rung"] for r in rescue_counts(rows, arms)] == ["raw", "denoise", "sharpen"]
+    assert [r["rung"] for r in rescue_counts(rows)] == [
+        "raw",
+        "sharpen",
+        "denoise",
+    ]  # Rung 定義順序
+
+
+def test_first_rung_with_min_agree(fake_decoder):
+    cfg = LadderConfig(rungs=(Rung.RAW, Rung.GRAY, Rung.BINARIZE), min_agree=2)
+    hit = _hit("4710088410108")
+    result = decode_with_ladder(IMG, fake_decoder([[hit], [], [hit]]), cfg)
+    assert result.success_rung is Rung.BINARIZE
+    assert first_rung(result) is Rung.RAW
+    failed = decode_with_ladder(IMG, fake_decoder([]), cfg)
+    assert first_rung(failed) is None
 
 
 def test_report_markdown():

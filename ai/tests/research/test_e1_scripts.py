@@ -66,3 +66,18 @@ def test_run_rejects_unknown_arm(tmp_path):
     )
     assert proc.returncode != 0
     assert "找不到實驗組" in proc.stderr
+
+
+def test_run_rejects_manifest_with_only_test_split(tmp_path):
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("image,truth,split\na.png,4710088410108,test\n", encoding="utf-8")
+    runs = tmp_path / "runs"
+    proc = subprocess.run(
+        [sys.executable, str(E1 / "run.py"), "--manifest", str(manifest), "--out", str(runs)],
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert "沒有可執行的影像" in proc.stderr
+    assert not runs.exists()

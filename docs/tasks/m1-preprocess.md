@@ -288,6 +288,20 @@ def locate_invoice_qrs(img, decoder, cfg) -> InvoiceQrResult
 | 預設改變與舊實驗組 | 所有實驗組設定一律明寫 `rungs` 與 `accept_formats`（測試檢查），舊實驗組釘在 Phase 2 的值，結果可重現；新增 `z2_default_v2` 對應新預設（測試確認與程式預設一致，預設再改時應新增實驗組）。 |
 | 新實驗組 | `m0`～`m5`（sharpen 移後、兩次一致、格式限制及其組合），結果見 E1 README。 |
 
+### Code review 修正（2026-10-16）
+
+| 問題 | 決議 |
+| --- | --- |
+| `PyzbarDecoder` 的四角排序 | 改用 `ops.order_quad`；原本只看 x + y／x − y，外接矩形旋轉 45° 時會重複選到同一點。 |
+| zxing-cpp 的色彩通道順序 | 經實測（藍條紅底、關閉反色），numpy 三通道本來就當成 BGR 讀取，不需要轉換；加上回歸測試。 |
+| 空的影像檔 | `read_image` 丟 `ValueError`（`cv2.imdecode` 遇到空緩衝區會丟 `cv2.error`）；`run_experiment` 讀檔時攔下所有例外，記為 `error`。 |
+| manifest 沒有可執行的影像 | `run_experiment` 丟 `ValueError`、不建立資料夾；`run.py`、`analyze.py` 改為顯示錯誤訊息，不再出現 traceback。 |
+| UPC-A 與 GTIN-13 真值 | `judge` 比對前把 12 位與 13 位數字補成 GTIN-13，EAN-8、QR 等其他內容不變。 |
+| 救回步驟 | `results.csv` 新增 `first_rung`（第一次解出採用內容的階），`rescue_counts` 改用它，並依 `run.json` 中各實驗組的階梯順序排列。`min_agree` 為 1 時與 `success_rung` 相同。 |
+| `rectify` 的座標慣例 | 四角視為角落像素的中心，對應到輸出的 `(0, 0)`–`(w − 1, h − 1)`；輸出比原本寬、高各多 1 像素，右邊與下邊的像素不再被截掉。 |
+| 寫死的門檻 | 新增 `LabelConfig.hough_collinear_ratio`、`hough_min_side_gap_ratio`、`hough_corner_margin_ratio` 與 `FoodConfig.plate_min_contour_points`，皆待校準，預設值與原本相同。共線距離的 2 像素下限，以及平滑與膨脹的核大小，屬於實作常數，不開放調整。 |
+| 重跑合成資料 E1 | 所有實驗組的成功率、誤讀次數與 2026-10-12 的結果相同；`m1_agree2` 的救回階由 gray 48 次更正為 raw 48 次。 |
+
 ## 10. 需要人決定、不要交給 AI 決定的事
 
 - 各門檻的實際數值（由 100–200 張標記照片校準）。

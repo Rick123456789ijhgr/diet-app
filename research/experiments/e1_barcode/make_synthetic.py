@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest = write_barcode_dataset(
         args.out, args.codes, args.seed, args.module_px, negatives=not args.no_negatives
     )
-    n = sum(1 for _ in manifest.open(encoding="utf-8")) - 1
+    n = len(manifest.read_text(encoding="utf-8").splitlines()) - 1  # 扣掉標題列
     print(f"已寫出 {n} 張影像與 manifest：{manifest}")
     return 0
 

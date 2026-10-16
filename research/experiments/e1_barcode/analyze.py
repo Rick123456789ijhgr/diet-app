@@ -49,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
         meta, rows = read_run(run_dir)
     except OSError as e:
         p.error(f"讀不到執行結果：{e}")
+    if not rows:
+        p.error(f"{run_dir} 沒有任何結果列")
     tags = meta["manifest"]["tag_columns"]
     by = tags if args.by is None else [s.strip() for s in args.by.split(",") if s.strip()]
     unknown = [b for b in by if b not in tags]

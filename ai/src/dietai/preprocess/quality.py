@@ -81,11 +81,11 @@ def exposure_masks(
 
 def exposure_stats(img: Image, cfg: QualityConfig = QualityConfig()) -> ExposureStats:
     """亮度平均，以及灰階低於 ``cfg.dark_level``、高於 ``cfg.bright_level`` 的像素比例。"""
-    dark, bright = exposure_masks(img, cfg)
+    gray = to_gray(img)
     return ExposureStats(
-        mean=float(to_gray(img).mean()),
-        dark_ratio=float(dark.mean()),
-        bright_ratio=float(bright.mean()),
+        mean=float(gray.mean()),
+        dark_ratio=float((gray < cfg.dark_level).mean()),
+        bright_ratio=float((gray > cfg.bright_level).mean()),
     )
 
 

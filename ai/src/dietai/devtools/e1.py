@@ -111,7 +111,7 @@ def run_json(run_dir: str) -> dict[str, Any]:
         # 基準組不同時 McNemar 的結果不同，每個基準組各算一次（實驗組數量不多）
         "overall": {b: summarize(rows, (), b) for b in arms},
         "by_tag": {t: summarize(rows, (t,)) for t in tags},
-        "rescues": rescue_counts(rows),
+        "rescues": rescue_counts(rows, meta.get("arms", ())),
         "failures": failures,
         "attempts": _failure_attempts(folder, {(f["arm"], f["id"]) for f in failures}),
     }

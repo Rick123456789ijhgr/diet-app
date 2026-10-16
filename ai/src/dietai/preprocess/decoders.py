@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 from dietai.preprocess.config import ZxingConfig
-from dietai.preprocess.ops import to_gray, validate_image
+from dietai.preprocess.ops import order_quad, to_gray, validate_image
 from dietai.preprocess.types import CodeFormat as CodeFormat  # 定義在 types，此處沿用舊路徑
 from dietai.preprocess.types import Image
 
@@ -124,23 +124,16 @@ class PyzbarDecoder:
         hits: list[DecodeHit] = []
         for r in self._decode(gray):
             poly = np.array([(p.x, p.y) for p in r.polygon], dtype=np.float32)
-            box = cv2.boxPoints(cv2.minAreaRect(poly))
-            pts: list[list[float]] = np.asarray(box, dtype=np.float64).tolist()
-            corners = _order_corners([(x, y) for x, y in pts])
+            # order_quad 依角度排序：只看 x + y／x − y 時，旋轉 45° 的外接矩形會重複選到同一點
+            box = order_quad(cv2.boxPoints(cv2.minAreaRect(poly)))
+            tl, tr, br, bl = ((float(x), float(y)) for x, y in box.tolist())
             raw = bytes(r.data)
             hits.append(
                 DecodeHit(
                     format=self._FORMATS.get(r.type, CodeFormat.OTHER),
                     text=raw.decode("utf-8", errors="replace"),
                     raw=raw,
-                    corners=corners,
+                    corners=(tl, tr, br, bl),
                 )
             )
         return hits
-
-
-def _order_corners(pts: list[Point]) -> tuple[Point, Point, Point, Point]:
-    """把四點排成左上、右上、右下、左下（以影像座標為準）。"""
-    by_sum = sorted(pts, key=lambda p: p[0] + p[1])
-    by_diff = sorted(pts, key=lambda p: p[0] - p[1])
-    return by_sum[0], by_diff[-1], by_sum[-1], by_diff[0]

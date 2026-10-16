@@ -98,6 +98,8 @@ def test_read_image_errors(tmp_path):
         read_image(tmp_path / "missing.png")
     with pytest.raises(ValueError):
         read_image(_write(tmp_path / "bad.png", "not an image"))
+    with pytest.raises(ValueError, match="空"):
+        read_image(_write(tmp_path / "empty.png", ""))
 
 
 @pytest.mark.parametrize(
