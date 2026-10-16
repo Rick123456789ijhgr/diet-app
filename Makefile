@@ -62,10 +62,10 @@ lint-web:
 workbench:
 	cd ai && $(AI_PY) -m streamlit run workbench/streamlit_app.py --server.headless false
 
-# 開發工作台（React 版，ADR 0003）：一次啟動 Python gRPC、Go、Vite，開啟 http://localhost:5173
-# 需要 Go 與 Node.js 22；Python 套件請先 make setup
+# 開發工作台（React 版，ADR 0003）：一次啟動 Python gRPC、Go、Vite，就緒後開啟 http://localhost:5173
+# 需要 Python、Go 與 Node.js 22；缺少的 Python／前端套件會自動安裝（同「啟動全部服務.bat」）
 workbench-react:
-	cd workbench && npm install --no-audit --no-fund && node scripts/dev.mjs
+	cd workbench && node scripts/dev.mjs
 
 # E1 條碼消融：以合成資料端到端跑一次（產生資料 → 執行所有實驗組 → 分組彙整）
 E1 := ../research/experiments/e1_barcode

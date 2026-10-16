@@ -10,11 +10,14 @@
 
 ## 啟動
 
-需要 Python（先 `make setup`）、Go 1.25、Node.js 22。
+需要 Python 3.11 以上、Go 1.25、Node.js 22。
 
 ```bash
-make workbench-react        # 一次啟動三個程序並開啟瀏覽器，Ctrl+C 全部停止
+make workbench-react        # 一次啟動三個程序，就緒後開啟瀏覽器；Ctrl+C 全部停止
 ```
+
+Windows 也可以雙擊根目錄的 `啟動全部服務.bat`（已在執行時直接開啟瀏覽器，關閉視窗即停止）。
+兩者都會在缺少時自動安裝 Python 套件（`ai/.venv`）與前端套件（`npm ci`），並等三個服務都就緒才開瀏覽器。
 
 只改前端時，也可以分開啟動：
 
@@ -60,7 +63,7 @@ src/
     useRenderView     診斷檢視（邊緣、遮罩、各階影像等）
   lib/                設定覆寫、合成場景、縮放、位元組與幾何顯示、中文文字對照（純函式，有單元測試）
   pages/              各頁
-scripts/dev.mjs       一次啟動 Python、Go、Vite
+scripts/dev.mjs       一次啟動 Python、Go、Vite（自動安裝缺少的套件、就緒後開瀏覽器）
 e2e/                  Playwright 冒煙測試
 ```
 
