@@ -18,10 +18,14 @@
 
 ## 快速開始
 
+需要 Python 3.11 以上、Go 1.26 以上、Node.js 22 與 make；完整安裝步驟見 [`ONBOARDING.md`](ONBOARDING.md)。
+
 ```bash
 cp .env.example .env
-make up          # 啟動 PostgreSQL、MinIO、api、ai
+make setup       # 建立 ai/.venv 並安裝 Python 套件
 make test        # 跑所有服務的測試
+make workbench   # 開發工作台：http://localhost:8080
+make up          # 啟動 PostgreSQL、MinIO、api、ai（需要 Docker）
 ```
 
 開發規範見 `CLAUDE.md`，架構決策見 `docs/adr/`。
