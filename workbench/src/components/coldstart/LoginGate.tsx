@@ -17,7 +17,7 @@ export function LoginGate() {
   if (me.isPending) return <EmptyState>載入中…</EmptyState>
   if (me.isError) {
     return (
-      <div className="p-6">
+      <div className="pr-3 pb-3">
         <ColdstartError error={me.error} />
       </div>
     )
