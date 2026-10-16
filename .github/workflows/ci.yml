@@ -74,11 +74,33 @@ jobs:
     defaults:
       run:
         working-directory: api
+    # 資料庫整合測試（internal/pgstore）：每次測試建立暫時的資料庫並套用 db/migrations
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://test:test@localhost:5432/test?sslmode=disable
+      TEST_MINIO_ENDPOINT: localhost:9000
+      TEST_MINIO_ACCESS_KEY: minio
+      TEST_MINIO_SECRET_KEY: minio-secret
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
           go-version-file: api/go.mod
+      # 物件儲存整合測試（internal/platform/objstore）：S3 相容的 RustFS（MinIO 已不提供公開映像）
+      - name: 啟動物件儲存（RustFS）
+        run: |
+          docker run -d -p 9000:9000 -e RUSTFS_ACCESS_KEY=minio -e RUSTFS_SECRET_KEY=minio-secret rustfs/rustfs:1.0.0
+          for i in $(seq 1 60); do curl -sf http://localhost:9000/health >/dev/null && exit 0; sleep 1; done
+          docker logs "$(docker ps -lq)"; exit 1
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...

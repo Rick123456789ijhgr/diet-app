@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
 
+import { LoginGate } from '@/components/coldstart/LoginGate'
 import { AppShell } from '@/components/layout/AppShell'
 import { HomePage } from '@/pages/HomePage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
@@ -38,6 +39,26 @@ export const routes = [
       {
         path: 'm1/e1',
         lazy: async () => ({ Component: (await import('@/pages/E1Page')).E1Page }),
+      },
+      {
+        // 冷啟動上傳：須登入，未登入時顯示登入表單，登入後留在原網址
+        path: 'coldstart',
+        element: <LoginGate />,
+        children: [
+          { index: true, element: <Navigate to="/coldstart/submissions" replace /> },
+          {
+            path: 'submissions',
+            lazy: async () => ({
+              Component: (await import('@/pages/SubmissionsPage')).SubmissionsPage,
+            }),
+          },
+          {
+            path: 'submissions/:id',
+            lazy: async () => ({
+              Component: (await import('@/pages/SubmissionPage')).SubmissionPage,
+            }),
+          },
+        ],
       },
       { path: ':module/:tool?', element: <PlaceholderPage /> },
     ],

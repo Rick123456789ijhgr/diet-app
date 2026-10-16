@@ -12,3 +12,4 @@
 | 模組五 營養分析與建議 | `insights`、`profile` | `profile` | `analytics` |
 | 共用基礎 | `core` | `platform` | `domain`、`adapters`、`server` |
 | 開發工作台（前端為 `workbench/`，React，ADR 0003） | — | `workbench`、`webui`（提供建置後的前端） | `server`、`devtools` |
+| 冷啟動上傳（任務書 2.6 節） | — | `coldstart`（流程與規則）、`auth`（組員登入）、`barcode`（GTIN）、`pgstore`（PostgreSQL）、`platform/objstore`（MinIO） | `preprocess`（經 gRPC） |

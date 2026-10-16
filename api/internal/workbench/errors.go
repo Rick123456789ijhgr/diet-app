@@ -8,6 +8,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	api "github.com/your-org/diet-app/api/gen/openapi/workbenchapi"
+	"github.com/your-org/diet-app/api/internal/auth"
+	"github.com/your-org/diet-app/api/internal/coldstart"
 	"github.com/your-org/diet-app/api/internal/platform/aiclient"
 )
 
@@ -46,6 +48,9 @@ func toError(err error) *Error {
 	if errors.As(err, &e) {
 		return e
 	}
+	if e := domainError(err); e != nil {
+		return e
+	}
 	var aiErr *aiclient.Error
 	if errors.As(err, &aiErr) {
 		status, ok := grpcStatus[aiErr.Code]
@@ -71,4 +76,33 @@ func writeError(w http.ResponseWriter, e *Error) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(e.Status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// domainError 把登入與冷啟動的領域錯誤對應成 HTTP 錯誤；不是這些錯誤時回傳 nil。
+func domainError(err error) *Error {
+	switch {
+	case errors.Is(err, auth.ErrInvalidCredentials):
+		return &Error{http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error(), ""}
+	case errors.Is(err, auth.ErrTooManyAttempts):
+		return &Error{http.StatusTooManyRequests, "TOO_MANY_ATTEMPTS", err.Error(), ""}
+	case errors.Is(err, auth.ErrUnauthenticated):
+		return &Error{http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), ""}
+	case errors.Is(err, coldstart.ErrUnavailable):
+		return &Error{http.StatusServiceUnavailable, "DB_UNAVAILABLE", err.Error(), ""}
+	case errors.Is(err, coldstart.ErrNotFound):
+		return &Error{http.StatusNotFound, "NOT_FOUND", "找不到這筆上傳、照片或產品", ""}
+	case errors.Is(err, coldstart.ErrClosed):
+		return &Error{http.StatusConflict, "SUBMISSION_CLOSED", err.Error(), ""}
+	case errors.Is(err, coldstart.ErrStale):
+		return &Error{http.StatusPreconditionFailed, "PRECONDITION_FAILED", err.Error(), ""}
+	}
+	var invalid *coldstart.InvalidError
+	if errors.As(err, &invalid) {
+		status := http.StatusBadRequest
+		if invalid.Code == "IMAGE_TOO_LARGE" {
+			status = http.StatusRequestEntityTooLarge
+		}
+		return &Error{status, invalid.Code, invalid.Message, invalid.Field}
+	}
+	return nil
 }

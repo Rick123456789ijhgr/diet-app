@@ -1,11 +1,12 @@
-// 外框（柔和卡片風）：左側浮動圖示欄（深淺色切換＋模組）、頂部列（標誌、頁面膠囊、服務狀態）、內容區。
+// 外框（柔和卡片風）：左側浮動圖示欄（深淺色切換＋模組）、頂部列（標誌、頁面膠囊、服務狀態、登入者）、內容區。
 import { useQuery } from '@tanstack/react-query'
-import { Moon, Sun } from 'lucide-react'
+import { LogOut, Moon, Sun, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 
 import { api, ApiError, unwrap } from '@/api/client'
-import { Hint } from '@/components/ui/primitives'
+import { Button, Hint } from '@/components/ui/primitives'
+import { useLogout, useMe } from '@/hooks/useAuth'
 import { cn } from '@/lib/cn'
 import { errorText } from '@/lib/text'
 import { HOME, locate, MODULES, modulePath, toolPath } from '@/nav'
@@ -53,6 +54,7 @@ export function AppShell() {
             )}
           </div>
           <ServiceStatus />
+          <UserMenu />
         </header>
         <main className="min-h-0 flex-1">
           <Outlet />
@@ -126,6 +128,23 @@ function ServiceStatus() {
         {state === 'up' ? '服務正常' : state === 'down' ? '服務中斷' : '連線中…'}
       </span>
     </Hint>
+  )
+}
+
+/** 目前登入者與登出；未登入時不顯示（開發工具頁不需要登入）。 */
+function UserMenu() {
+  const me = useMe()
+  const logout = useLogout()
+  if (!me.data) return null
+  return (
+    <div className="bg-card shadow-card flex h-11 shrink-0 items-center gap-2 rounded-full pr-1.5 pl-4 text-[13px]">
+      <UserRound className="text-muted size-4" aria-hidden />
+      <span title={me.data.username}>{me.data.display_name}</span>
+      <Button size="sm" variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending}>
+        <LogOut className="size-3.5" aria-hidden />
+        登出
+      </Button>
+    </div>
   )
 }
 
