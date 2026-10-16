@@ -15,7 +15,7 @@ export default defineConfig({
   webServer: process.env.WORKBENCH_URL
     ? undefined
     : {
-        command: 'node scripts/dev.mjs',
+        command: 'node scripts/dev.mjs --dev',
         url: baseURL,
         env: { WORKBENCH_NO_OPEN: '1' },
         reuseExistingServer: true,

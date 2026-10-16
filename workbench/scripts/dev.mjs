@@ -1,11 +1,13 @@
-// 一次啟動開發工作台需要的三個程序：Python gRPC（開發模式）、Go 主伺服器、Vite。
-// 用法：雙擊根目錄的「啟動全部服務.bat」、make workbench-react，或在 workbench/ 下 npm run dev:all。
-// 按 Ctrl+C 全部停止。
+// 啟動開發工作台。按 Ctrl+C 全部停止。
+//
+// - 一般模式（make workbench、雙擊「啟動工作台.bat」）：建置前端，再啟動 Python gRPC（開發模式）
+//   與 Go 主伺服器；Go 以 embed 提供建置後的前端，網址 http://localhost:8080。
+// - --dev（make workbench-dev，改前端時用）：另外啟動 Vite（熱更新），網址 http://localhost:5173。
 //
 // 啟動前先檢查套件：沒有 ai/.venv 或缺少套件時自動安裝；前端套件比 package-lock.json 舊時 npm ci。
-// 三個服務都就緒（經 Vite → Go → Python 取得設定結構成功）後才開啟瀏覽器。
+// 服務都就緒（經網頁的網址 → Go → Python 取得設定結構成功）後才開啟瀏覽器。
 //
-// 環境變數（皆可省略）：AI_GRPC_PORT（預設 50051）、API_PORT（8080）、WEB_PORT（5173）、
+// 環境變數（皆可省略）：AI_GRPC_PORT（預設 50051）、API_PORT（8080）、WEB_PORT（5173，只用於 --dev）、
 // WORKBENCH_NO_OPEN=1（不自動開瀏覽器）、WORKBENCH_SKIP_SETUP=1（不檢查套件）。
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
@@ -20,8 +22,9 @@ const webPort = process.env.WEB_PORT ?? '5173'
 
 const venvPython = path.join(root, 'ai', '.venv', isWin ? 'Scripts/python.exe' : 'bin/python')
 const vite = path.join(root, 'workbench', 'node_modules', 'vite', 'bin', 'vite.js')
-const webUrl = `http://localhost:${webPort}`
-// 經 Vite 代理 → Go → Python 的輕量請求；成功代表三個服務都就緒
+const devMode = process.argv.includes('--dev')
+const webUrl = `http://localhost:${devMode ? webPort : apiPort}`
+// 經網頁的網址 → Go → Python 的輕量請求；成功代表服務都就緒
 const readyUrl = `${webUrl}/workbench/v1/dev/config-schemas`
 const READY_TIMEOUT_MS = 180_000 // 第一次 go run 需要編譯，給足時間
 
@@ -54,7 +57,7 @@ function ensurePython() {
     log('安裝 Python 套件，約需數分鐘')
     runOrFail(
       venvPython,
-      ['-m', 'pip', 'install', '-e', '.[dev,vision,workbench,grpc]'],
+      ['-m', 'pip', 'install', '-e', '.[dev,vision,grpc]'],
       aiDir,
       '安裝 Python 套件',
     )
@@ -70,11 +73,37 @@ function ensureNode() {
   runOrFail('npm', ['ci', '--no-audit', '--no-fund'], path.join(root, 'workbench'), '安裝前端套件')
 }
 
+async function isReady(timeoutMs) {
+  try {
+    return (await fetch(readyUrl, { signal: AbortSignal.timeout(timeoutMs) })).ok
+  } catch {
+    return false
+  }
+}
+
+// 已在執行（例如重複雙擊）時不重複啟動：埠已被佔用，新啟動的程序只會失敗
+if (await isReady(1000)) {
+  log(`工作台已在執行：${webUrl}`)
+  if (!process.env.WORKBENCH_NO_OPEN) openBrowser(webUrl)
+  process.exit(0)
+}
+
 if (!process.env.WORKBENCH_SKIP_SETUP) {
   ensurePython()
   ensureNode()
 }
 const python = existsSync(venvPython) ? venvPython : 'python'
+
+if (!devMode) {
+  // 輸出到 api/internal/webui/static/app/，go run 編譯時以 embed 打包（見 vite.config.ts）
+  log('建置前端')
+  runOrFail(
+    process.execPath,
+    [vite, 'build', '--logLevel', 'warn'],
+    path.join(root, 'workbench'),
+    '建置前端',
+  )
+}
 
 const procs = [
   {
@@ -106,7 +135,7 @@ const procs = [
     cwd: path.join(root, 'workbench'),
     env: { WORKBENCH_API: `http://localhost:${apiPort}` },
   },
-]
+].filter((p) => devMode || p.name !== 'web')
 
 const children = []
 let stopping = false
@@ -142,22 +171,21 @@ for (const p of procs) {
   children.push(child)
 }
 
-log(`啟動中：Python :${aiPort} → Go :${apiPort} → Vite :${webPort}（Ctrl+C 全部停止）`)
+log(
+  devMode
+    ? `啟動中：Python :${aiPort} → Go :${apiPort} → Vite :${webPort}（Ctrl+C 全部停止）`
+    : `啟動中：Python :${aiPort} → Go :${apiPort}（Ctrl+C 全部停止）`,
+)
 void waitUntilReady()
 
 async function waitUntilReady() {
   const started = Date.now()
   while (!stopping && Date.now() - started < READY_TIMEOUT_MS) {
-    try {
-      const res = await fetch(readyUrl, { signal: AbortSignal.timeout(3000) })
-      if (res.ok) {
-        const secs = ((Date.now() - started) / 1000).toFixed(1)
-        log(`\x1b[32m就緒\x1b[0m（${secs} 秒）：${webUrl}`)
-        if (!process.env.WORKBENCH_NO_OPEN) openBrowser(webUrl)
-        return
-      }
-    } catch {
-      // 還沒啟動完成，稍後再試
+    if (await isReady(3000)) {
+      const secs = ((Date.now() - started) / 1000).toFixed(1)
+      log(`\x1b[32m就緒\x1b[0m（${secs} 秒）：${webUrl}`)
+      if (!process.env.WORKBENCH_NO_OPEN) openBrowser(webUrl)
+      return
     }
     await new Promise((r) => setTimeout(r, 500))
   }

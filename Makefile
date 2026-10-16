@@ -1,4 +1,4 @@
-.PHONY: up down setup test lint gen test-api test-ai test-web lint-api lint-ai lint-web workbench workbench-react e1-synthetic
+.PHONY: up down setup test lint gen test-api test-ai test-web lint-api lint-ai lint-web workbench workbench-dev e1-synthetic
 
 # Windows（PowerShell／cmd 下由 cmd.exe 執行）與 Linux／macOS（sh）共用：
 # 指令只用兩邊都支援的語法，含斜線的執行檔路徑一律加引號。
@@ -31,7 +31,7 @@ down:
 # 建立 ai/.venv 並安裝開發所需套件（含工作台與 gRPC 服務）
 setup:
 	cd ai && python -m venv .venv
-	cd ai && "$(VENV_BIN)/python" -m pip install -e ".[dev,vision,workbench,grpc]"
+	cd ai && "$(VENV_BIN)/python" -m pip install -e ".[dev,vision,grpc]"
 
 test: test-api test-ai test-web
 
@@ -57,15 +57,15 @@ lint-ai:
 lint-web:
 	cd workbench && npm install --no-audit --no-fund && npm run lint && npm run typecheck
 
-# 開發工作台（Streamlit 版），開啟 http://localhost:8501（未安裝請先 make setup）。
-# 新版完成前（任務書階段 4）兩版並存。
+# 開發工作台（ADR 0003）：建置前端，啟動 Python gRPC 與 Go，就緒後開啟 http://localhost:8080
+# （Go 以 embed 提供建置後的前端）。需要 Python、Go 與 Node.js 22；
+# 缺少的 Python／前端套件會自動安裝（同雙擊「啟動工作台.bat」）。Ctrl+C 全部停止。
 workbench:
-	cd ai && $(AI_PY) -m streamlit run workbench/streamlit_app.py --server.headless false
-
-# 開發工作台（React 版，ADR 0003）：一次啟動 Python gRPC、Go、Vite，就緒後開啟 http://localhost:5173
-# 需要 Python、Go 與 Node.js 22；缺少的 Python／前端套件會自動安裝（同「啟動全部服務.bat」）
-workbench-react:
 	cd workbench && node scripts/dev.mjs
+
+# 改前端時用：另外啟動 Vite（熱更新），開啟 http://localhost:5173
+workbench-dev:
+	cd workbench && node scripts/dev.mjs --dev
 
 # E1 條碼消融：以合成資料端到端跑一次（產生資料 → 執行所有實驗組 → 分組彙整）
 E1 := ../research/experiments/e1_barcode

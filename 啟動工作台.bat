@@ -9,42 +9,52 @@ exit /b %errorlevel%
 
 :main
 setlocal
-title 開發工作台 Workbench
+title 開發工作台 · Workbench
 
-rem 雙擊啟動開發工作台：首次執行會自動建立 ai\.venv 並安裝套件。
-rem 已在執行時直接開啟瀏覽器；關閉此視窗即停止工作台。
+rem 雙擊啟動開發工作台：建置前端，啟動 Python gRPC 與 Go，全部就緒後自動開啟 http://localhost:8080。
+rem 首次執行會自動安裝套件；已在執行時直接開啟瀏覽器。關閉此視窗即停止所有服務。
+rem 實際的啟動流程在 workbench\scripts\dev.mjs（與 make workbench 相同）。
 
-cd /d "%~dp0ai"
-set "PY=.venv\Scripts\python.exe"
-set "URL=http://localhost:8501"
+cd /d "%~dp0"
+set "URL=http://localhost:8080"
 
-curl -s -o nul "%URL%/_stcore/health" && (
+curl -s -f -o nul "%URL%/workbench/v1/dev/config-schemas" && (
     echo 工作台已在執行，開啟瀏覽器 · Already running
     start "" "%URL%"
     exit /b 0
 )
 
-if not exist "%PY%" (
-    echo [首次執行] 建立虛擬環境 · Creating virtual environment
-    python -m venv .venv || goto :fail
+set "MISSING="
+where python >nul 2>nul || if not exist "ai\.venv\Scripts\python.exe" (
+    echo [缺少] Python 3.11 以上：winget install Python.Python.3.12
+    set "MISSING=1"
 )
-
-"%PY%" -c "import streamlit, cv2, dietai" 2>nul || (
-    echo [安裝] 安裝工作台所需套件，約需數分鐘 · Installing dependencies
-    "%PY%" -m pip install -e ".[dev,vision,workbench]" || goto :fail
+where go >nul 2>nul || (
+    echo [缺少] Go 1.25 以上：winget install GoLang.Go
+    set "MISSING=1"
+)
+where node >nul 2>nul || (
+    echo [缺少] Node.js 22：winget install OpenJS.NodeJS.LTS
+    set "MISSING=1"
+)
+if defined MISSING (
+    echo.
+    echo 請先安裝上列工具，裝完後重開此視窗 · Install the tools above, then run this again.
+    pause
+    exit /b 1
 )
 
 echo.
-echo 工作台啟動中，瀏覽器會自動開啟 %URL%
+echo 啟動工作台，就緒後會自動開啟 %URL%
 echo Starting workbench. 關閉此視窗即可停止 · Close this window to stop.
 echo.
-"%PY%" -m streamlit run workbench\streamlit_app.py --server.headless false
+node workbench\scripts\dev.mjs
 if errorlevel 1 goto :fail
 exit /b 0
 
 :fail
 echo.
 echo [錯誤] 工作台啟動失敗 · Failed to start
-echo 請確認已安裝 Python 3.11 以上，並把上方訊息提供給組員或 AI 工具。
+echo 請把上方訊息提供給組員或 AI 工具。
 pause
 exit /b 1

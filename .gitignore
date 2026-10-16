@@ -3,6 +3,8 @@
 *.pem
 # Go
 api/bin/
+# 工作台前端的建置結果（make workbench 時產生，以 embed 打包進 Go）
+api/internal/webui/static/app/
 # Python
 __pycache__/
 *.pyc

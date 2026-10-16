@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+
 	api "github.com/your-org/diet-app/api/gen/openapi/workbenchapi"
 	"github.com/your-org/diet-app/api/internal/platform/aiclient"
 	"github.com/your-org/diet-app/api/internal/platform/requestid"
@@ -40,7 +42,8 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 		},
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			e := toError(err)
-			if e.Status >= http.StatusInternalServerError {
+			// 使用者取消（換參數、離開頁面）不是錯誤，不記錄
+			if e.Status >= http.StatusInternalServerError && !canceled(r, err) {
 				logger.ErrorContext(r.Context(), "workbench",
 					"request_id", requestid.From(r.Context()), "path", r.URL.Path, "err", err)
 			}
@@ -279,4 +282,13 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// canceled 判斷請求是否因使用者取消而失敗（瀏覽器中止請求後，呼叫 Python 會以 Canceled 結束）。
+func canceled(r *http.Request, err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
+		return true
+	}
+	var aiErr *aiclient.Error
+	return errors.As(err, &aiErr) && aiErr.Code == codes.Canceled
 }

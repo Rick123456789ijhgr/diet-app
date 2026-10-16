@@ -5,6 +5,8 @@
 //   - PORT：HTTP 埠，預設 8080
 //   - AI_GRPC_ADDR：Python gRPC 服務位址，預設 localhost:50051
 //   - WORKBENCH_DEV_TOOLS=1：啟用開發工作台的開發工具路由（/workbench/v1/dev/*），只在本機開發時開啟
+//
+// 工作台前端（建置後以 embed 打包，見 internal/webui）由同一個埠的 / 提供。
 package main
 
 import (
@@ -19,6 +21,7 @@ import (
 
 	"github.com/your-org/diet-app/api/internal/platform/aiclient"
 	"github.com/your-org/diet-app/api/internal/platform/httpmw"
+	"github.com/your-org/diet-app/api/internal/webui"
 	"github.com/your-org/diet-app/api/internal/workbench"
 )
 
@@ -48,6 +51,8 @@ func run(logger *slog.Logger) error {
 	mux.Handle("/workbench/", workbench.NewHTTPHandler(
 		workbench.NewService(ai), workbench.Options{DevTools: devTools, Logger: logger},
 	))
+	// 其餘路徑交給工作台前端（前端路由一律回 index.html）
+	mux.Handle("/", webui.Handler())
 	// TODO: 依 openapi/openapi.yaml 以 oapi-codegen 產生路由後註冊各領域 handler
 
 	srv := &http.Server{
@@ -60,7 +65,7 @@ func run(logger *slog.Logger) error {
 	defer stop()
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
-	logger.Info("api listening", "addr", srv.Addr, "ai_grpc_addr", aiAddr, "workbench_dev_tools", devTools)
+	logger.Info("api listening", "addr", srv.Addr, "ai_grpc_addr", aiAddr, "workbench_dev_tools", devTools, "webui_built", webui.Built())
 
 	select {
 	case err := <-errCh:

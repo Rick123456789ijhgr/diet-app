@@ -1,4 +1,4 @@
-// 尚未遷移到新版的頁面與模組。
+// 尚未完成的頁面與模組。
 import { Construction } from 'lucide-react'
 import { Link, useLocation } from 'react-router'
 
@@ -13,9 +13,7 @@ export function PlaceholderPage() {
       {tool ? (
         <>
           <span className="text-ink font-medium">{tool.name}</span>
-          <span>
-            預計在任務書階段 {tool.stage} 完成；完成前請使用 Streamlit 版（make workbench）。
-          </span>
+          <span>預計在任務書階段 {tool.stage} 完成。</span>
         </>
       ) : first ? (
         <Link to={toolPath(module, first)} className="text-primary-ink underline">

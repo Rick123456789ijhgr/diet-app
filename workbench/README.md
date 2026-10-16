@@ -1,29 +1,31 @@
-# 開發工作台（React 版）
+# 開發工作台
 
 以合成影像或開發照片測試各模組、調整參數。架構與決策見 [ADR 0003](../docs/adr/0003-workbench-react-go.md)，進度見[任務書](../docs/tasks/workbench-react.md)。
 
 ```
-瀏覽器（React，:5173）→ Go 主伺服器（/workbench/v1，:8080）→ Python gRPC（:50051）
+瀏覽器 → Go 主伺服器（:8080；/workbench/v1 為 API，其餘路徑為建置後的前端）→ Python gRPC（:50051）
 ```
 
-新版完成前（任務書階段 4）與 Streamlit 版（`make workbench`）並存；尚未遷移的頁面會顯示「預計在階段 N 完成」。
+前端以 `vite build` 輸出到 `api/internal/webui/static/app/`（不進 git），Go 編譯時以 `embed` 打包進執行檔，
+因此只有一個網址、一個 Go 程序。尚未完成的頁面會顯示「預計在階段 N 完成」。
 
 ## 啟動
 
 需要 Python 3.11 以上、Go 1.25、Node.js 22。
 
 ```bash
-make workbench-react        # 一次啟動三個程序，就緒後開啟瀏覽器；Ctrl+C 全部停止
+make workbench        # 建置前端，啟動 Python 與 Go，就緒後開啟 http://localhost:8080；Ctrl+C 全部停止
+make workbench-dev    # 改前端時用：另外啟動 Vite 熱更新，開啟 http://localhost:5173
 ```
 
-Windows 也可以雙擊根目錄的 `啟動全部服務.bat`（已在執行時直接開啟瀏覽器，關閉視窗即停止）。
-兩者都會在缺少時自動安裝 Python 套件（`ai/.venv`）與前端套件（`npm ci`），並等三個服務都就緒才開瀏覽器。
+Windows 也可以雙擊根目錄的 `啟動工作台.bat`（等同 `make workbench`；已在執行時直接開啟瀏覽器，關閉視窗即停止）。
+都會在缺少時自動安裝 Python 套件（`ai/.venv`）與前端套件（`npm ci`），並等服務都就緒才開瀏覽器。
 
-只改前端時，也可以分開啟動：
+也可以分開啟動：
 
 ```bash
 cd ai && WORKBENCH_DEV_TOOLS=1 python -m dietai.server          # Python gRPC
-cd api && WORKBENCH_DEV_TOOLS=1 go run ./cmd/server               # Go
+cd api && WORKBENCH_DEV_TOOLS=1 go run ./cmd/server               # Go（含最近一次建置的前端）
 cd workbench && npm run dev                                       # Vite（/workbench 代理到 :8080）
 ```
 
@@ -33,8 +35,8 @@ cd workbench && npm run dev                                       # Vite（/work
 npm run lint        # ESLint＋Prettier
 npm run typecheck   # TypeScript（strict）
 npm test            # Vitest＋Testing Library，後端以 MSW 假造（src/test/server.ts）
-npm run test:e2e    # Playwright 冒煙測試，接真的 Go 與 Python（沒在執行時會自動啟動）；首次執行前 npx playwright install chromium
-npm run build
+npm run test:e2e    # Playwright 冒煙測試，接真的 Go 與 Python（沒在執行時以 --dev 模式自動啟動）；首次執行前 npx playwright install chromium
+npm run build       # 型別檢查並建置到 api/internal/webui/static/app/
 ```
 
 ## 結構
@@ -63,7 +65,7 @@ src/
     useRenderView     診斷檢視（邊緣、遮罩、各階影像等）
   lib/                設定覆寫、合成場景、縮放、位元組與幾何顯示、中文文字對照（純函式，有單元測試）
   pages/              各頁
-scripts/dev.mjs       一次啟動 Python、Go、Vite（自動安裝缺少的套件、就緒後開瀏覽器）
+scripts/dev.mjs       建置前端並啟動 Python、Go（--dev 另啟動 Vite）；自動安裝缺少的套件、就緒後開瀏覽器
 e2e/                  Playwright 冒煙測試
 ```
 

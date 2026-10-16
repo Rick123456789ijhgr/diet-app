@@ -6,7 +6,7 @@
   "description": "開發工作台前端（ADR 0003）：React → Go（/workbench/v1）→ Python gRPC",
   "scripts": {
     "dev": "vite",
-    "dev:all": "node scripts/dev.mjs",
+    "dev:all": "node scripts/dev.mjs --dev",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
