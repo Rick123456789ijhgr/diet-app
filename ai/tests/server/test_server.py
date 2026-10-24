@@ -373,6 +373,12 @@ def test_sweep_quality_and_barcode(wb):
     b = run("barcode", {"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3, "samples": 1})
     assert set(b["overall"]) == {"raw", "ladder"}
     assert len(b["thumbs"]) == 3
+    # 條碼掃描縮圖的來源鍵不是暫存影像 ID，仍要能重用（只改階梯設定時不新增影像）
+    b2 = run(
+        "barcode",
+        {"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3, "samples": 1, "ladder": {"min_agree": 1}},
+    )
+    assert [t["image_id"] for t in b2["thumbs"]] == [t["image_id"] for t in b["thumbs"]]
 
     _expect_error(
         lambda: run("moon", {}), grpc.StatusCode.INVALID_ARGUMENT, "INVALID_PARAMS", "target"

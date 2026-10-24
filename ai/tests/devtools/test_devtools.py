@@ -126,6 +126,19 @@ def test_store_derived_cache_follows_source_eviction():
     assert store.derived(src.image_id, "k") is None
 
 
+def test_store_detached_derived_survives_eviction_pass():
+    # 來源鍵不是暫存影像 ID（如條碼掃描縮圖）：之後再存入其他影像、觸發淘汰檢查，對應仍在
+    store = ImageStore(max_items=3)
+    d = store.put_derived("barcode-sweep:1:3:0", "k", _img(), "thumb", detached=True)
+    store.put(_img(), "other")
+    assert store.derived("barcode-sweep:1:3:0", "k") is d
+    # 衍生影像本身被淘汰後，對應一併清掉
+    for _ in range(3):
+        store.put(_img(), "filler")
+    assert store.derived("barcode-sweep:1:3:0", "k") is None
+    assert not store._detached
+
+
 def test_store_encodes_jpeg_once():
     store = ImageStore()
     item = store.put(_img(), "x")
