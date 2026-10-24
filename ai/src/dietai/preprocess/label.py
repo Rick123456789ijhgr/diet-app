@@ -291,7 +291,7 @@ def _detect_scale(img: Image, cfg: LabelConfig) -> tuple[Image, float]:
     # 已經夠小就不放大：放大不會增加資訊，只會讓像素單位的參數失去意義
     if short <= cfg.detect_short_side:
         return gray, 1.0
-    # 倍率 = 小圖 / 原圖（< 1）；_locate 以此把小圖座標除回原圖座標
+    # 倍率 = 小圖 / 原圖（< 1）；_locate 換回原圖座標時改用各軸實際尺寸（見 _quad_to_original）
     return ops.resize_short_side(gray, cfg.detect_short_side), cfg.detect_short_side / short
 
 
@@ -307,7 +307,7 @@ def _edges(gray: Image, cfg: LabelConfig) -> Image:
 def _locate(img: Image, cfg: LabelConfig) -> tuple[Quad | None, QuadMethod | None]:
     """在縮小圖上依序嘗試輪廓法與直線法，回傳（原圖座標的四角, 方法）或 ``(None, None)``。"""
     ops.validate_image(img)
-    small, factor = _detect_scale(img, cfg)
+    small, _ = _detect_scale(img, cfg)
     edges = _edges(small, cfg)
     # 面積門檻以「縮小圖」的總面積換算；比例與縮放無關，因此在小圖上判斷即可
     total = small.shape[0] * small.shape[1]
@@ -323,8 +323,21 @@ def _locate(img: Image, cfg: LabelConfig) -> tuple[Quad | None, QuadMethod | Non
             found = (quad, "hough")
     if found[0] is None:
         return found
-    # 小圖座標 ÷ 倍率 = 原圖座標（factor 為 1 時不變）
-    return (found[0] / np.float32(factor)).astype(np.float32), found[1]
+    return _quad_to_original(found[0], small.shape[:2], img.shape[:2]), found[1]
+
+
+def _quad_to_original(quad: Quad, small_shape: tuple[int, ...], shape: tuple[int, ...]) -> Quad:
+    """把縮小圖上的四角換回原圖座標。
+
+    像素座標指像素中心，縮放時兩張圖對齊的是像素的外緣，因此要做半像素修正：
+    ``原圖 = (小圖 + 0.5) / 倍率 - 0.5``；直接除以倍率會往左上偏約半個原圖像素 ×（1／倍率 − 1），
+    短邊 4000→720 時約 2 像素。倍率依各軸實際尺寸計算：縮小後的長邊經過四捨五入，
+    與短邊的倍率略有差異。尺寸相同（未縮小）時原樣回傳。
+    """
+    if tuple(small_shape) == tuple(shape):
+        return quad
+    scale = np.array([small_shape[1] / shape[1], small_shape[0] / shape[0]], dtype=np.float64)
+    return ((quad.astype(np.float64) + 0.5) / scale - 0.5).astype(np.float32)
 
 
 def _quad_from_contours(edges: Image, cfg: LabelConfig, area: tuple[float, float]) -> Quad | None:

@@ -76,6 +76,31 @@ def test_locate_works_on_gray_and_large_images():
     assert _corner_error(quad, truth) < 2 * TOLERANCE_PX  # 4K 原圖座標，容許值隨尺寸放大
 
 
+def test_quad_to_original_half_pixel_correction():
+    from dietai.preprocess.label import _quad_to_original
+
+    small = np.array([[0, 0], [9, 0], [9, 4], [0, 4]], dtype=np.float32)
+    # 縮小一半：小圖像素 0 涵蓋原圖像素 0、1，中心為 0.5；像素 9 涵蓋 18、19，中心 18.5
+    out = _quad_to_original(small, (5, 10), (10, 20))
+    expected = [[0.5, 0.5], [18.5, 0.5], [18.5, 8.5], [0.5, 8.5]]
+    np.testing.assert_allclose(out, expected)
+    assert out.dtype == np.float32
+    # 兩軸倍率各自計算（長邊經四捨五入時與短邊倍率不同）
+    out = _quad_to_original(np.array([[3, 3]] * 4, np.float32), (4, 7), (8, 15))
+    np.testing.assert_allclose(out[0], [3.5 * 15 / 7 - 0.5, 3.5 * 2 - 0.5], rtol=1e-6)
+    # 未縮小時原樣回傳
+    assert _quad_to_original(small, (5, 10), (5, 10)) is small
+
+
+def test_locate_large_image_error_shrinks_with_half_pixel_fix():
+    # 短邊 2160 → 720（倍率 1/3）：未修正時四角約偏 (1/倍率 − 1)/2 = 1 像素，修正後誤差應更小
+    img, truth = label_perspective_scene(0.0, seed=1, height=2160, width=2880)
+    quad = locate_label_quad(img)
+    assert quad is not None
+    shifted = quad - (0.5 * 3 - 0.5)  # 還原成「直接除以倍率」的舊算法
+    assert _corner_error(quad, truth) < _corner_error(shifted, truth)
+
+
 def test_hough_fallback_when_contour_is_open():
     img, truth = _dashed_quad_scene()
     result = preprocess_label(img)
