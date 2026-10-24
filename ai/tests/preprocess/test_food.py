@@ -62,6 +62,21 @@ def test_box_crop_is_copy():
     assert img[3, 2] == 32
 
 
+@pytest.mark.parametrize(
+    ("box", "shape"),
+    [
+        (Box(-10, 0, 5, 3), (3, 0)),  # 整個在左方：x1=-5，不夾會切成 img[:, 0:-5]
+        (Box(0, -10, 3, 5), (0, 3)),  # 整個在上方
+        (Box(12, 2, 4, 4), (4, 0)),  # 整個在右方
+        (Box(-3, -2, 6, 5), (3, 3)),  # 部分超出左上
+        (Box(8, 7, 5, 6), (3, 2)),  # 部分超出右下
+    ],
+)
+def test_box_crop_clamps_both_ends(box, shape):
+    img = np.arange(100, dtype=np.uint8).reshape(10, 10)
+    assert box.crop(img).shape == shape
+
+
 @pytest.mark.parametrize("angle", [0.0, 30.0, 90.0, 135.0])
 def test_ellipse_bbox_contains_boundary(angle):
     e = Ellipse(100.0, 80.0, 120.0, 50.0, angle)
