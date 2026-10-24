@@ -45,9 +45,26 @@ describe('條碼頁', () => {
     expect(screen.getByText("LadderConfig(rungs=('gray', 'raw', 'binarize'))")).toBeInTheDocument()
     // 還原後回到預設順序（不帶 rungs 覆寫）
     await user.click(screen.getByRole('tab', { name: /階梯參數/ }))
-    await user.click(screen.getByRole('button', { name: /還原順序與倍率/ }))
+    await user.click(screen.getByRole('button', { name: /還原順序、倍率與格式/ }))
     await user.click(screen.getByRole('tab', { name: /匯出入/ }))
     expect(screen.getByText('LadderConfig()')).toBeInTheDocument()
+  })
+
+  it('多尺度倍率至少保留一個', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/barcode')
+    await screen.findByText('解碼成功', {}, WAIT)
+    await user.click(screen.getByRole('tab', { name: /階梯參數/ }))
+    // 預設倍率為 ×2、×0.5；取消 ×2 後只剩 ×0.5，不能再取消
+    await user.click(screen.getByRole('button', { name: /^×2/ }))
+    const last = screen.getByRole('button', { name: /^×0\.5/ })
+    expect(last).toHaveAttribute('aria-pressed', 'true')
+    expect(last).toBeDisabled()
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/barcode')).toContainEqual(
+        expect.objectContaining({ ladder: { scales: [0.5] } }),
+      ),
+    )
   })
 
   it('電子發票模式顯示左右碼與原始位元組', async () => {

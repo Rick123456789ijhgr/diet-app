@@ -63,7 +63,8 @@ export function LadderControls({
           size="sm"
           variant="ghost"
           disabled={!changed}
-          // 只移除這三個序列欄位的覆寫，ParamForm 管理的其他數值參數保持不變
+          // 只移除這三個序列欄位（順序、倍率、格式）的覆寫，ParamForm 管理的其他數值參數保持不變；
+          // 按鈕文字與實際行為一致，含採用格式（發票模式不顯示格式，但同樣還原）
           onClick={() =>
             onChange(
               Object.fromEntries(Object.entries(overrides).filter(([k]) => !SEQUENCES.includes(k))),
@@ -71,7 +72,7 @@ export function LadderControls({
           }
         >
           <RotateCcw className="size-3.5" aria-hidden />
-          還原順序與倍率
+          還原順序、倍率與格式
         </Button>
       </div>
       <fieldset>
@@ -139,6 +140,8 @@ export function LadderControls({
           selected={scales}
           format={(v) => `×${v}`}
           ordered
+          // 至少保留一個倍率：全部取消會送出空陣列，多尺度階就沒有任何倍率可試
+          minSelected={1}
           onToggle={(v) =>
             set('scales', scales.includes(v) ? scales.filter((x) => x !== v) : [...scales, v])
           }
@@ -203,6 +206,7 @@ function Chips<T extends string | number>({
   format,
   onToggle,
   ordered,
+  minSelected = 0,
 }: {
   options: T[]
   selected: T[]
@@ -210,19 +214,25 @@ function Chips<T extends string | number>({
   onToggle: (v: T) => void
   /** 顯示點選順序（順序有意義時） */
   ordered?: boolean
+  /** 至少要保留的選取數；已達下限時，已選的項目不能再取消 */
+  minSelected?: number
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => {
         const on = selected.includes(o)
+        // 已達下限的已選項目停用（未選的項目仍可加入）
+        const locked = on && selected.length <= minSelected
         return (
           <button
             key={String(o)}
             type="button"
             aria-pressed={on}
+            disabled={locked}
+            title={locked ? `至少保留 ${minSelected} 個` : undefined}
             onClick={() => onToggle(o)}
             className={cn(
-              'readout rounded-lg border px-2 py-0.5 text-xs',
+              'readout rounded-lg border px-2 py-0.5 text-xs disabled:cursor-not-allowed',
               on
                 ? 'border-primary bg-primary-soft text-primary-ink'
                 : 'border-card-border text-muted hover:bg-hover',

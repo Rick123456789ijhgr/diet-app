@@ -6,6 +6,7 @@ import { ApiError, type ConfigClass } from '@/api/client'
 import { ParamForm } from '@/components/ParamForm'
 import { Badge, Button, DraftNumberInput, Hint, Segmented } from '@/components/ui/primitives'
 import { syntheticSource, type ImagePipeline } from '@/hooks/useImagePipeline'
+import { degradationCount } from '@/lib/config'
 import { SCENES, type SceneField, type SceneId, type SceneParams } from '@/lib/scenes'
 import { errorText } from '@/lib/text'
 
@@ -28,6 +29,8 @@ export function ImageSourcePanel({
   // useId 產生穩定且唯一的 id，讓 <label htmlFor> 對應隱藏的 file input（同頁多個面板也不衝突）
   const fileId = useId()
   const { source, setSource, degradation, setDegradation } = pipeline
+  // 已覆寫的退化項目數（不含 seed）；徽章的數字與顏色共用
+  const changedDegradations = degradationCount(degradation)
   // 退化參數不合法時，後端回 INVALID_CONFIG 並指出欄位；交給 ParamForm 把該欄標紅
   const err = pipeline.degraded.error
   const invalid = err instanceof ApiError && err.code === 'INVALID_CONFIG' ? err : undefined
@@ -104,10 +107,9 @@ export function ImageSourcePanel({
         <div className="border-card-border border-t pt-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">模擬退化</h3>
-            {/* 已覆寫的退化項目數；seed（亂數種子）本身不是一種退化，不計入數量 */}
-            <Badge tone={Object.keys(degradation).length ? 'accent' : 'muted'}>
-              {Object.keys(degradation).filter((k) => k !== 'seed').length} 項
-            </Badge>
+            {/* 已覆寫的退化項目數；seed（亂數種子）本身不是一種退化，不計入數量。
+                顏色與數字用同一個計數，只改 seed 時不會呈強調色卻顯示「0 項」 */}
+            <Badge tone={changedDegradations ? 'accent' : 'muted'}>{changedDegradations} 項</Badge>
           </div>
           <p className="text-muted mb-3 text-xs">
             依序套用：旋轉 → 縮小 → 模糊 → 亮度 → 梯度 → 光斑 →

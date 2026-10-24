@@ -177,3 +177,8 @@ export function formatValue(field: ConfigField, value: Value): string {
 export function changedCount(overrides: ConfigOverride): number {
   return Object.keys(overrides).length
 }
+
+/** 已覆寫的退化項目數；seed（亂數種子）本身不是一種退化，不計入。徽章的數字與顏色共用這個值。 */
+export function degradationCount(overrides: ConfigOverride): number {
+  return Object.keys(overrides).filter((k) => k !== 'seed').length
+}

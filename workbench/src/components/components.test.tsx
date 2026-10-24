@@ -86,6 +86,32 @@ describe('基本元件', () => {
   })
 })
 
+describe('參數表單與退化計數', () => {
+  it('同頁兩個 ParamForm 有同名欄位時 id 不重複；說明提示可用鍵盤聚焦', async () => {
+    const { ParamForm } = await import('./ParamForm')
+    const { qualitySchema } = await import('@/test/server')
+    const { TooltipProvider } = await import('./ui/primitives')
+    render(
+      <TooltipProvider>
+        <ParamForm schema={qualitySchema} overrides={{}} onChange={() => {}} />
+        <ParamForm schema={qualitySchema} overrides={{}} onChange={() => {}} />
+      </TooltipProvider>,
+    )
+    const inputs = screen.getAllByLabelText('模糊下限', { selector: 'input' })
+    expect(inputs).toHaveLength(2)
+    expect(inputs[0]!.id).not.toBe(inputs[1]!.id)
+    const help = screen.getAllByRole('button', { name: '模糊下限說明' })[0]!
+    help.focus()
+    expect(help).toHaveFocus()
+  })
+
+  it('退化計數不含 seed（徽章的數字與顏色共用）', async () => {
+    const { degradationCount } = await import('@/lib/config')
+    expect(degradationCount({ seed: 3 })).toBe(0)
+    expect(degradationCount({ seed: 3, blur_sigma: 2 })).toBe(1)
+  })
+})
+
 describe('影像檢視器', () => {
   it('觸控被中斷（pointercancel）後，下次移動不會被當成拖曳', async () => {
     const { ImageViewer } = await import('./ImageViewer')
