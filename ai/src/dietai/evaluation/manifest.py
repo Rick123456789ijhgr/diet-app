@@ -141,16 +141,25 @@ def read_manifest(path: str | Path, *, include_test: bool = False) -> Manifest:
 def write_manifest(
     path: str | Path, rows: Sequence[Mapping[str, str]], tag_columns: tuple[str, ...] = ()
 ) -> Path:
-    """寫出 manifest CSV（UTF-8，無 BOM）。欄位順序：``id, image, truth, split`` 再接標籤。"""
+    """寫出 manifest CSV（UTF-8，無 BOM）。欄位順序：``id, image, truth, split`` 再接標籤。
+
+    列中缺少的欄位寫成空字串；列中有不在欄位清單（含 ``tag_columns``）的鍵時丟 ``ValueError``，
+    避免標籤欄被靜默丟掉。檢查在開檔前完成，失敗時不會留下寫到一半的檔案。
+    """
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = ["id", "image", "truth", "split", *tag_columns]
+    allowed = set(fieldnames)
+    for i, row in enumerate(rows):
+        extra = sorted(k for k in row if k not in allowed)
+        if extra:
+            raise ValueError(f"第 {i} 列有未列在 tag_columns 的欄位 {extra}，請加入 tag_columns")
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="raise")
+        # 直接把 row 交給 DictWriter：缺的欄位補 restval（空字串），多的欄位 raise（上面已先檢查）
+        writer = csv.DictWriter(f, fieldnames=fieldnames, restval="", extrasaction="raise")
         writer.writeheader()
-        # 只取 fieldnames 中的欄位、缺的補空字串；不在欄位清單中的鍵會被靜默略過
         for row in rows:
-            writer.writerow({k: row.get(k, "") for k in fieldnames})
+            writer.writerow(row)
     return path
 
 
