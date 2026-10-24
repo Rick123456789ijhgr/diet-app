@@ -1,0 +1,87 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+import { foldSeries, OTHER_KEY } from '@/lib/series'
+
+import { Heatmap, PALETTE, StackedBars } from './charts'
+import { DraftNumberInput, Slider } from './ui/primitives'
+
+describe('系列合併（色盤不循環）', () => {
+  it('未超過上限時原樣回傳', () => {
+    const rows = [{ label: 'a', values: { x: 1 } }]
+    expect(foldSeries(['x'], rows, 8)).toEqual({ keys: ['x'], rows })
+  })
+
+  it('超過上限時第 limit 個以後的鍵加總為「其他」', () => {
+    const keys = ['a', 'b', 'c', 'd']
+    const rows = [{ label: 'r', values: { a: 1, b: 2, c: 3, d: 4 } }]
+    const out = foldSeries(keys, rows, 3)
+    expect(out.keys).toEqual(['a', 'b', OTHER_KEY])
+    expect(out.rows[0]!.values).toEqual({ a: 1, b: 2, [OTHER_KEY]: 7 })
+  })
+
+  it('StackedBars 超過 8 個鍵時不重複用色，圖例顯示「其他」', () => {
+    const keys = Array.from({ length: 10 }, (_, i) => `k${i}`)
+    const values = Object.fromEntries(keys.map((k) => [k, 1]))
+    const { container } = render(
+      <StackedBars rows={[{ label: '列', values }]} keys={keys} label="圖" />,
+    )
+    const fills = [...container.querySelectorAll('rect')].map((r) => r.getAttribute('fill'))
+    expect(fills).toHaveLength(PALETTE.length)
+    expect(new Set(fills).size).toBe(fills.length)
+    expect(screen.getByText('其他')).toBeInTheDocument()
+    // 總數不因合併而改變
+    expect(screen.getByText('10')).toBeInTheDocument()
+  })
+})
+
+describe('主題變數（不寫死色碼）', () => {
+  it('熱度圖深色格的文字用主題變數', () => {
+    const { container } = render(
+      <Heatmap rows={['r']} cols={['c']} value={() => ({ rate: 0.9, title: 't' })} label="圖" />,
+    )
+    expect(container.querySelector('text[fill="var(--on-primary)"]')).not.toBeNull()
+  })
+
+  it('新增的主題變數在淺色與深色都有定義', () => {
+    const css = readFileSync(path.resolve(import.meta.dirname, '../index.css'), 'utf8')
+    for (const name of ['--on-primary', '--switch-thumb']) {
+      expect(css.match(new RegExp(`\\s${name}:`, 'g'))).toHaveLength(2)
+    }
+  })
+})
+
+describe('基本元件', () => {
+  it('Slider 的 aria-label 只標在 Thumb', () => {
+    const { container } = render(<Slider aria-label="清晰度" value={[1]} min={0} max={2} />)
+    expect(screen.getAllByLabelText('清晰度')).toHaveLength(1)
+    expect(screen.getByRole('slider')).toHaveAttribute('aria-label', '清晰度')
+    expect(container.firstElementChild).not.toHaveAttribute('aria-label')
+  })
+
+  it('DraftNumberInput 依格式化字串同步：外部值改變時更新、編輯中不覆蓋', () => {
+    // 內聯 format：每次渲染都是新參照
+    const format = (v: number) => v.toFixed(1)
+    const { rerender } = render(
+      <DraftNumberInput aria-label="值" value={1} format={(v) => format(v)} onCommit={() => {}} />,
+    )
+    const input = screen.getByLabelText('值')
+    expect(input).toHaveValue(1)
+    // 外部值改變仍會同步
+    rerender(
+      <DraftNumberInput aria-label="值" value={2} format={(v) => format(v)} onCommit={() => {}} />,
+    )
+    expect(input).toHaveValue(2)
+    // 編輯中不覆蓋草稿；失焦後恢復成目前值
+    fireEvent.focus(input)
+    fireEvent.change(input, { target: { value: '' } })
+    rerender(
+      <DraftNumberInput aria-label="值" value={2} format={(v) => format(v)} onCommit={() => {}} />,
+    )
+    expect(input).toHaveValue(null)
+    fireEvent.blur(input)
+    expect(input).toHaveValue(2)
+  })
+})

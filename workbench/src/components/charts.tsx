@@ -3,6 +3,8 @@
 // 數值由後端計算；這裡只負責畫圖（直方圖的分箱屬於畫圖）。
 import { useState, type ReactNode } from 'react'
 
+import { foldSeries, OTHER_KEY } from '@/lib/series'
+
 /**
  * 系列色：經色盲模擬驗證的固定順序（橘、藍、青綠、黃、洋紅、綠、紫、紅），深淺色各有一組，
  * 定義在 index.css。依序取用、不循環；超過 8 個系列應合併為「其他」或分圖。
@@ -271,26 +273,29 @@ export function BarList({
  * 堆疊長條：每列依 keys 順序堆疊（例如各實驗組成功於各階的影像數）。
  * - values 為絕對數量（非比例）；所有列共用同一個最大總和作比例尺，列與列之間長度可比較。
  * - keys 的順序同時決定堆疊順序與 PALETTE 取色順序；keyLabel 把 key 轉成顯示文字。
+ * - 超過 PALETTE 數量（8）時，第 8 個以後的鍵合併為「其他」（色盤不循環）。
  */
 export function StackedBars({
-  rows,
-  keys,
+  rows: allRows,
+  keys: allKeys,
   label,
-  keyLabel = (k) => k,
+  keyLabel: rawKeyLabel = (k) => k,
 }: {
   rows: { label: string; values: Record<string, number> }[]
   keys: string[]
   label: string
   keyLabel?: (k: string) => string
 }) {
+  const { keys, rows } = foldSeries(allKeys, allRows, PALETTE.length)
+  const keyLabel = (k: string) => (k === OTHER_KEY ? '其他' : rawKeyLabel(k))
   const rowH = 28
   const left = 150
   const width = W - left - 40
   // 最大列總和；至少為 1，避免全部為 0 時除以 0
   const max = Math.max(1, ...rows.map((r) => keys.reduce((a, k) => a + (r.values[k] ?? 0), 0)))
   const h = rows.length * rowH + 8
-  // 注意：超過 8 個 key 時這裡會循環取色（與 PALETTE 說明的「不循環」不同），呼叫端應自行控制 key 數
-  const color = (k: string) => PALETTE[keys.indexOf(k) % PALETTE.length]!
+  // keys 已經 foldSeries 限制在 PALETTE 數量內，索引不會超出色盤
+  const color = (k: string) => PALETTE[keys.indexOf(k)]!
   return (
     <figure>
       <svg viewBox={`0 0 ${W} ${h}`} className="w-full" role="img" aria-label={label}>
@@ -407,8 +412,8 @@ export function Heatmap({
                     x={left + j * cell + cell / 2}
                     y={top + i * 26 + 17}
                     textAnchor="middle"
-                    // 底色夠深（>60%）時改用白字維持對比
-                    fill={rate > 0.6 ? 'white' : 'var(--ink)'}
+                    // 底色夠深（>60%）時改用主色上的文字色維持對比
+                    fill={rate > 0.6 ? 'var(--on-primary)' : 'var(--ink)'}
                     className="tabular text-[10px]"
                   >
                     {Math.round(rate * 100)}%
