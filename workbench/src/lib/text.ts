@@ -1,4 +1,5 @@
 // 介面文字：工作台標籤只寫中文；代碼維持英文，在這裡對應中文。
+// 對照表的鍵為後端回傳的代碼；新增代碼時在這裡補上中文，沒補時畫面會直接顯示英文代碼（見檔尾的查詢函式）。
 
 /** 前處理警告（PreprocessWarning）。APP 端另有自己的對照，不共用。 */
 export const WARNING_TEXT: Record<string, string> = {
@@ -103,6 +104,7 @@ export const GROUP_TEXT: Record<string, string> = {
   optics: '光學',
   lighting: '光線',
   random: '隨機',
+  // 未指定 group 的欄位
   '': '其他',
 }
 
@@ -131,6 +133,7 @@ export const NUTRIENT_TEXT: Record<string, string> = {
   sugar_g: '糖',
   sodium_mg: '鈉',
 }
+/** 營養素的單位，鍵與 NUTRIENT_TEXT 相同。 */
 export const NUTRIENT_UNIT_TEXT: Record<string, string> = {
   energy_kcal: '大卡',
   protein_g: '公克',
@@ -170,6 +173,7 @@ export const BASIS_TEXT: Record<string, string> = {
   both: '每份與每 100',
 }
 
+// 查詢函式：找不到對照時退回原始代碼，未知代碼至少看得到內容，不會變成空白
 export const warningText = (code: string) => WARNING_TEXT[code] ?? code
 export const errorText = (code: string) => ERROR_TEXT[code] ?? code
 export const groupText = (group: string) => GROUP_TEXT[group] ?? group

@@ -16,9 +16,12 @@ from dietai.preprocess import QualityConfig, check_quality
 from dietai.preprocess.quality import QUALITY_WARNINGS
 from dietai.preprocess.types import Image
 
+# 一次批次最多處理的張數；呼叫端給的 limit 會被夾在 1–MAX_LIMIT 之間，
+# 避免誤選整個相簿時請求跑太久
 MAX_LIMIT = 5000
 
-# 把單一檔案存進暫存區並回傳 image_id
+# 把單一檔案存進暫存區並回傳 image_id。
+# 由 server 端注入（實際為 ``ImageStore.put``），本模組因此不必依賴暫存區的實作。
 Keep = Callable[[Image, str], str]
 
 
@@ -46,6 +49,7 @@ def iter_batch(
     yield {"type": "start", "total": len(files), "folder": str(resolved)}
     rows: list[dict[str, Any]] = []
     for i, f in enumerate(files):
+        # 只有單一檔案模式才存影像：資料夾模式可能有上千張，全存會把暫存區的其他影像擠掉
         row = _check(f, cfg, keep if resolved.is_file() else None)
         rows.append(row)
         yield {"type": "row", "index": i, **row}
@@ -53,6 +57,11 @@ def iter_batch(
 
 
 def _check(path: Path, cfg: QualityConfig, keep: Keep | None) -> dict[str, Any]:
+    """單張影像的品質檢查結果列。
+
+    讀檔或解碼失敗（``OSError``／``ValueError``，含 ``SplitLockedError``）不中斷整批，
+    改在 ``error`` 欄回報訊息。``keep`` 不為 None 時另附 ``image_id`` 與寬高，供介面開啟細節。
+    """
     base: dict[str, Any] = {"file": path.name, "path": str(path)}
     try:
         img = load_image(path)
@@ -78,6 +87,11 @@ def _check(path: Path, cfg: QualityConfig, keep: Keep | None) -> dict[str, Any]:
 
 
 def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """彙整批次結果。
+
+    讀取失敗的列不計入通過率（全部失敗時 ``pass_rate`` 為 None）；``warning_counts``
+    列出所有品質警告代碼（沒出現的為 0），讓前端的欄位固定。
+    """
     ok = [r for r in rows if r.get("error") is None]
     warnings = Counter(w for r in ok for w in r["warnings"])
     return {

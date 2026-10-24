@@ -2,6 +2,13 @@
 
 暫存、合成、退化、各頁的診斷檢視、取得影像、參數掃描、資料夾批次（串流）、
 E1 的執行結果與快速執行（串流）。讀取本機路徑的功能一律經測試集鎖定。
+
+各方法只做 proto ↔ devtools 的轉換：結構化的參數與結果多半以 JSON 字串欄位傳遞
+（``*_json``），設定一律經 ``config_from_override`` 建構與驗證。方法以 ``rpc.unary``／
+``rpc.stream`` 包裝，在執行緒中執行；領域例外由 ``rpc.to_rpc_error`` 轉成 gRPC 狀態：
+``ConfigError`` → ``INVALID_CONFIG``、``SceneError`` → ``INVALID_PARAMS``、
+``ImageNotFoundError`` → ``IMAGE_NOT_FOUND``、``SplitLockedError`` → ``SPLIT_LOCKED``、
+``PathNotFoundError`` → ``PATH_NOT_FOUND``，其餘為 ``INTERNAL``。
 """
 
 from __future__ import annotations
@@ -44,6 +51,7 @@ from dietai.server.rpc import RpcError, stream, unary
 from dietai.v1 import workbench_pb2, workbench_pb2_grpc
 
 # 只依一組設定產生一張影像的檢視：名稱 → (設定類別, 說明, 產生函式)
+# 新增這類檢視只要加一列；需要額外資料或特殊快取的檢視（光斑、逐步升級）另寫方法
 _SIMPLE_VIEWS: dict[str, tuple[type[Any], str, Callable[[Image, Any], Image]]] = {
     "laplacian": (QualityConfig, "邊緣響應", laplacian_heatmap),
     "exposure": (QualityConfig, "曝光遮罩", exposure_overlay),
@@ -57,6 +65,8 @@ _SIMPLE_VIEWS: dict[str, tuple[type[Any], str, Callable[[Image, Any], Image]]] =
 
 
 class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
+    """工作台 gRPC 服務；所有影像經同一個 ``ImageStore`` 以 ID 往返，避免重複傳送大圖。"""
+
     def __init__(self, store: ImageStore) -> None:
         self._store = store
 
@@ -64,10 +74,12 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     def GetConfigSchemas(
         self, request: workbench_pb2.GetConfigSchemasRequest
     ) -> workbench_pb2.GetConfigSchemasResponse:
+        """各設定類別的表單結構（JSON，見 ``devtools.schema``）。"""
         return workbench_pb2.GetConfigSchemasResponse(json=_schemas_json())
 
     @unary
     def PutImage(self, request: workbench_pb2.PutImageRequest) -> workbench_pb2.PutImageResponse:
+        """解碼上傳的影像檔並存進暫存區；無法解碼時回 ``IMAGE_DECODE_FAILED``（欄位 encoded）。"""
         try:
             img = decode_image(request.encoded)
         except ValueError as exc:
@@ -81,16 +93,22 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     def Synthesize(
         self, request: workbench_pb2.SynthesizeRequest
     ) -> workbench_pb2.SynthesizeResponse:
+        """產生合成影像並存進暫存區，真值隨 ``ImageRef.truth_json`` 回傳。"""
         scene = synthesize(request.scene, _json_object(request.params_json, "params"))
         item = self._store.put(scene.image, scene.description, scene.truth)
         return workbench_pb2.SynthesizeResponse(image=convert.image_ref(item))
 
     @unary
     def Degrade(self, request: workbench_pb2.DegradeRequest) -> workbench_pb2.DegradeResponse:
+        """對暫存影像套用模擬退化，結果以衍生影像存放。
+
+        沒有任何退化時直接回傳原圖；同一張圖、同一組參數（含種子）只算一次。
+        """
         d = config_from_override(Degradation, request.degradation_json)
         source = self._store.get(request.image_id)
         if d.is_identity():
             return workbench_pb2.DegradeResponse(image=convert.image_ref(source))
+        # 快取鍵含全部欄位；種子不影響 is_identity，但會影響光斑位置與雜訊
         key = "degrade:" + convert.config_key(d)
         item = self._store.derived(source.image_id, key)
         if item is None:
@@ -109,6 +127,12 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     def RenderView(
         self, request: workbench_pb2.RenderViewRequest
     ) -> workbench_pb2.RenderViewResponse:
+        """診斷檢視：依 ``view`` 回傳診斷影像（``image``）及／或圖表資料（``data_json``）。
+
+        - ``histogram``：灰階直方圖（只有資料，不需設定）
+        - ``_SIMPLE_VIEWS`` 中的檢視：一張影像，以衍生影像快取
+        - ``glare_mask``、``ladder_variant``：影像加資料，見各自的方法
+        """
         source = self._store.get(request.image_id)
         view = request.view
         if view == "histogram":
@@ -134,6 +158,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     def GetArtifact(
         self, request: workbench_pb2.GetArtifactRequest
     ) -> workbench_pb2.GetArtifactResponse:
+        """取得暫存影像的編碼檔（預設 JPEG，第一次取用時才編碼）供前端顯示。"""
         encoded, content_type = self._store.encoded(request.id)
         return workbench_pb2.GetArtifactResponse(encoded=encoded, content_type=content_type)
 
@@ -143,6 +168,9 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
 
         - quality：image_id、config（QualityConfig 覆寫）
         - barcode：samples、module_px、seed、ladder、zxing（覆寫）
+
+        ``thumb_source`` 是縮圖衍生影像的來源鍵：quality 用來源影像 ID；barcode 沒有來源影像，
+        改用由樣本參數組成的字串。
         """
         params = _json_object(request.params_json, "params")
         ax = sweep.parse_axis(params)
@@ -181,6 +209,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     ) -> Iterator[workbench_pb2.RunBatchResponse]:
         """資料夾批次（逐張回傳）；folder 為單一檔案時把影像存進暫存區並附上 image_id。"""
         cfg = config_from_override(QualityConfig, request.config_json)
+        # proto3 的 int 欄位未設定時為 0，視為使用預設的 500 張
         events = batch.iter_batch(
             request.folder,
             cfg,
@@ -195,16 +224,23 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     def ListE1Runs(
         self, request: workbench_pb2.ListE1RunsRequest
     ) -> workbench_pb2.ListE1RunsResponse:
+        """E1 結果資料夾下的各次執行與可用的實驗組（root 為空時用預設資料夾）。"""
         return workbench_pb2.ListE1RunsResponse(json=convert.dumps(e1.list_runs_json(request.root)))
 
     @unary
     def GetE1Run(self, request: workbench_pb2.GetE1RunRequest) -> workbench_pb2.GetE1RunResponse:
+        """一次 E1 執行的完整彙整（成功率、信賴區間、失敗影像等，見 ``e1.run_json``）。"""
         return workbench_pb2.GetE1RunResponse(json=convert.dumps(e1.run_json(request.run_dir)))
 
     @stream
     def StartE1Run(
         self, request: workbench_pb2.StartE1RunRequest
     ) -> Iterator[workbench_pb2.StartE1RunResponse]:
+        """以合成資料快速執行 E1，逐筆回傳進度事件。
+
+        n_codes 未設定（0）時用 2。呼叫端取消時 ``rpc.stream`` 會關閉本產生器，
+        連帶關閉 ``e1.start_run``，由它中止實驗並刪除未完成的資料夾。
+        """
         events = e1.start_run(list(request.arms), request.n_codes or 2, request.root)
         for event in events:
             yield workbench_pb2.StartE1RunResponse(json=convert.dumps(event))
@@ -231,7 +267,8 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         item = self._store.derived(source.image_id, key)
         if item is None:
             result = glare_overlay(source.image, cfg)
-            assert result is not None
+            assert result is not None  # 上面已確認 enable_glare，不會是 None
+            # 光斑比例存在 meta，快取命中時不必重算也能回傳
             overlay, ratio = result
             item = self._store.put_derived(
                 source.image_id,
@@ -250,6 +287,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     ) -> workbench_pb2.RenderViewResponse:
         """條碼逐步升級第 index 次嘗試送進解碼器的影像；config 為 {"ladder": {...}, "index": n}。"""
         options = _json_object(config_json, "config")
+        # 依序取出已知欄位，剩下的就是不認得的欄位
         index = options.pop("index", 0)
         if not isinstance(index, int) or isinstance(index, bool) or index < 0:
             raise SceneError("index 必須是非負整數", "index")
@@ -259,6 +297,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         key = f"view:ladder:{index}:{convert.config_key(cfg)}"
         item = self._store.derived(source.image_id, key)
         if item is None:
+            # ladder_variants 惰性產生，只算到第 index 個為止；超出範圍時得到 None
             variant = next(islice(ladder_variants(source.image, cfg), index, None), None)
             if variant is None:
                 raise SceneError(
@@ -271,6 +310,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
             }
             if variant.image is None:  # 略過的階沒有影像，不快取
                 return workbench_pb2.RenderViewResponse(data_json=convert.dumps(data))
+            # 階的資訊存在 meta，快取命中時直接回傳
             item = self._store.put_derived(
                 source.image_id,
                 key,
@@ -284,6 +324,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
 
 
 def _ref(item: StoredImage) -> dict[str, Any]:
+    """放進 JSON 回應的影像參照（ID 與寬高）；proto 回應則用 ``convert.image_ref``。"""
     return {"image_id": item.image_id, "width": item.width, "height": item.height}
 
 
@@ -294,10 +335,16 @@ def _attempt_count(cfg: LadderConfig) -> int:
 
 @functools.cache
 def _schemas_json() -> str:
+    """表單結構的 JSON；設定類別在執行期不變，第一次請求後快取。"""
     return convert.dumps(config_schemas())
 
 
 def _json_object(text: str, field: str) -> dict[str, Any]:
+    """把請求中的 JSON 字串欄位解析成字典。
+
+    空字串（proto3 預設值）視為空物件；不是合法 JSON 或不是物件時丟 ``SceneError``
+    （``INVALID_PARAMS``，欄位為 ``field``）。
+    """
     if not text:
         return {}
     try:

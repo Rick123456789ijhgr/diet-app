@@ -9,6 +9,12 @@ import { syntheticSource, type ImagePipeline } from '@/hooks/useImagePipeline'
 import { SCENES, type SceneField, type SceneId, type SceneParams } from '@/lib/scenes'
 import { errorText } from '@/lib/text'
 
+/**
+ * 控制面板的「影像」分頁。
+ * - pipeline：useImagePipeline 的狀態（目前來源、退化覆寫、原圖／退化圖的查詢）。
+ * - scene：切換到「合成」時要產生的場景（由所在頁面決定，例如條碼或發票）。
+ * - degradationSchema：退化參數的結構；尚未載入時不顯示「模擬退化」區塊。
+ */
 export function ImageSourcePanel({
   pipeline,
   scene,
@@ -19,8 +25,10 @@ export function ImageSourcePanel({
   scene: SceneId
   degradationSchema?: ConfigClass
 }) {
+  // useId 產生穩定且唯一的 id，讓 <label htmlFor> 對應隱藏的 file input（同頁多個面板也不衝突）
   const fileId = useId()
   const { source, setSource, degradation, setDegradation } = pipeline
+  // 退化參數不合法時，後端回 INVALID_CONFIG 並指出欄位；交給 ParamForm 把該欄標紅
   const err = pipeline.degraded.error
   const invalid = err instanceof ApiError && err.code === 'INVALID_CONFIG' ? err : undefined
 
@@ -30,6 +38,7 @@ export function ImageSourcePanel({
         <Segmented
           label="影像來源"
           value={source.kind}
+          // 切到「上傳」時先放一個空檔案（EMPTY），pipeline 以 size === 0 判斷為「尚未選檔」
           onChange={(kind) =>
             setSource(
               kind === 'synthetic' ? syntheticSource(scene) : { kind: 'upload', file: EMPTY },
@@ -64,6 +73,7 @@ export function ImageSourcePanel({
             onChange={(params) => setSource({ ...source, params })}
           />
         ) : (
+          // 整個虛線框是 <label>，點擊任何位置都會開啟檔案選擇；input 以 sr-only 視覺隱藏但仍可用鍵盤聚焦
           <label
             htmlFor={fileId}
             className="border-card-border hover:bg-hover flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center text-sm"
@@ -82,6 +92,7 @@ export function ImageSourcePanel({
               className="sr-only"
               onChange={(e) => {
                 const file = e.target.files?.[0]
+                // 使用者取消選檔時 files 為空，保留原本的檔案
                 if (file) setSource({ kind: 'upload', file })
               }}
             />
@@ -93,6 +104,7 @@ export function ImageSourcePanel({
         <div className="border-card-border border-t pt-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">模擬退化</h3>
+            {/* 已覆寫的退化項目數；seed（亂數種子）本身不是一種退化，不計入數量 */}
             <Badge tone={Object.keys(degradation).length ? 'accent' : 'muted'}>
               {Object.keys(degradation).filter((k) => k !== 'seed').length} 項
             </Badge>
@@ -114,8 +126,10 @@ export function ImageSourcePanel({
   )
 }
 
+// 「上傳但尚未選檔」的佔位檔案（大小 0）；模組層級常數，避免每次渲染產生新物件
 const EMPTY = new File([], '')
 
+/** 合成場景的參數列：依 SCENES[scene].fields 逐欄產生輸入框，右上角可一鍵還原預設。 */
 function SceneControls({
   scene,
   params,
@@ -154,6 +168,10 @@ function SceneControls({
   )
 }
 
+/**
+ * 單一合成參數的輸入框，依 field.kind 選擇文字框、下拉選單或數字框。
+ * 可見的標籤設為 aria-hidden，改由輸入框自身的 aria-label 提供名稱，避免螢幕閱讀器念兩次。
+ */
 function SceneInput({
   field,
   value,
@@ -195,6 +213,7 @@ function SceneInput({
         step={field.step}
         value={Number(value)}
         format={(v) => (field.kind === 'float' ? v.toFixed(2) : String(v))}
+        // 把輸入文字轉成數值：int 欄四捨五入；超出 min／max 回傳 undefined，代表輸入不合法、不送出
         parse={(t) => {
           const raw = Number(t)
           const v = field.kind === 'int' ? Math.round(raw) : raw
@@ -214,5 +233,6 @@ function SceneInput({
       {body}
     </div>
   )
+  // 有說明文字時包一層 Hint（懸停／聚焦顯示提示）
   return field.help ? <Hint text={field.help}>{box}</Hint> : box
 }

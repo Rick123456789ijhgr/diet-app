@@ -16,7 +16,10 @@ from typing import Any, TypeVar
 
 from dietai.preprocess.types import CodeFormat, Rung
 
+# param() 的預設值型別：只支援純量欄位（工作台表單與 config_from_override 的型別檢查都以此為準）
 T = TypeVar("T", int, float, bool)
+
+# ---------------------------------------------------------------- 欄位描述資料（工作台表單用）
 
 
 @dataclass(frozen=True)
@@ -45,8 +48,13 @@ def param(
     calibrate: bool = False,
     group: str = "",
 ) -> T:
-    """宣告一個帶描述資料的設定欄位。"""
+    """宣告一個帶描述資料的設定欄位。
+
+    ``min``／``max``／``step`` 只供工作台表單使用，不做檢查；數值是否合法由各設定類別的
+    ``__post_init__`` 負責，兩者須自行保持一致。
+    """
     info = ParamInfo(label, label_en, help, min, max, step, calibrate, group)
+    # dataclasses.field() 的回傳型別是 Field，這裡標成 T，讓型別檢查器把欄位視為 int／float／bool
     result: T = field(default=default, metadata={"info": info})
     return result
 
@@ -56,10 +64,17 @@ def param_info(cfg_cls: type[Any]) -> dict[str, ParamInfo]:
     return {f.name: f.metadata["info"] for f in fields(cfg_cls) if "info" in f.metadata}
 
 
+# 以下各設定類別皆為 frozen dataclass：建立後不可修改，可安全共用與比較相等。
+# 驗證集中在 __post_init__，無論由程式、JSON 覆寫或工作台建立都會經過同一套檢查。
+
+# ---------------------------------------------------------------- 共通品質檢查
+
+
 @dataclass(frozen=True)
 class QualityConfig:
     """共通品質檢查（``dietai.preprocess.quality``）的參數。"""
 
+    # 模糊：blur_min 是在縮放到 blur_short_side 後量得的分數，改了 blur_short_side 須重新校準
     blur_short_side: int = param(
         480,
         "模糊計算短邊",
@@ -81,6 +96,7 @@ class QualityConfig:
         calibrate=True,
         group="blur",
     )
+    # 曝光：每側各有「像素灰階門檻」與「像素比例上限」兩個參數；須 dark_level <= bright_level
     dark_level: int = param(
         30,
         "過暗灰階",
@@ -125,6 +141,7 @@ class QualityConfig:
         calibrate=True,
         group="exposure",
     )
+    # 解析度：以原圖短邊判斷，與 blur_short_side（計算用縮放尺寸）無關
     min_short_side: int = param(
         480,
         "最小短邊",
@@ -138,6 +155,7 @@ class QualityConfig:
     )
 
     def __post_init__(self) -> None:
+        """檢查數值範圍與欄位之間的大小關係；不合法時丟 ``ValueError``。"""
         if self.blur_short_side <= 0 or self.min_short_side <= 0:
             raise ValueError("blur_short_side 與 min_short_side 必須為正整數")
         if not 0 <= self.dark_level <= self.bright_level <= 255:
@@ -145,6 +163,9 @@ class QualityConfig:
         for name in ("dark_ratio_max", "bright_ratio_max"):
             if not 0.0 <= getattr(self, name) <= 1.0:
                 raise ValueError(f"{name} 必須介於 0 與 1")
+
+
+# ---------------------------------------------------------------- 條碼與發票 QR
 
 
 @dataclass(frozen=True)
@@ -210,6 +231,8 @@ class LadderConfig:
     rungs: tuple[Rung, ...] = DEFAULT_RUNGS
     scales: tuple[float, ...] = (2.0, 0.5)
     accept_formats: tuple[CodeFormat, ...] = RETAIL_FORMATS
+    # 以下各組參數只作用於對應的階（binarize、sharpen、denoise、deskew）；
+    # 該階不在 rungs 中時不會被使用
     binarize_block_size: int = param(
         31,
         "二值化鄰域",
@@ -275,6 +298,7 @@ class LadderConfig:
         calibrate=True,
         group="deskew",
     )
+    # 驗證：決定一個解碼結果能否採用，與前面各階的影像處理無關
     verify_ean13: bool = param(
         True,
         "驗證 EAN-13 檢查碼",
@@ -297,6 +321,7 @@ class LadderConfig:
     )
 
     def __post_init__(self) -> None:
+        """正規化序列欄位並檢查數值；不合法時丟 ``ValueError``（未知列舉值亦同）。"""
         # JSON 讀入時為串列與字串，統一轉成 tuple 與列舉，維持 frozen 與可比較
         object.__setattr__(self, "rungs", tuple(Rung(r) for r in self.rungs))
         object.__setattr__(self, "scales", tuple(float(s) for s in self.scales))
@@ -307,10 +332,12 @@ class LadderConfig:
             raise ValueError(f"accept_formats 不得重複，收到 {self.accept_formats}")
         if len(set(self.rungs)) != len(self.rungs):
             raise ValueError(f"rungs 不得重複，收到 {[r.value for r in self.rungs]}")
+        # 倍率 1 等於原圖，已由其他階涵蓋，重複嘗試沒有意義
         if any(s <= 0 or s == 1 for s in self.scales):
             raise ValueError(f"scales 每個倍率須大於 0 且不等於 1，收到 {self.scales}")
         if Rung.MULTISCALE in self.rungs and not self.scales:
             raise ValueError("啟用多尺度（multiscale）時 scales 不得為空")
+        # OpenCV 的自適應二值化與中值濾波都要求奇數視窗（以中心像素為準）
         for name in ("binarize_block_size", "denoise_ksize"):
             value = getattr(self, name)
             if value < 3 or value % 2 == 0:
@@ -338,6 +365,9 @@ class InvoiceQrConfig:
             object.__setattr__(self, "ladder", LadderConfig(**self.ladder))
 
 
+# ---------------------------------------------------------------- 營養標示
+
+
 @dataclass(frozen=True)
 class LabelConfig:
     """營養標示前處理（``dietai.preprocess.label``）的參數。
@@ -347,6 +377,7 @@ class LabelConfig:
     定位在縮小到短邊 ``detect_short_side`` 的影像上進行，像素單位的參數皆以該尺寸為準。
     """
 
+    # 各段開關
     enable_rectify: bool = param(
         True,
         "定位與透視校正",
@@ -368,6 +399,10 @@ class LabelConfig:
         "以 CLAHE 做局部對比增強。",
         group="label_steps",
     )
+    # 定位：先以 Canny＋輪廓多邊形近似找四邊形，找不到時以 HoughLinesP 直線法備援。
+    # 須 canny_low <= canny_high、min_quad_area_ratio <= max_quad_area_ratio；
+    # 像素單位的參數（hough_max_gap）以 detect_short_side 縮小後的尺寸為準，
+    # 改了 detect_short_side 須一併檢查
     detect_short_side: int = param(
         720,
         "定位用短邊",
@@ -501,6 +536,7 @@ class LabelConfig:
         calibrate=True,
         group="locate",
     )
+    # 透視校正
     rectify_max_side: int = param(
         2000,
         "校正輸出長邊上限",
@@ -511,6 +547,7 @@ class LabelConfig:
         step=16,
         group="rectify",
     )
+    # 光斑：V 高且 S 低的像素為光斑候選，擴張後的面積比例決定修補（inpaint）或警告重拍
     glare_v_min: int = param(
         250,
         "光斑亮度下限",
@@ -564,6 +601,7 @@ class LabelConfig:
         step=1,
         group="glare",
     )
+    # 對比（CLAHE）
     clahe_clip: float = param(
         2.0,
         "CLAHE 限幅",
@@ -594,6 +632,7 @@ class LabelConfig:
     )
 
     def __post_init__(self) -> None:
+        """檢查數值範圍與欄位之間的大小關係；不合法時丟 ``ValueError``。"""
         for name in (
             "detect_short_side",
             "hough_threshold",
@@ -629,6 +668,9 @@ class LabelConfig:
             raise ValueError("clahe_clip 必須大於 0")
 
 
+# ---------------------------------------------------------------- 食物照片
+
+
 @dataclass(frozen=True)
 class FoodConfig:
     """食物照片前處理（``dietai.preprocess.food``）的參數。
@@ -639,6 +681,7 @@ class FoodConfig:
     VLM 輸入的最終尺寸由 E2 實驗決定（見任務書第 10 節），這裡只是預設值。
     """
 
+    # 各段開關（縮放壓縮一律執行，沒有開關）
     enable_crop: bool = param(
         True,
         "切出各道菜",
@@ -653,6 +696,9 @@ class FoodConfig:
         "以橢圓擬合偵測盤緣（選做）；結果目前只供觀察，尚無下游使用，預設關閉。",
         group="food_steps",
     )
+    # 前景切割（dish_foreground）：背景色估計 → ΔE 門檻 → 形態學。
+    # detect_short_side 同時作用於切菜與盤緣偵測；morph_px 以縮小後的像素計，
+    # 改了 detect_short_side 須一併調整
     detect_short_side: int = param(
         512,
         "偵測用短邊",
@@ -696,6 +742,8 @@ class FoodConfig:
         calibrate=True,
         group="segment",
     )
+    # 框的篩選（crop_dishes）：依面積由大到小，先過濾面積比例、再以 IoU 去重複、最後取前幾個。
+    # 須 min_dish_area_ratio <= max_dish_area_ratio；面積比例與縮放無關
     min_dish_area_ratio: float = param(
         0.005,
         "最小菜面積",
@@ -749,6 +797,10 @@ class FoodConfig:
         step=0.01,
         group="dish_filter",
     )
+    # 盤緣橢圓（detect_plate_ellipse，只在 enable_plate 時使用）：
+    # 須 plate_canny_low <= plate_canny_high；plate_min_contour_points 不得低於 5
+    # （cv2.fitEllipse 的下限）。殘差與覆蓋是互補的兩個條件：殘差看輪廓是否貼合橢圓，
+    # 覆蓋看輪廓是否繞了大半圈，兩者都通過才採用
     plate_canny_low: int = param(
         40,
         "盤緣 Canny 低門檻",
@@ -826,6 +878,8 @@ class FoodConfig:
         calibrate=True,
         group="plate",
     )
+    # VLM 輸入（resize_for_vlm）：整張與各裁切共用同一組尺寸與品質；作用於原圖，
+    # 與 detect_short_side 無關
     vlm_max_side: int = param(
         1024,
         "VLM 長邊",
@@ -850,9 +904,11 @@ class FoodConfig:
     )
 
     def __post_init__(self) -> None:
+        """檢查數值範圍與欄位之間的大小關係；不合法時丟 ``ValueError``。"""
         for name in ("detect_short_side", "max_dishes", "vlm_max_side"):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} 必須為正整數，收到 {getattr(self, name)}")
+        # 邊寬須小於一半，否則上下（左右）兩條邊框會重疊、蓋滿整張影像
         if not 0 < self.bg_border_ratio < 0.5:
             raise ValueError("bg_border_ratio 必須介於 0 與 0.5（不含）")
         if self.bg_distance <= 0:

@@ -49,6 +49,7 @@ import { valueOf } from '@/lib/config'
 
 type ViewKind = 'boxes' | 'mask' | 'plates' | 'crops' | 'vlm' | 'steps'
 
+/** 主檢視的分頁；mask 另向後端要診斷檢視，vlm 會另外試算多組長邊上限。 */
 const VIEWS = [
   { value: 'boxes' as const, label: withIcon(Crop, '裁切框') },
   { value: 'mask' as const, label: withIcon(Shapes, '前景遮罩') },
@@ -61,6 +62,7 @@ const VIEWS = [
 /** E2 事前試算的候選長邊（只供觀察，最終由 E2 實驗決定） */
 const VLM_SIDES = [384, 512, 768, 1024, 1536, 2048]
 
+/** 呼叫 `/dev/food`；主分析、盤緣試算與 VLM 尺寸試算共用。 */
 function runFood(imageId: string, cfg: ConfigOverride, signal: AbortSignal): Promise<FoodResult> {
   return unwrap(
     api.POST('/workbench/v1/dev/food', {
@@ -70,18 +72,34 @@ function runFood(imageId: string, cfg: ConfigOverride, signal: AbortSignal): Pro
   )
 }
 
+/** 位元組 → KB（1024 進位、取整數） */
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
 
+/**
+ * 食物照片工具頁（`FoodConfig`）。
+ *
+ * 一頁內有四組查詢，各自只在需要時送出：
+ * 1. `analysis`：主分析（切菜框、盤緣、VLM 輸入、步驟），任何分頁都會跑。
+ * 2. `plateTrial`：盤緣步驟關閉時，在「盤緣」分頁強制 `enable_plate: true` 試算一次，方便調盤緣參數。
+ * 3. `mask`：「前景遮罩」分頁的診斷檢視。
+ * 4. `sizes`：「VLM 輸入」分頁對 `VLM_SIDES` 每個長邊上限各跑一次，只看輸出尺寸與 JPEG 大小。
+ *
+ * 菜數與真值的差、盤緣短長比是前端顯示用的評測／換算；其餘數字都來自後端。
+ */
 export function FoodPage() {
   const food = useConfigClass('FoodConfig')
   const degradationSchema = useConfigClass('Degradation').schema
   const pipeline = useImagePipeline('food')
+  // 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）
   const [config, setConfig] = useState<ConfigOverride>({})
   const [view, setView] = useState<ViewKind>('boxes')
   const image = pipeline.image
+  // 給 VLM 尺寸試算用的防抖參數（useAnalysis 內部另有自己的防抖）
   const debounced = useDebounced(config)
 
   const analysis = useAnalysis({ name: 'food', imageId: image?.image_id, config, run: runFood })
+  // useMemo 讓物件保持穩定：useAnalysis 以「防抖值 === 目前值」判斷是否可送出，
+  // 每次重繪都產生新物件會讓防抖永遠追不上
   const plateConfig = useMemo(() => ({ ...config, enable_plate: true }), [config])
   const platesOff = analysis.shown?.data.plates_enabled === false
   // 盤緣步驟關閉時，在「盤緣」檢視仍試算一次（不影響輸出），方便調參
@@ -92,13 +110,17 @@ export function FoodPage() {
     run: runFood,
     enabled: view === 'plates' && platesOff,
   })
+  // 前景遮罩只在該分頁開啟時查詢；用目前參數（config 為 state，本身就是穩定物件）
   const mask = useRenderView(image?.image_id, 'food_mask', config, view === 'mask')
+  // 尺寸試算沿用目前的 JPEG 品質（防抖後），讓表格與主分析可比較；結構未載入時暫用 85
   const quality = food.schema
     ? (valueOf(
         food.schema.fields.find((f) => f.name === 'vlm_jpeg_quality')!,
         debounced,
       ) as number)
     : 85
+  // 每個候選長邊一個查詢；關掉切菜與盤緣，只算整張影像的縮放壓縮。
+  // 查詢鍵含 image_id 與品質，換圖或改品質時重算；未設 placeholderData，重算期間表格顯示「…」。
   const sizes = useQueries({
     queries: VLM_SIDES.map((side) => ({
       queryKey: ['food-vlm-size', image?.image_id, side, quality],
@@ -135,6 +157,7 @@ export function FoodPage() {
             schema={food.schema}
             overrides={config}
             onChange={setConfig}
+            // 後端回 INVALID_CONFIG 時，在對應欄位旁標出錯誤
             invalidField={analysis.configError?.field}
             invalidMessage={analysis.configError?.message}
           />
@@ -159,12 +182,17 @@ export function FoodPage() {
         )
       }
     >
+      {/* AnalysisFrame 只在影像與結果屬於同一張圖時才呼叫 children，避免舊框疊到新影像上 */}
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!food.schema}>
         {({ data: r, roundTripMs, config: used }, img) => {
+          // 門檻與說明用「算出這個結果的參數」（used），防抖期間才不會與結果對不上
           const current = valuesOf(used as ConfigOverride)
+          // 真值只有合成影像才有（FreeJson，需自行斷言型別）；上傳照片時為 undefined
           const truthPlates = img.truth?.plates as Ellipse[] | undefined
           const truthBoxes = img.truth?.plate_boxes as Box[] | undefined
+          // VLM 實際會收到的總大小：整張＋所有裁切
           const total = r.whole.num_bytes + r.crops.reduce((a, c) => a + c.num_bytes, 0)
+          // 盤緣步驟開啟時用主結果；關閉時改用試算結果（尚未回來則為空陣列）
           const plates = r.plates_enabled ? r.plates : (plateTrial.shown?.data.plates ?? [])
           const readout = (
             <>
@@ -180,6 +208,7 @@ export function FoodPage() {
               />
               <ReadoutBlock title="指標">
                 <MetricGrid>
+                  {/* delta 為「切出框數 − 真實盤數」，前端評測顯示（負號用 U+2212） */}
                   <Metric
                     label="菜數"
                     value={r.dishes_enabled ? String(r.dishes.length) : '未啟用'}
@@ -203,6 +232,7 @@ export function FoodPage() {
                   />
                 </MetricGrid>
               </ReadoutBlock>
+              {/* 盤緣明細只在盤緣分頁顯示；短長比 minor/major 越接近 1 越接近正圓（俯拍） */}
               {view === 'plates' && plates.length > 0 && (
                 <ReadoutBlock title={r.plates_enabled ? '盤緣橢圓' : '盤緣橢圓（試算）'}>
                   <DataTable
@@ -245,6 +275,7 @@ export function FoodPage() {
                 ]}
               />
             ) : undefined
+          // 主檢視依分頁切換：裁切框 → 前景遮罩 → 盤緣 → 各道菜 → VLM 輸入 → 步驟
           const main =
             view === 'boxes' ? (
               <ImageViewer
@@ -253,6 +284,7 @@ export function FoodPage() {
                 width={img.width}
                 height={img.height}
                 alt="切出的各道菜"
+                // 疊圖座標為原圖像素；px 讓線寬與標籤維持固定的螢幕大小。真值先畫、找到的在上層
                 overlay={(px) => (
                   <>
                     {truthBoxes?.map((b, i) => (
@@ -304,6 +336,7 @@ export function FoodPage() {
               ) : (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
                   {r.crops.map((c, i) => {
+                    // 假設 crops 與 dishes 依相同順序一一對應（第 i 張裁切來自第 i 個框）
                     const b = r.dishes[i]
                     return (
                       <figure
@@ -330,6 +363,7 @@ export function FoodPage() {
               )
             ) : view === 'vlm' ? (
               <>
+                {/* 不用 fill：以實際尺寸顯示，下方還要放尺寸試算表 */}
                 <ImageViewer
                   src={artifactUrl(r.whole.image.artifact_id)}
                   width={r.whole.image.width}
@@ -344,6 +378,7 @@ export function FoodPage() {
                   <DataTable
                     label="不同長邊上限下的輸出尺寸與 JPEG 大小"
                     columns={['長邊上限', '輸出尺寸', 'JPEG', '像素數（MP）']}
+                    // sizes 與 VLM_SIDES 同順序；尚未回來的列顯示「…」
                     rows={VLM_SIDES.map((side, i) => {
                       const w = sizes[i]?.data?.whole
                       return [
@@ -362,6 +397,7 @@ export function FoodPage() {
             ) : (
               <StepsTable steps={r.steps} />
             )
+          // 影像型分頁撐滿主檢視；各道菜、VLM 輸入、步驟改為可捲動
           const isImage = view === 'boxes' || view === 'mask' || view === 'plates'
           return (
             <Split

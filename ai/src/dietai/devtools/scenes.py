@@ -1,4 +1,8 @@
-"""工作台的合成影像：依場景名稱與 JSON 參數呼叫 ``dietai.synthetic``，並附上真值。"""
+"""工作台的合成影像：依場景名稱與 JSON 參數呼叫 ``dietai.synthetic``，並附上真值。
+
+``SceneError`` 也被 ``sweep``、``e1`` 與 ``server/workbench.py`` 借用來表示一般的請求參數
+錯誤，``server.rpc`` 轉成 ``INVALID_PARAMS``（附欄位名稱）。
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,7 @@ from typing import Any
 from dietai import synthetic
 from dietai.preprocess.types import Box, Ellipse, Image, Quad
 
+# 可用的場景名稱（只用於錯誤訊息；分派在 synthesize 中）
 SCENES = ("label", "ean13", "invoice", "nutrition", "food")
 
 
@@ -23,6 +28,8 @@ class SceneError(ValueError):
 
 @dataclass(frozen=True)
 class Scene:
+    """一張合成影像、給使用者看的說明，以及真值（JSON 可序列化；沒有時為 ``None``）。"""
+
     image: Image
     description: str
     truth: dict[str, Any] | None = None
@@ -37,6 +44,7 @@ def synthesize(scene: str, params: dict[str, Any] | None = None) -> Scene:
     - ``nutrition``：透視變形的營養標示（``strength``、``seed``…）；真值為表格四角
     - ``food``：餐桌上的盤子（``n_dishes``、``seed``、``tilt``…）；真值為盤緣橢圓與其外接框
     """
+    # 複製一份：invoice 分支會 pop 欄位，不可改到呼叫端的字典
     params = dict(params or {})
     if scene == "label":
         img = _call(synthetic.label_scene, params)
@@ -46,6 +54,8 @@ def synthesize(scene: str, params: dict[str, Any] | None = None) -> Scene:
         code = params.get("code", _default(synthetic.ean13_scene, "code"))
         return Scene(img, f"合成 EAN-13（{code}）", {"text": code, "format": "EAN13"})
     if scene == "invoice":
+        # QR 內容是位元組；前端送文字，在此依 encoding（預設 Big5）編碼後再交給合成函式。
+        # 真值保留原始文字與編碼名稱
         encoding = str(params.pop("encoding", "big5"))
         left = str(params.pop("left", "AB12345678 茶葉蛋:1:25"))
         right = str(params.pop("right", "**鮮奶:1:35"))
@@ -74,6 +84,11 @@ def synthesize(scene: str, params: dict[str, Any] | None = None) -> Scene:
 
 
 def _call(fn: Callable[..., Any], params: dict[str, Any]) -> Any:
+    """以關鍵字參數呼叫合成函式。
+
+    先比對函式簽名，未知參數以 ``SceneError`` 回報並附參數名稱；函式本身丟出的
+    ``TypeError``／``ValueError``（型別或範圍錯誤）也轉成 ``SceneError``（無法歸到欄位）。
+    """
     accepted = set(inspect.signature(fn).parameters)
     for name in params:
         if name not in accepted:
@@ -85,16 +100,20 @@ def _call(fn: Callable[..., Any], params: dict[str, Any]) -> Any:
 
 
 def _default(fn: Callable[..., Any], name: str) -> Any:
+    """函式參數的預設值（用於說明與真值，例如未指定條碼內容時）。"""
     return inspect.signature(fn).parameters[name].default
 
 
 def _quad_points(quad: Quad) -> list[dict[str, float]]:
+    """四邊形四角轉成 JSON 用的點列（numpy 數值轉 float）。"""
     return [{"x": float(x), "y": float(y)} for x, y in quad]
 
 
 def _box_dict(b: Box) -> dict[str, int]:
+    """外接框轉成 JSON 物件。"""
     return {"x": b.x, "y": b.y, "w": b.w, "h": b.h}
 
 
 def _ellipse_dict(e: Ellipse) -> dict[str, float]:
+    """橢圓轉成 JSON 物件。"""
     return {"cx": e.cx, "cy": e.cy, "major": e.major, "minor": e.minor, "angle": e.angle}

@@ -37,6 +37,7 @@ class DecodeHit:
 
     @property
     def center(self) -> Point:
+        """四角座標的平均（像素）。``invoice_qr`` 依其 x 分左右。"""
         xs, ys = zip(*self.corners, strict=True)
         return (sum(xs) / 4, sum(ys) / 4)
 
@@ -44,6 +45,7 @@ class DecodeHit:
     def area(self) -> float:
         """四角圍成的多邊形面積（平方像素，鞋帶公式）。"""
         pts = self.corners
+        # 鞋帶公式：Σ (x_i·y_{i+1} − x_{i+1}·y_i) / 2；取絕對值，與四角的繞行方向無關
         s = sum(pts[i][0] * pts[(i + 1) % 4][1] - pts[(i + 1) % 4][0] * pts[i][1] for i in range(4))
         return abs(s) / 2
 
@@ -58,11 +60,13 @@ class ZxingDecoder:
     """以 zxing-cpp 解碼。``cfg`` 控制 zxing-cpp 內建的旋轉、縮小、反色嘗試。"""
 
     def __init__(self, cfg: ZxingConfig = ZxingConfig()) -> None:
+        # 延遲 import：未安裝 zxing-cpp 的環境仍可 import 本模組（例如只用 PyzbarDecoder）
         import zxingcpp
 
         self._zx = zxingcpp
         self.cfg = cfg
         fmt = zxingcpp.BarcodeFormat
+        # zxing-cpp 格式 → 專案的 ``CodeFormat``；未列出的格式在 __call__ 中歸為 OTHER
         self._formats: dict[Any, CodeFormat] = {
             fmt.EAN13: CodeFormat.EAN13,
             fmt.EAN8: CodeFormat.EAN8,
@@ -74,6 +78,9 @@ class ZxingDecoder:
 
     def __call__(self, img: Image) -> list[DecodeHit]:
         validate_image(img)
+        # zxing-cpp 直接接受灰階或 BGR 的 numpy 陣列，但需連續記憶體；切片等非連續的視圖
+        # 由 ascontiguousarray 複製一份（已連續時不複製）。未指定 formats，即嘗試所有格式，
+        # 格式篩選由呼叫端（``LadderConfig.accept_formats``）負責
         results = self._zx.read_barcodes(
             np.ascontiguousarray(img),
             try_rotate=self.cfg.try_rotate,
@@ -82,6 +89,7 @@ class ZxingDecoder:
         )
         hits: list[DecodeHit] = []
         for r in results:
+            # zxing-cpp 的 position 依條碼本身的方向給四角，條碼倒置時 top_left 可能在影像右下
             p = r.position
             corners = tuple(
                 (float(q.x), float(q.y))
@@ -105,6 +113,7 @@ class PyzbarDecoder:
     電子發票的正式流程請用 ``ZxingDecoder``。四角取自 ZBar 多邊形的最小外接矩形。
     """
 
+    # pyzbar 回傳的 ``type`` 字串 → 專案的 ``CodeFormat``；未列出者歸為 OTHER
     _FORMATS = {
         "EAN13": CodeFormat.EAN13,
         "EAN8": CodeFormat.EAN8,
@@ -115,6 +124,7 @@ class PyzbarDecoder:
     }
 
     def __init__(self) -> None:
+        # 延遲 import：pyzbar 只在實驗對照時需要（且需系統安裝 ZBar 函式庫）
         from pyzbar import pyzbar
 
         self._decode = pyzbar.decode
@@ -123,6 +133,8 @@ class PyzbarDecoder:
         gray = to_gray(img)  # ZBar 只接受 8 位元灰階
         hits: list[DecodeHit] = []
         for r in self._decode(gray):
+            # ZBar 的 polygon 點數不固定（不一定是四點），
+            # 先以 minAreaRect 求最小外接旋轉矩形，再由 boxPoints 取出其四個頂點
             poly = np.array([(p.x, p.y) for p in r.polygon], dtype=np.float32)
             # order_quad 依角度排序：只看 x + y／x − y 時，旋轉 45° 的外接矩形會重複選到同一點
             box = order_quad(cv2.boxPoints(cv2.minAreaRect(poly)))
@@ -131,6 +143,7 @@ class PyzbarDecoder:
             hits.append(
                 DecodeHit(
                     format=self._FORMATS.get(r.type, CodeFormat.OTHER),
+                    # 無法以 UTF-8 解碼的位元組以 U+FFFD 取代，避免例外；text 只供顯示與比對
                     text=raw.decode("utf-8", errors="replace"),
                     raw=raw,
                     corners=(tl, tr, br, bl),

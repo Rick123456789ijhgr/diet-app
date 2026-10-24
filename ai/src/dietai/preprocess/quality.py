@@ -56,6 +56,8 @@ def laplacian_map(img: Image, cfg: QualityConfig = QualityConfig()) -> npt.NDArr
     供視覺化檢查哪些區域貢獻邊緣；回傳 ``float64``，形狀為縮放後的 ``(H, W)``。
     """
     gray = resize_short_side(to_gray(img), cfg.blur_short_side)
+    # 輸出深度用 CV_64F：拉普拉斯響應有正有負且可能超過 255，用 uint8 會被截斷而失真。
+    # 未指定 ksize 時 OpenCV 預設 ksize=1，即 3×3 核 [[0,1,0],[1,-4,1],[0,1,0]]
     return np.asarray(cv2.Laplacian(gray, cv2.CV_64F), dtype=np.float64)
 
 
@@ -65,6 +67,7 @@ def blur_score(img: Image, cfg: QualityConfig = QualityConfig()) -> float:
     計算前先把影像等比縮放到短邊 ``cfg.blur_short_side``，
     避免解析度不同造成分數不可比。輸入為 BGR 或灰階 ``uint8`` 影像。
     """
+    # 清晰影像的邊緣多、拉普拉斯響應起伏大（變異數高）；模糊影像響應趨近 0（變異數低）
     return float(laplacian_map(img, cfg).var())
 
 
@@ -81,9 +84,11 @@ def exposure_masks(
 
 def exposure_stats(img: Image, cfg: QualityConfig = QualityConfig()) -> ExposureStats:
     """亮度平均，以及灰階低於 ``cfg.dark_level``、高於 ``cfg.bright_level`` 的像素比例。"""
+    # 在原解析度上計算（不像 blur_score 先縮放）：比例本身與解析度無關
     gray = to_gray(img)
     return ExposureStats(
         mean=float(gray.mean()),
+        # 布林陣列的平均即為 True 的比例；判斷式與 ``exposure_masks`` 相同
         dark_ratio=float((gray < cfg.dark_level).mean()),
         bright_ratio=float((gray > cfg.bright_level).mean()),
     )
@@ -106,6 +111,8 @@ def check_quality(img: Image, cfg: QualityConfig = QualityConfig()) -> QualityRe
     steps: list[StepRecord] = []
     warnings: list[PreprocessWarning] = []
 
+    # 三項檢查彼此獨立、全部都會執行（不因前一項失敗而提早 return），
+    # 以便一次回報所有問題；每項只把自己用到的設定欄位記進 StepRecord
     start = time.perf_counter()
     resolution_ok = resolution_check(img, cfg)
     steps.append(
@@ -142,6 +149,7 @@ def check_quality(img: Image, cfg: QualityConfig = QualityConfig()) -> QualityRe
             },
         )
     )
+    # 過暗與過亮分開判斷，兩者可能同時成立（例如逆光：主體暗、背景過曝）
     if exposure.dark_ratio > cfg.dark_ratio_max:
         warnings.append(PreprocessWarning.TOO_DARK)
     if exposure.bright_ratio > cfg.bright_ratio_max:
@@ -158,4 +166,5 @@ def check_quality(img: Image, cfg: QualityConfig = QualityConfig()) -> QualityRe
 
 
 def _ms_since(start: float) -> float:
+    """從 ``time.perf_counter()`` 的 ``start`` 到現在經過的毫秒數。"""
     return (time.perf_counter() - start) * 1000

@@ -32,13 +32,16 @@ from dietai.synthetic import write_barcode_dataset
 # ai/src/dietai/devtools/e1.py → 專案根目錄
 E1_DIR = Path(__file__).resolve().parents[4] / "research" / "experiments" / "e1_barcode"
 DEFAULT_ROOT = E1_DIR / "runs"
+# 列入「失敗影像」清單的判定結果（不含 correct 與 true_negative）
 FAILURES = (Outcome.MISREAD, Outcome.MISSED, Outcome.FALSE_POSITIVE, Outcome.ERROR)
+# 快速執行的條碼數上限：每個條碼會產生多張退化影像，再乘上實驗組數，數量放大很快
 MAX_CODES = 20
 # 失敗影像的嘗試紀錄最多附上幾筆（避免大型執行的回應過大）
 MAX_FAILURE_ATTEMPTS = 2000
 
 
 def resolve_root(root: str) -> Path:
+    """結果資料夾：空字串用預設的 ``e1_barcode/runs``，否則經測試集鎖定檢查。"""
     return guard_path(root) if root else DEFAULT_ROOT
 
 
@@ -58,6 +61,7 @@ def resolve_run(run_dir: str) -> Path:
 def list_runs_json(root: str) -> dict[str, Any]:
     """結果資料夾下的各次執行（新的在前），以及可用的實驗組。"""
     folder = resolve_root(root)
+    # 實驗組設定讀不到或格式錯時仍列出既有結果，只是不能快速執行
     try:
         arms = [a.name for a in load_arms(E1_DIR / "configs")]
     except (OSError, ValueError):
@@ -76,7 +80,9 @@ def run_json(run_dir: str) -> dict[str, Any]:
     meta, rows = read_run(folder)
     manifest = meta.get("manifest", {})
     tags: list[str] = list(manifest.get("tag_columns", []))
+    # 依結果中首次出現的順序去重複（保留執行時的實驗組順序）
     arms = list(dict.fromkeys(r["arm"] for r in rows))
+    # 失敗列只挑介面需要的欄位（含各標籤欄），缺的欄位補空字串
     failures = [
         {
             k: r.get(k, "")
@@ -118,6 +124,11 @@ def run_json(run_dir: str) -> dict[str, Any]:
 
 
 def _failure_attempts(folder: Path, keys: set[tuple[str, str]]) -> list[dict[str, str]]:
+    """從 ``attempts.csv`` 挑出失敗影像（``(arm, id)``）的逐階嘗試紀錄。
+
+    逐列串流讀取，最多 ``MAX_FAILURE_ATTEMPTS`` 筆；檔案不存在或沒有失敗時回傳空串列。
+    ``utf-8-sig`` 讓有 BOM（例如 Excel 存過）的檔案也能正確讀到第一欄名稱。
+    """
     path = folder / "attempts.csv"
     if not keys or not path.is_file():
         return []
@@ -141,6 +152,7 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
     失敗影像日後仍可檢視），只供驗證流程與觀察趨勢，不可作為結論。
     產生器被關閉（使用者取消）時中止實驗並刪除未完成的結果資料夾。
     """
+    # 先檢查完所有參數再建立任何檔案，參數錯誤時不留下空資料夾
     if not arm_names:
         raise SceneError("至少選一個實驗組", "arms")
     if not 1 <= n_codes <= MAX_CODES:
@@ -160,6 +172,7 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
         shutil.rmtree(out, ignore_errors=True)
         shutil.rmtree(data_dir, ignore_errors=True)
 
+    # 讀 manifest 一律經 read_manifest（測試集鎖定）；合成資料的 split 一律為 dev
     try:
         manifest = read_manifest(write_barcode_dataset(data_dir, n_codes))
     except BaseException:
@@ -178,11 +191,13 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
     cancelled = threading.Event()
 
     def progress(done: int, n: int) -> None:
+        """run_experiment 的進度回呼（在背景執行緒中呼叫）。"""
         if cancelled.is_set():
             raise _Cancelled
         events.put(("progress", (done, n)))
 
     def work() -> None:
+        """背景執行緒：跑實驗，結束狀態（done／cancelled／error）一律經佇列回報。"""
         try:
             run_experiment(manifest, arms, out, label="workbench", progress=progress)
             events.put(("done", None))
@@ -195,6 +210,8 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
 
     worker = threading.Thread(target=work, name="e1-quick-run", daemon=True)
     worker.start()
+    # 呼叫端執行緒在這裡把佇列轉成事件。產生器被關閉時 yield 處丟出 GeneratorExit，
+    # finally 設下取消旗標，背景執行緒在下一次進度回呼時中止並刪除未完成的資料夾
     try:
         while True:
             kind, value = events.get()

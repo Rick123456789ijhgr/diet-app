@@ -27,8 +27,9 @@ import numpy as np
 
 from dietai.preprocess.types import Image
 
-TEST_SPLIT = "test"
+TEST_SPLIT = "test"  # split 欄為此值（不分大小寫）的列屬於鎖定的測試集
 REQUIRED_COLUMNS = ("image", "truth")
+# 保留欄位以外的欄位一律視為拍攝條件標籤（``tags``）
 RESERVED_COLUMNS = ("image", "truth", "split", "id")
 
 
@@ -38,6 +39,8 @@ class SplitLockedError(ValueError):
 
 def is_test_split(path: str | Path) -> bool:
     """路徑中是否含有連續的 ``splits/test`` 目錄（不分大小寫）。"""
+    # 兩道鎖之一：只看目錄結構、不看檔案內容，因此不必開檔就能擋下（另一道是 split 欄）。
+    # 只比對相鄰的兩層，``splits/dev/test`` 或單獨的 ``test/`` 都不算。
     parts = [p.lower() for p in Path(path).parts]
     return any(a == "splits" and b == "test" for a, b in zip(parts, parts[1:], strict=False))
 
@@ -54,6 +57,10 @@ class ManifestItem:
 
     @property
     def is_test(self) -> bool:
+        """是否屬於鎖定的測試集：``split`` 為 ``test``，或影像路徑含 ``splits/test``。
+
+        兩者任一成立即算，避免只改 ``split`` 欄就把測試集影像混進開發用的 manifest。
+        """
         return self.split.lower() == TEST_SPLIT or is_test_split(self.image)
 
 
@@ -81,11 +88,16 @@ def read_manifest(path: str | Path, *, include_test: bool = False) -> Manifest:
 
     缺少必填欄位、``id`` 重複或 ``image`` 為空時丟 ``ValueError``。
     """
+    # 先解析成絕對路徑（含符號連結），再檢查是否位於 splits/test；
+    # 整份 manifest 屬於測試集時直接拒絕，連檔案都不讀
     path = Path(path).expanduser().resolve()
     if not include_test and is_test_split(path):
         raise SplitLockedError(f"測試集已鎖定，正式實驗才可讀取：{path}")
+    # 以位元組讀入：同一份內容同時用來解析與計算 sha256，確保雜湊對應實際讀到的內容。
+    # utf-8-sig 會去掉 Excel 另存時加的 BOM；沒有 BOM 時與 utf-8 相同。
     data = path.read_bytes()
     reader = csv.DictReader(data.decode("utf-8-sig").splitlines())
+    # 欄名去除前後空白（手寫 CSV 常在逗號後加空格）；空檔案時 fieldnames 為 None
     columns = tuple(c.strip() for c in reader.fieldnames or ())
     missing = [c for c in REQUIRED_COLUMNS if c not in columns]
     if missing:
@@ -95,7 +107,9 @@ def read_manifest(path: str | Path, *, include_test: bool = False) -> Manifest:
     items: list[ManifestItem] = []
     seen: set[str] = set()
     excluded = 0
+    # line 為 CSV 中的實際列號（第 1 列是標題），供錯誤訊息定位
     for line, raw in enumerate(reader, start=2):
+        # 多出的欄位 DictReader 放在鍵 None 之下，直接忽略；缺少的欄位值為 None，視為空字串
         row = {k.strip(): (v or "").strip() for k, v in raw.items() if k is not None}
         if not row["image"]:
             raise ValueError(f"第 {line} 列的 image 為空：{path}")
@@ -106,9 +120,11 @@ def read_manifest(path: str | Path, *, include_test: bool = False) -> Manifest:
             split=row.get("split", ""),
             tags={c: row.get(c, "") for c in tag_columns},
         )
+        # id 重複檢查涵蓋所有列（含之後會被排除的測試集），結果檔以 id 配對時才不會混淆
         if item.id in seen:
             raise ValueError(f"第 {line} 列的 id 重複：{item.id}")
         seen.add(item.id)
+        # 兩道鎖之二：逐列排除測試集，只記數量，不保留內容
         if item.is_test and not include_test:
             excluded += 1
             continue
@@ -132,6 +148,7 @@ def write_manifest(
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="raise")
         writer.writeheader()
+        # 只取 fieldnames 中的欄位、缺的補空字串；不在欄位清單中的鍵會被靜默略過
         for row in rows:
             writer.writerow({k: row.get(k, "") for k in fieldnames})
     return path
@@ -142,6 +159,7 @@ def read_image(path: str | Path) -> Image:
 
     找不到檔案丟 ``FileNotFoundError``，無法解碼丟 ``ValueError``。
     """
+    # 不用 cv2.imread：它在 Windows 無法開啟含非 ASCII 字元的路徑，改由 Python 讀位元組再解碼
     data = Path(path).read_bytes()
     if not data:  # 空緩衝區會讓 cv2.imdecode 丟 cv2.error，而不是回傳 None
         raise ValueError(f"影像檔是空的：{path}")
@@ -154,6 +172,7 @@ def read_image(path: str | Path) -> Image:
 def write_image(path: str | Path, img: Image) -> Path:
     """依副檔名編碼並寫出影像（支援含中文的 Windows 路徑），回傳路徑。"""
     path = Path(path)
+    # 與 read_image 相同理由不用 cv2.imwrite：先在記憶體編碼，再由 Python 寫檔；無副檔名時用 PNG
     ok, buf = cv2.imencode(path.suffix or ".png", img)
     if not ok:
         raise ValueError(f"無法編碼影像：{path}")

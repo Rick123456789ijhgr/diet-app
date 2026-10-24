@@ -46,16 +46,23 @@ import { useRenderView } from '@/hooks/useRenderView'
 import { asciiPreview, fromBase64, hexPreview } from '@/lib/bytes'
 import { rungText } from '@/lib/text'
 
+/** barcode：商品條碼（EAN-13 等）；invoice：電子發票左右兩個 QR */
 type Mode = 'barcode' | 'invoice'
 type ViewKind = 'hits' | 'rung' | 'steps' | 'bytes'
 
+/** 頁面的參數狀態：階梯（LadderConfig）與解碼器（ZxingConfig）兩組覆寫，一起作為查詢鍵 */
 interface LadderBody {
   ladder: ConfigOverride
   zxing: ConfigOverride
 }
 
+/** 帶模式標記的結果，用來辨別結果屬於哪個模式（切換模式後舊結果仍可能在畫面上） */
 type Result = { mode: 'barcode'; data: BarcodeResult } | { mode: 'invoice'; data: InvoiceQrResult }
 
+/**
+ * 依模式呼叫條碼或發票 QR 路由；兩者請求格式相同（image_id＋ladder＋zxing 覆寫）。
+ * `overrideBody`：沒有覆寫時送 undefined，後端視為全部用預設值。
+ */
 async function runLadder(
   mode: Mode,
   imageId: string,
@@ -69,22 +76,38 @@ async function runLadder(
   return { mode, data: await unwrap(api.POST('/workbench/v1/dev/invoice-qr', { body, signal })) }
 }
 
+/**
+ * 條碼與電子發票 QR 工具頁。
+ *
+ * 資料流：
+ * 1. `useImagePipeline` 產生合成條碼／發票或上傳照片，再套用模擬退化，得到 `image`。
+ * 2. `analysis`：用目前的階梯與解碼器參數跑完整的逐步升級階梯（`runLadder`）。
+ * 3. `baseline`：同樣參數但只嘗試 raw（原圖），作為 E1 消融的對照；只在商品條碼模式啟用。
+ * 4. `variant`：「各階影像」分頁中，向後端要某一次嘗試實際送進解碼器的影像（ladder_variant 檢視）。
+ *
+ * 成功與否、命中的階、警告都來自後端；前端只顯示與切換檢視。
+ */
 export function BarcodePage() {
   const schemas = useConfigSchemas()
   const ladderSchema = useConfigClass('LadderConfig').schema
   const zxingSchema = useConfigClass('ZxingConfig').schema
   const degradationSchema = useConfigClass('Degradation').schema
   const [mode, setMode] = useState<Mode>('barcode')
+  // 合成場景隨模式切換；pipeline 的初始場景固定為 ean13（初始模式為 barcode），之後由 switchMode 換
   const scene = mode === 'barcode' ? 'ean13' : 'invoice'
   const pipeline = useImagePipeline('ean13')
   const [body, setBody] = useState<LadderBody>({ ladder: {}, zxing: {} })
   const { ladder, zxing } = body
   const [view, setView] = useState<ViewKind>('hits')
+  // 「各階影像」分頁選的嘗試序號；null 表示跟隨預設（成功的那一次或最後一次）
   const [attempt, setAttempt] = useState<number | null>(null)
   const image = pipeline.image
 
+  // 只更新其中一組覆寫（ladder 或 zxing），另一組保留
   const update = (next: Partial<LadderBody>) => setBody({ ...body, ...next })
 
+  // 切換模式：重設選的嘗試；商品條碼沒有「位元組」分頁，需退回偵測結果；
+  // 合成來源要換成對應場景，上傳的照片則保留不動
   const switchMode = (m: Mode) => {
     setMode(m)
     setAttempt(null)
@@ -94,6 +117,7 @@ export function BarcodePage() {
     }
   }
 
+  // 查詢鍵名稱用 mode，兩種模式的結果分開快取
   const analysis = useAnalysis({
     name: mode,
     imageId: image?.image_id,
@@ -110,12 +134,15 @@ export function BarcodePage() {
     enabled: mode === 'barcode',
   })
 
+  // shown 在計算中或出錯時沿用上一次結果，可能還是切換前模式的結果，所以要比對 mode
   const result = analysis.shown?.data
   const attempts: RungAttempt[] = result && result.mode === mode ? result.data.attempts : []
+  // 預設顯示成功的那一次；發票模式或全部失敗時顯示最後一次
   const defaultAttempt =
     result?.mode === 'barcode' && result.data.success_index >= 0
       ? result.data.success_index
       : attempts.length - 1
+  // 夾在 [0, attempts.length - 1]：換參數後嘗試次數可能變少，舊的選擇會超出範圍
   const shownAttempt = Math.max(
     0,
     Math.min(attempt ?? defaultAttempt, Math.max(0, attempts.length - 1)),
@@ -125,6 +152,7 @@ export function BarcodePage() {
     () => ({ ladder: body.ladder, index: shownAttempt }),
     [body.ladder, shownAttempt],
   )
+  // 只在「各階影像」分頁且已有嘗試紀錄時查詢
   const variant = useRenderView(
     image?.image_id,
     'ladder_variant',
@@ -132,11 +160,13 @@ export function BarcodePage() {
     view === 'rung' && attempts.length > 0,
   )
 
+  // Rung、CodeFormat 等列舉值由參數結構提供，不在前端寫死
   const enums = schemas.data?.enums ?? {}
   const configError = analysis.configError
   const panel = (
     <ToolPanel
       paramsLabel="階梯參數"
+      // 兩組參數的覆寫數合計，顯示在「階梯參數」標籤旁
       changed={Object.keys(ladder).length + Object.keys(zxing).length}
       image={
         <ImageSourcePanel pipeline={pipeline} scene={scene} degradationSchema={degradationSchema} />
@@ -144,6 +174,7 @@ export function BarcodePage() {
       params={
         ladderSchema && zxingSchema ? (
           <div className="space-y-6">
+            {/* 序列欄位（rungs 順序、formats）由 LadderControls 管理；OTHER 不是可選的條碼格式 */}
             <LadderControls
               schema={ladderSchema}
               overrides={ladder}
@@ -152,6 +183,7 @@ export function BarcodePage() {
               formats={(enums.CodeFormat ?? []).filter((f) => f !== 'OTHER')}
               showFormats={mode === 'barcode'}
             />
+            {/* 純量欄位交給 ParamForm；回寫時要把序列欄位合併回去，否則會被覆蓋掉 */}
             <ParamForm
               schema={ladderSchema}
               overrides={scalars(ladder)}
@@ -173,6 +205,7 @@ export function BarcodePage() {
           <EmptyState>載入參數結構中…</EmptyState>
         )
       }
+      // 匯入／匯出只處理階梯參數（不含 zxing）
       io={
         ladderSchema && (
           <ConfigIO
@@ -185,6 +218,7 @@ export function BarcodePage() {
     />
   )
 
+  // 「位元組」分頁只在發票模式出現（商品條碼不需要看原始位元組）
   const views = [
     { value: 'hits' as const, label: withIcon(ScanSearch, '偵測結果') },
     { value: 'rung' as const, label: withIcon(Layers, '各階影像') },
@@ -216,12 +250,15 @@ export function BarcodePage() {
         </div>
       }
     >
+      {/* ready 額外要求結果屬於目前模式，切換模式後不會用舊模式的結果畫畫面 */}
       <AnalysisFrame
         pipeline={pipeline}
         analysis={analysis}
         ready={!!ladderSchema && result?.mode === mode}
       >
         {({ data: r, roundTripMs }, img) => {
+          // 統一成命中清單：條碼模式為所有 hits；發票模式為找到的左、右碼（未找到者略過）。
+          // labels 與 hits 一一對應：條碼用內容文字，發票用 L／R
           const hits: DecodeHit[] =
             r.mode === 'barcode'
               ? r.data.hits
@@ -230,9 +267,11 @@ export function BarcodePage() {
             r.mode === 'barcode'
               ? r.data.hits.map((h) => h.text)
               : ([r.data.left && 'L', r.data.right && 'R'].filter(Boolean) as string[])
+          // 只用原圖的對照結果；還沒回來或不是條碼結果時顯示「…」
           const base = baseline.shown?.data
           const readout = (
             <>
+              {/* 讀數欄：條碼與發票的狀態卡、指標不同，解碼結果表共用 */}
               {r.mode === 'barcode' ? (
                 <>
                   <StatusCard
@@ -313,6 +352,7 @@ export function BarcodePage() {
                   <DataTable
                     label="解碼結果"
                     columns={['#', '格式', '內容', '位元組']}
+                    // 第一欄：條碼模式（label 即內容）顯示序號，發票模式顯示 L／R
                     rows={hits.map((h, i) => [
                       labels[i] === h.text ? i + 1 : (labels[i] ?? i + 1),
                       h.format,
@@ -324,6 +364,7 @@ export function BarcodePage() {
               )}
             </>
           )
+          // 主檢視依分頁切換：偵測結果 → 步驟 → 位元組（僅發票）→ 各階影像（錯誤／載入中／影像／略過）
           const main =
             view === 'hits' ? (
               <ImageViewer
@@ -332,6 +373,7 @@ export function BarcodePage() {
                 width={img.width}
                 height={img.height}
                 alt="原圖與偵測到的條碼四角"
+                // 疊圖座標為原圖像素，四角取自解碼器回報的 corners；px 讓線寬維持固定的螢幕大小
                 overlay={(px) =>
                   hits.map((h, i) => (
                     <Quad key={i} points={h.corners} color={FOUND} label={labels[i]} px={px} />
@@ -342,6 +384,7 @@ export function BarcodePage() {
               <AttemptsTable attempts={r.data.attempts} />
             ) : view === 'bytes' && r.mode === 'invoice' ? (
               <div className="space-y-4">
+                {/* 原始位元組的十六進位與 ASCII 預覽（raw 為 base64） */}
                 {(
                   [
                     ['左碼', r.data.left],
@@ -382,6 +425,7 @@ export function BarcodePage() {
                 alt="送進解碼器的影像版本"
               />
             ) : (
+              // 後端沒有回影像：代表這一階被略過，顯示當時的參數說明原因
               <EmptyState>此階已略過（{formatParams(variant.data.data?.params)}）。</EmptyState>
             )
           return (
@@ -393,6 +437,7 @@ export function BarcodePage() {
                   toolbar={
                     <>
                       <Segmented label="檢視" value={view} onChange={setView} options={views} />
+                      {/* 各階影像分頁：選要看第幾次嘗試 */}
                       {view === 'rung' && (
                         <select
                           aria-label="嘗試"
@@ -434,15 +479,20 @@ function sequences(o: ConfigOverride): ConfigOverride {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => Array.isArray(v)))
 }
 
+/** 只留純量欄位（非陣列），交給 ParamForm。 */
 function scalars(o: ConfigOverride): ConfigOverride {
   return Object.fromEntries(Object.entries(o).filter(([, v]) => !Array.isArray(v)))
 }
 
+/** 把後端回報的參數物件格式化成「k=v、k=v」；沒有參數時顯示「無」。 */
 function formatParams(params: unknown): string {
   const entries = Object.entries((params as Record<string, unknown> | undefined) ?? {})
   return entries.length ? entries.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('、') : '無'
 }
 
+/**
+ * 「步驟」分頁：列出每一次嘗試的階、耗時、命中內容與被拒絕的命中（例如 EAN-13 檢查碼錯誤）。
+ */
 function AttemptsTable({ attempts }: { attempts: RungAttempt[] }) {
   return (
     <DataTable

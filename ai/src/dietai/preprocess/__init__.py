@@ -7,6 +7,9 @@
 zxing-cpp（``vision`` extra）。營養標示（``label``）與食物照片（``food``）只需 OpenCV。
 """
 
+# 以下依子模組分組匯入公開介面：
+# barcode／decoders（條碼）、config（各流程的參數 dataclass）、food（食物照片）、
+# invoice_qr（電子發票 QR）、label（營養標示）、quality（影像品質檢查）、types（共用型別）。
 from dietai.preprocess.barcode import (
     LadderResult,
     RungAttempt,
@@ -64,6 +67,7 @@ from dietai.preprocess.quality import (
 )
 from dietai.preprocess.types import Box, Ellipse, PreprocessWarning, Quad, Rung, StepRecord
 
+# 對外公開的名稱；新增公開介面時，上方的 import 與此清單兩處都要加
 __all__ = [
     "DEFAULT_RUNGS",
     "Box",

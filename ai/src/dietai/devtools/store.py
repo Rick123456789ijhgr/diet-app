@@ -34,6 +34,12 @@ class ImageNotFoundError(KeyError):
 
 @dataclass
 class StoredImage:
+    """一張暫存影像與附帶資訊。
+
+    ``truth`` 為合成影像的真值（回傳給前端比對）；``meta`` 只在服務內部使用。
+    編碼結果在第一次取用時才產生並快取，之後計入 ``nbytes``。
+    """
+
     image_id: str
     image: Image
     description: str
@@ -47,10 +53,12 @@ class StoredImage:
 
     @property
     def width(self) -> int:
+        """影像寬度（像素）。"""
         return int(self.image.shape[1])
 
     @property
     def height(self) -> int:
+        """影像高度（像素）。"""
         return int(self.image.shape[0])
 
     @property
@@ -60,6 +68,13 @@ class StoredImage:
 
 
 class ImageStore:
+    """記憶體中的 LRU 暫存區。
+
+    ``_items`` 為 ``OrderedDict``：尾端是最近使用的影像，``get``／``derived`` 取用時移到尾端，
+    淘汰時從頭端開始。``_lock`` 保護 ``_items``、``_bytes``、``_derived`` 三者的一致性；
+    耗時的編碼在鎖外進行（見 ``encoded``）。
+    """
+
     def __init__(
         self, max_items: int = DEFAULT_MAX_ITEMS, max_bytes: int = DEFAULT_MAX_BYTES
     ) -> None:
@@ -81,7 +96,11 @@ class ImageStore:
         encode: Callable[[], tuple[bytes, str]] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> StoredImage:
-        """存入影像；``encode`` 回傳（檔案位元組, content type），第一次取用時才呼叫。"""
+        """存入影像；``encode`` 回傳（檔案位元組, content type），第一次取用時才呼叫。
+
+        ID 為 ``secrets`` 產生的 16 位十六進位亂數（64 位元），碰撞機率可忽略。
+        存入後立即檢查上限，可能淘汰其他影像（但不會淘汰剛存入的這一張）。
+        """
         item = StoredImage(secrets.token_hex(8), image, description, truth, meta, encode)
         with self._lock:
             self._items[item.image_id] = item
@@ -90,6 +109,7 @@ class ImageStore:
         return item
 
     def get(self, image_id: str) -> StoredImage:
+        """取得影像並標記為最近使用；不存在時丟 ``ImageNotFoundError``（``IMAGE_NOT_FOUND``）。"""
         with self._lock:
             item = self._items.get(image_id)
             if item is None:
@@ -117,13 +137,22 @@ class ImageStore:
         encode: Callable[[], tuple[bytes, str]] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> StoredImage:
+        """存入衍生影像，並登記「(來源 ID, 參數鍵) → 衍生影像 ID」供 ``derived`` 重用。
+
+        存入與登記分兩次取鎖；兩個執行緒同時算同一張衍生影像時會各存一份、後登記者覆蓋，
+        只是多占一份空間，結果不會錯。
+        """
         item = self.put(image, description, truth, encode, meta)
         with self._lock:
             self._derived[(source_id, key)] = item.image_id
         return item
 
     def encoded(self, image_id: str) -> tuple[bytes, str]:
-        """取得編碼後的影像與 content type（預設 JPEG）。"""
+        """取得編碼後的影像與 content type（預設 JPEG）。
+
+        編碼在鎖外進行（大圖編碼可能耗時），不阻塞其他請求；完成後再取鎖寫回並計入位元組。
+        若編碼期間影像已被淘汰（不在 ``_items`` 中），仍回傳結果但不計入總量。
+        """
         item = self.get(image_id)
         if item._encoded is None:
             if item._encode is not None:
@@ -139,15 +168,23 @@ class ImageStore:
         return item._encoded, item._content_type
 
     def __len__(self) -> int:
+        """目前暫存的張數。"""
         with self._lock:
             return len(self._items)
 
     @property
     def total_bytes(self) -> int:
+        """目前計入的總位元組數（解碼後的陣列加上已編碼的檔案）。"""
         with self._lock:
             return self._bytes
 
     def _evict(self) -> None:
+        """從最久未使用端淘汰，直到張數與位元組都符合上限；呼叫端須已持有 ``_lock``。
+
+        淘汰後一併清掉失效的衍生對應：衍生影像已被淘汰，或來源 ID 已不在暫存區。
+        注意來源鍵若不是暫存影像 ID（例如 ``server/workbench.py`` 條碼掃描縮圖的
+        ``barcode-sweep:...``），對應會在下一次呼叫本函式時被清掉。
+        """
         # 至少保留最新的一張，即使它本身就超過位元組上限
         while len(self._items) > 1 and (
             len(self._items) > self.max_items or self._bytes > self.max_bytes

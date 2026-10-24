@@ -14,6 +14,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// 專案根目錄（本檔在 workbench/scripts/ 下，往上兩層）；不依賴從哪個目錄執行
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const isWin = process.platform === 'win32'
 const aiPort = process.env.AI_GRPC_PORT ?? '50051'
@@ -21,6 +22,7 @@ const apiPort = process.env.API_PORT ?? '8080'
 const webPort = process.env.WEB_PORT ?? '5173'
 
 const venvPython = path.join(root, 'ai', '.venv', isWin ? 'Scripts/python.exe' : 'bin/python')
+// 直接以 node 執行 Vite 的 JS 進入點，不經 npx／.cmd 包裝，Windows 上不必透過 shell
 const vite = path.join(root, 'workbench', 'node_modules', 'vite', 'bin', 'vite.js')
 const devMode = process.argv.includes('--dev')
 
@@ -30,20 +32,24 @@ function storageEnv() {
   const file = path.join(root, '.env')
   const dotenv = {}
   if (existsSync(file)) {
+    // 簡易解析 KEY=VALUE：值不去引號、不處理跳脫與行尾註解；註解行（#）與 export 開頭的行對不上規則式，會被略過
     for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
       const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
       if (m) dotenv[m[1]] = m[2]
     }
   }
+  // 環境變數優先於 .env
   const get = (k) => process.env[k] ?? dotenv[k]
   const env = {}
   const db = get('DATABASE_URL')
   if (db) env.DATABASE_URL = db
   else if (get('POSTGRES_USER') && get('POSTGRES_DB')) {
+    // 帳號密碼可能含 @、: 等字元，要編碼後才能放進連線網址；主機與埠固定為本機預設的 5432
     const user = encodeURIComponent(get('POSTGRES_USER'))
     const password = encodeURIComponent(get('POSTGRES_PASSWORD') ?? '')
     env.DATABASE_URL = `postgres://${user}:${password}@localhost:5432/${get('POSTGRES_DB')}?sslmode=disable`
   }
+  // 沒有專用的存取金鑰時，退回 MinIO 的 root 帳號（本機開發用）
   const minio = get('MINIO_ENDPOINT')
   if (minio || get('MINIO_ROOT_USER')) {
     env.MINIO_ENDPOINT = minio ?? 'localhost:9000'
@@ -52,6 +58,7 @@ function storageEnv() {
   }
   return env
 }
+// 使用者要開的網址：--dev 時是 Vite（由它代理到 Go），否則直接是 Go
 const webUrl = `http://localhost:${devMode ? webPort : apiPort}`
 // 經網頁的網址 → Go → Python 的輕量請求；成功代表服務都就緒
 const readyUrl = `${webUrl}/workbench/v1/dev/config-schemas`
@@ -73,6 +80,7 @@ function runOrFail(cmd, args, cwd, what) {
   if (r.status !== 0) fail(`${what}失敗，請把上方訊息提供給組員或 AI 工具`)
 }
 
+// 確保 ai/.venv 存在且能 import 伺服器需要的套件；探測失敗才執行耗時的 pip install
 function ensurePython() {
   const aiDir = path.join(root, 'ai')
   if (!existsSync(venvPython)) {
@@ -102,6 +110,7 @@ function ensureNode() {
   runOrFail('npm', ['ci', '--no-audit', '--no-fund'], path.join(root, 'workbench'), '安裝前端套件')
 }
 
+// 單次健康檢查：連不上、逾時或非 2xx 都回傳 false，不丟例外
 async function isOk(url, timeoutMs) {
   try {
     return (await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })).ok
@@ -128,10 +137,12 @@ if (await isOk(readyUrl, 1000)) {
   )
 }
 
+// 啟動順序：檢查套件 → （一般模式）建置前端 → 同時啟動 Python、Go（、Vite）→ 輪詢健康檢查直到就緒
 if (!process.env.WORKBENCH_SKIP_SETUP) {
   ensurePython()
   ensureNode()
 }
+// 跳過檢查且沒有 venv 時，退回系統 PATH 上的 python
 const python = existsSync(venvPython) ? venvPython : 'python'
 
 if (!devMode) {
@@ -145,6 +156,8 @@ if (!devMode) {
   )
 }
 
+// 三個服務同時啟動，不互相等待：Go 啟動時 Python 可能還沒好，由下方的健康檢查等全部就緒。
+// name 補成三個字元，讓各服務的輸出前綴對齊。
 const procs = [
   {
     name: 'ai ',
@@ -155,6 +168,7 @@ const procs = [
     env: {
       WORKBENCH_DEV_TOOLS: '1',
       AI_GRPC_LISTEN: `127.0.0.1:${aiPort}`,
+      // 輸出不緩衝才能即時看到日誌；強制 UTF-8，Windows 主控台輸出中文時才不會因編碼出錯
       PYTHONUNBUFFERED: '1',
       PYTHONIOENCODING: 'utf-8',
     },
@@ -176,6 +190,7 @@ const procs = [
     name: 'web',
     color: 36, // 青
     cmd: process.execPath,
+    // --strictPort：埠被佔用時直接失敗，而不是悄悄換埠，否則 webUrl 與健康檢查會對不上
     args: [vite, '--port', webPort, '--strictPort'],
     cwd: path.join(root, 'workbench'),
     env: { WORKBENCH_API: `http://localhost:${apiPort}` },
@@ -185,6 +200,7 @@ const procs = [
 const children = []
 let stopping = false
 
+// 每行加上彩色的服務名稱前綴；chunk 是任意切開的輸出片段，一行被切成兩塊時前綴會出現在行中間（僅影響顯示）
 function prefix(name, color, chunk) {
   const tag = `\x1b[${color}m[${name}]\x1b[0m `
   return chunk
@@ -207,6 +223,7 @@ for (const p of procs) {
     console.error(prefix(p.name, 31, `無法啟動 ${p.cmd}：${err.message}`))
     stop(1)
   })
+  // 任一服務意外結束就全部停止，避免留下半套服務（例如 Go 在跑但 Python 已掛）
   child.on('exit', (code) => {
     if (!stopping) {
       console.error(prefix(p.name, 31, `已結束（代碼 ${code}），停止其他程序`))
@@ -223,6 +240,7 @@ log(
 )
 void waitUntilReady()
 
+// 每 500 ms 輪詢一次（每次最多等 3 秒），直到就緒、逾時或已在停止中；逾時仍開瀏覽器，讓使用者自己看狀態
 async function waitUntilReady() {
   const started = Date.now()
   while (!stopping && Date.now() - started < READY_TIMEOUT_MS) {
@@ -240,6 +258,8 @@ async function waitUntilReady() {
   }
 }
 
+// 用各平台的預設程式開啟網址；Windows 的 start 第一個引號參數是視窗標題，所以先放空字串
+// detached＋unref：不讓瀏覽器程序綁住本腳本的結束
 function openBrowser(url) {
   const [cmd, args] = isWin
     ? ['cmd', ['/c', 'start', '""', url]]
@@ -249,6 +269,7 @@ function openBrowser(url) {
   spawn(cmd, args, { stdio: 'ignore', detached: true }).unref()
 }
 
+// 停止所有子程序後結束；stopping 旗標讓重複呼叫（Ctrl+C 與子程序 exit 事件同時發生）只執行一次
 function stop(code = 0) {
   if (stopping) return
   stopping = true
@@ -258,6 +279,7 @@ function stop(code = 0) {
     if (isWin) spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
     else child.kill('SIGTERM')
   }
+  // 稍等一下讓子程序的最後輸出印完再結束
   setTimeout(() => process.exit(code), 300)
 }
 

@@ -52,7 +52,10 @@ def resize_short_side(img: Image, short_side: int) -> Image:
     if current == short_side:
         return img.copy()
     scale = short_side / current
+    # cv2.resize 的尺寸參數為 (寬, 高)；長邊四捨五入，至少 1 像素
     size = (max(1, round(w * scale)), max(1, round(h * scale)))
+    # INTER_AREA 縮小時以面積平均取樣，可避免疊頻（摩爾紋）；放大時效果近似最近鄰，
+    # 故改用 INTER_LINEAR
     interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
     return np.asarray(cv2.resize(img, size, interpolation=interp), dtype=np.uint8)
 
@@ -66,6 +69,8 @@ def adaptive_threshold(img: Image, block_size: int, c: float) -> Image:
     if block_size < 3 or block_size % 2 == 0:
         raise ValueError(f"block_size 必須為 ≥ 3 的奇數，收到 {block_size}")
     gray = to_gray(img)
+    # 每個像素與其 block_size × block_size 鄰域的高斯加權平均減 c 比較：
+    # 大於者設為 255（THRESH_BINARY），否則為 0；局部門檻可承受光照不均
     out = cv2.adaptiveThreshold(
         gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, c
     )
@@ -81,9 +86,13 @@ def rotation_matrix(
     可用 ``cv2.invertAffineTransform`` 把旋轉後找到的座標回推到原圖。
     """
     h, w = shape[:2]
+    # getRotationMatrix2D：正角度為逆時針，縮放倍率 1.0
     m = np.asarray(cv2.getRotationMatrix2D((w / 2, h / 2), degrees, 1.0), dtype=np.float64)
+    # 縮放為 1 時 m[0, 0] = cos θ、m[0, 1] = sin θ；取絕對值以涵蓋任意象限的角度
     cos, sin = abs(m[0, 0]), abs(m[0, 1])
+    # 旋轉後矩形的外接框尺寸
     new_w, new_h = int(round(h * sin + w * cos)), int(round(h * cos + w * sin))
+    # 平移量加上新舊畫布中心的差，使旋轉後的影像置中於擴大的畫布
     m[0, 2] += new_w / 2 - w / 2
     m[1, 2] += new_h / 2 - h / 2
     return m, (new_w, new_h)
@@ -96,6 +105,7 @@ def rotate(img: Image, degrees: float, border: int = 255) -> Image:
     """
     validate_image(img)
     m, size = rotation_matrix(img.shape, degrees)
+    # 彩色影像的 borderValue 需給三個通道的值；預設 255 為白色，接近紙張／包裝背景
     value = (border, border, border) if img.ndim == 3 else border
     out = cv2.warpAffine(img, m, size, flags=cv2.INTER_LINEAR, borderValue=value)
     return np.asarray(out, dtype=np.uint8)
@@ -113,6 +123,7 @@ def scale(img: Image, factor: float) -> Image:
         return img.copy()
     h, w = img.shape[:2]
     size = (max(1, round(w * factor)), max(1, round(h * factor)))
+    # 放大用 INTER_CUBIC（比 INTER_LINEAR 保留更銳利的邊緣，代價是較慢）
     interp = cv2.INTER_AREA if factor < 1 else cv2.INTER_CUBIC
     return np.asarray(cv2.resize(img, size, interpolation=interp), dtype=np.uint8)
 
@@ -122,7 +133,9 @@ def unsharp_mask(img: Image, sigma: float, amount: float) -> Image:
     validate_image(img)
     if sigma <= 0 or amount < 0:
         raise ValueError(f"須滿足 sigma > 0、amount ≥ 0，收到 sigma={sigma}、amount={amount}")
+    # 核心大小 (0, 0) 表示由 sigma 自動推算
     blurred = cv2.GaussianBlur(img, (0, 0), sigmaX=sigma)
+    # (1 + amount)·img − amount·blurred 即上式展開；uint8 輸入時 addWeighted 會飽和截斷到 0–255
     out = cv2.addWeighted(img, 1 + amount, blurred, -amount, 0)
     return np.asarray(out, dtype=np.uint8)
 
@@ -144,13 +157,18 @@ def estimate_skew(img: Image) -> float:
     沒有明顯梯度（例如全白）時回傳 0。
     """
     gray = to_gray(img).astype(np.float32)
+    # 3×3 Sobel 求 x、y 方向梯度；用 float32 輸出保留負值
     gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
     gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    # 全圖加總的結構張量 [[sxx, sxy], [sxy, syy]]
     sxx, syy, sxy = float((gx * gx).sum()), float((gy * gy).sum()), float((gx * gy).sum())
+    # 完全沒有梯度（均勻影像）時方向無定義
     if sxx + syy == 0:
         return 0.0
+    # 結構張量主特徵向量的角度為 0.5·atan2(2·sxy, sxx − syy)（梯度方向為雙向，故取半角）
     # 影像 y 軸向下，主梯度角取負號才是一般的逆時針角度
     theta = -0.5 * np.degrees(np.arctan2(2 * sxy, sxx - syy))
+    # 把 -90 映到 90，使回傳範圍為 (-90, 90]
     return float(theta + 180 if theta <= -90 else theta)
 
 
@@ -165,8 +183,10 @@ def order_quad(points: npt.ArrayLike) -> Quad:
     if pts.shape != (4, 2):
         raise ValueError(f"四邊形必須有 4 個 (x, y) 點，收到形狀 {pts.shape}")
     center = pts.mean(axis=0)
+    # y 軸向下時，arctan2 角度遞增在畫面上是順時針方向
     angles = np.arctan2(pts[:, 1] - center[1], pts[:, 0] - center[0])
     clockwise = pts[np.argsort(angles)]
+    # 以 x + y 最小者（最靠左上）為起點，循環平移保持順時針順序
     start = int(np.argmin(clockwise.sum(axis=1)))
     return np.roll(clockwise, -start, axis=0)
 
@@ -181,5 +201,7 @@ def clahe(img: Image, clip: float, tile: int) -> Image:
         raise ValueError(f"clahe 只接受灰階影像，收到形狀 {img.shape}")
     if clip <= 0 or tile <= 0:
         raise ValueError(f"須滿足 clip > 0、tile > 0，收到 clip={clip}、tile={tile}")
+    # clipLimit 限制每格直方圖的高度，超出部分平均分配，以免放大雜訊；
+    # tileGridSize 為把影像切成幾格（格數，不是每格的像素數）
     op = cv2.createCLAHE(clipLimit=clip, tileGridSize=(tile, tile))
     return np.asarray(op.apply(img), dtype=np.uint8)

@@ -24,7 +24,9 @@ from dietai.preprocess.decoders import DecodeHit, Decoder
 from dietai.preprocess.types import CodeFormat, Image, PreprocessWarning, Rung, StepRecord
 
 Affine = npt.NDArray[np.float64]  # 2×3 仿射矩陣
+# 不改變幾何的階共用這一個物件；``_map_hit`` 以 ``is`` 判斷，命中時直接略過座標換算
 _IDENTITY: Affine = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+# 只接受 ASCII 數字：``[0-9]`` 而非 ``\d``，``\d`` 也會匹配全形等其他 Unicode 數字
 _EAN13 = re.compile(r"[0-9]{13}")
 _EAN13_BODY = re.compile(r"[0-9]{12}")
 
@@ -46,7 +48,11 @@ class Variant:
 
 @dataclass(frozen=True)
 class RungAttempt:
-    """一次嘗試的紀錄。``hits`` 為採用的結果、``rejected`` 為檢查碼錯誤而捨棄的結果。"""
+    """一次嘗試的紀錄。``hits`` 為採用的結果、``rejected`` 為檢查碼錯誤而捨棄的結果。
+
+    ``rejected`` 也包含格式不在 ``LadderConfig.accept_formats`` 中的結果（見 ``iter_attempts``）。
+    ``hits``／``rejected`` 的座標皆已回推到原圖。
+    """
 
     rung: Rung
     params: Mapping[str, Any]
@@ -83,6 +89,8 @@ def ean13_check_digit(body: str) -> int:
     """
     if not _EAN13_BODY.fullmatch(body):
         raise ValueError(f"EAN-13 本體須為 12 個數字，收到 {body!r}")
+    # GS1 規則：由左數第 1、3、5…位（索引偶數）權重 1，第 2、4、6…位（索引奇數）權重 3；
+    # 檢查碼為使加權和補到 10 的倍數所需的數字（外層 % 10 讓「剛好整除」時得 0 而非 10）
     total = sum(int(c) * (3 if i % 2 else 1) for i, c in enumerate(body))
     return (10 - total % 10) % 10
 
@@ -107,12 +115,15 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
     gray: Image | None = None
 
     def get_gray() -> Image:
+        """第一次需要時才轉灰階並快取；若在 ``raw`` 階就解碼成功，就完全不必轉換。"""
         nonlocal gray
         if gray is None:
             gray = ops.to_gray(img)
         return gray
 
     for rung in cfg.rungs:
+        # 以下各階皆只改像素、不改幾何，座標與原圖相同，故 ``to_original`` 為恆等矩陣；
+        # 只有 deskew（旋轉＋擴大畫布）與 multiscale（縮放）需要回推矩陣
         if rung is Rung.RAW:
             yield Variant(rung, img, _IDENTITY)
         elif rung is Rung.GRAY:
@@ -129,11 +140,17 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
             params = {"ksize": cfg.denoise_ksize}
             yield Variant(rung, ops.median_blur(get_gray(), cfg.denoise_ksize), _IDENTITY, params)
         elif rung is Rung.DESKEW:
+            # 以整張灰階的梯度結構張量估計主方向（見 ``ops.estimate_skew``）；
+            # 回傳值為內容被逆時針轉了幾度，所以下方以 ``-skew`` 轉回
             skew = ops.estimate_skew(get_gray())
             params = {"skew_deg": round(skew, 2), "min_deg": cfg.deskew_min_deg}
             if abs(skew) < cfg.deskew_min_deg:
+                # 角度低於門檻時略過旋轉（旋轉會多一次內插、也多花一次解碼時間）；
+                # 仍產出一筆 skipped 紀錄以保留估計角度供分析，但不送解碼
                 yield Variant(rung, None, _IDENTITY, params, skipped=True)
                 continue
+            # m 把原圖座標映射到旋轉後（已擴大畫布）的座標，與 ``ops.rotate`` 內部用的矩陣相同；
+            # 取反矩陣即可把旋轉後影像上找到的四角回推到原圖
             m, _ = ops.rotation_matrix(get_gray().shape, -skew)
             inverse = np.asarray(cv2.invertAffineTransform(m), dtype=np.float64)
             yield Variant(rung, ops.rotate(get_gray(), -skew), inverse, params)
@@ -141,8 +158,11 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
             h, w = get_gray().shape[:2]
             for factor in cfg.scales:
                 out = ops.scale(get_gray(), factor)
+                # 以實際輸出尺寸計算倍率：``ops.scale`` 會把寬高取整，實際倍率可能與 factor
+                # 略有差異，且 x、y 方向不一定相同
                 sx, sy = out.shape[1] / w, out.shape[0] / h
                 # resize 的像素中心對應：x' = (x + 0.5)·s − 0.5
+                # 反解得 x = x'/s + (0.5/s − 0.5)，即下方矩陣的縮放項與平移項（y 方向同理）
                 inverse = np.array(
                     [[1 / sx, 0.0, 0.5 / sx - 0.5], [0.0, 1 / sy, 0.5 / sy - 0.5]],
                     dtype=np.float64,
@@ -162,15 +182,21 @@ def iter_attempts(
     """
     variants = ladder_variants(img, cfg)
     while True:
+        # 計時從 next() 之前開始：產生器是惰性的，影像版本在 next() 時才計算，
+        # 這樣耗時才包含前處理本身（第一次用到灰階的那一階也會包含轉灰階的時間）
         start = time.perf_counter()
         variant = next(variants, None)
         if variant is None:
             return
         hits: list[DecodeHit] = []
         rejected: list[DecodeHit] = []
+        # skipped 的版本 image 為 None：不解碼，但仍產出一筆（空的）嘗試紀錄
         if variant.image is not None:
             for hit in decoder(variant.image):
+                # 先回推到原圖座標再分類，hits 與 rejected 的座標系才一致
                 mapped = _map_hit(hit, variant.to_original)
+                # 兩種情況捨棄：(1) 設定了允許格式而此格式不在其中；
+                # (2) 要求驗證且為 EAN-13，但檢查碼不符
                 if (cfg.accept_formats and mapped.format not in cfg.accept_formats) or (
                     cfg.verify_ean13
                     and mapped.format is CodeFormat.EAN13
@@ -205,10 +231,12 @@ def decode_with_ladder(
     """
     ops.validate_image(img)
     attempts: list[RungAttempt] = []
+    # 跨嘗試累計的票數；只計 hits，rejected（格式不符／檢查碼錯）不投票
     votes: Counter[tuple[CodeFormat, str]] = Counter()
     for variant, attempt in iter_attempts(img, decoder, cfg):
         attempts.append(attempt)
         votes.update({(h.format, h.text) for h in attempt.hits})  # 同一次嘗試只算一票
+        # 本次嘗試中，累計票數已達門檻的結果；票數可能有一部分來自先前的嘗試
         confirmed = tuple(h for h in attempt.hits if votes[h.format, h.text] >= cfg.min_agree)
         if confirmed:
             return LadderResult(
@@ -222,6 +250,7 @@ def decode_with_ladder(
                 steps=attempts_to_steps(attempts),
                 warnings=(),
             )
+    # 所有階都試完仍未確認：有任何一票表示「解得出但不夠一致」，否則為完全沒找到
     return LadderResult(
         success=False,
         success_rung=None,
@@ -242,9 +271,12 @@ def attempts_to_steps(attempts: list[RungAttempt]) -> tuple[StepRecord, ...]:
 
 
 def _map_hit(hit: DecodeHit, affine: Affine) -> DecodeHit:
+    """以 2×3 仿射矩陣把 ``hit`` 的四角從影像版本座標換算回原圖座標，其餘欄位不變。"""
     if affine is _IDENTITY:
         return hit
+    # 對每個點 p（列向量）計算 A·p + t：pts 形狀 (4, 2)，所以乘 A 的轉置再加平移向量 t
     pts = np.array(hit.corners, dtype=np.float64)
     mapped = pts @ affine[:, :2].T + affine[:, 2]
+    # 仿射只換座標、不重排順序，四角仍為左上、右上、右下、左下（以條碼本身方向為準）
     tl, tr, br, bl = ((float(x), float(y)) for x, y in mapped.tolist())
     return DecodeHit(hit.format, hit.text, hit.raw, (tl, tr, br, bl))

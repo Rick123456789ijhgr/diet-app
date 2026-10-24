@@ -1,6 +1,7 @@
 // 參數掃描的退化種類與範圍，對應 Python 的 dietai.devtools.degradations.SWEEP_AXES。
 // 範圍超出時後端會回報 INVALID_PARAMS，兩邊不一致時能立即發現。
 
+/** 一種可掃描的退化：允許範圍 [lo, hi]、預設掃描區間 [defaultLo, defaultHi] 與滑桿步距。 */
 export interface SweepAxis {
   key: string
   label: string
@@ -37,4 +38,5 @@ export const SWEEP_AXES: SweepAxis[] = [
   { key: 'rotate_deg', label: '旋轉角度', lo: -90, hi: 90, defaultLo: 0, defaultHi: 45, step: 1 },
 ]
 
+/** 依 key 找掃描軸；找不到時退回第一個，呼叫端不必處理 undefined。 */
 export const axisOf = (key: string) => SWEEP_AXES.find((a) => a.key === key) ?? SWEEP_AXES[0]!

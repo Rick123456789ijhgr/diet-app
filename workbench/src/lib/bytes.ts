@@ -1,5 +1,6 @@
 // 解碼結果原始位元組的顯示（後端以 base64 傳來）。中文解碼由之後的發票模組負責，這裡只顯示位元組。
 
+/** base64 → 位元組。atob 回傳的是「每字元一個位元組」的二進位字串，逐字元取 charCode 即為原始位元組。 */
 export function fromBase64(b64: string): Uint8Array {
   const bin = atob(b64)
   return Uint8Array.from(bin, (c) => c.charCodeAt(0))
@@ -16,5 +17,6 @@ export function hexPreview(bytes: Uint8Array, limit = 48): string {
 
 /** 可列印的 ASCII 原樣顯示，其他位元組以「.」代替。 */
 export function asciiPreview(bytes: Uint8Array): string {
+  // 0x20（空白）到 0x7E（~）為可列印字元；Big5／UTF-8 的多位元組都會顯示成「.」
   return Array.from(bytes, (b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.')).join('')
 }

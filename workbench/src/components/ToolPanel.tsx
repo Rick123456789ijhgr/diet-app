@@ -4,6 +4,10 @@ import type { ReactNode } from 'react'
 
 import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/primitives'
 
+/**
+ * 工具頁左側控制面板，三個分頁的內容由呼叫端以 ReactNode 傳入（image、params、io），
+ * 本元件只負責分頁外框與標題。預設開在「影像」分頁；分頁狀態由 Radix Tabs 自行管理（非受控）。
+ */
 export function ToolPanel({
   image,
   params,
@@ -23,6 +27,7 @@ export function ToolPanel({
 }) {
   return (
     <Tabs defaultValue="image">
+      {/* 分頁列固定在面板頂端（sticky），參數很長時捲動也能切換分頁；背景用卡片色蓋住捲過去的內容 */}
       <div className="bg-card sticky top-0 z-10 p-3 pb-2">
         <TabsList>
           <TabsTrigger value="image">

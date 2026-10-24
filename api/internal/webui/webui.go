@@ -12,6 +12,9 @@ import (
 	"strings"
 )
 
+// static 是編譯時打包的前端。all: 前綴讓以 . 或 _ 開頭的檔案也被包含：尚未建置前端時
+// static/ 下只有進 git 的 .gitkeep，沒有 all: 會因「沒有可嵌入的檔案」而編譯失敗。
+//
 //go:embed all:static
 var static embed.FS
 
@@ -33,21 +36,26 @@ func Handler() http.Handler {
 	return newHandler(app)
 }
 
+// newHandler 以任意 fs.FS 建立 handler；與 Handler 分開，測試可傳入 fstest.MapFS。
 func newHandler(app fs.FS) http.Handler {
 	return handler{app: app, files: http.FileServerFS(app)}
 }
 
+// handler 提供單頁應用（SPA）：app 用來判斷檔案是否存在，files 負責實際回傳靜態檔。
 type handler struct {
 	app   fs.FS
 	files http.Handler
 }
 
+// ServeHTTP 的判斷順序：只接受 GET／HEAD → 存在的檔案直接回傳 → 有副檔名但不存在回 404
+// → 其餘（前端路由，例如 /barcode）回 index.html，由前端路由器決定畫面。
 func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	// path.Clean 去掉 ..，再去掉開頭的 /，得到 fs.FS 可用的相對路徑（fs.FS 不接受以 / 開頭的名稱）
 	name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	if name != "" && name != "index.html" {
 		if st, err := fs.Stat(h.app, name); err == nil && !st.IsDir() {
@@ -68,6 +76,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.ServeFileFS(w, r, h.app, "index.html")
 }
 
+// notBuilt 是執行檔未包含前端時的說明頁（狀態碼 404），告訴使用者如何建置前端。
 func notBuilt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)

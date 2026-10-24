@@ -6,6 +6,13 @@ import { cn } from '@/lib/cn'
 import { formatValue, setOverride, valueOf, type Value } from '@/lib/config'
 import { groupText } from '@/lib/text'
 
+/**
+ * 由設定結構（schema）自動產生的參數表單，不手寫欄位。
+ * - schema：後端提供的 ConfigClass（欄位名、型別、預設、範圍、步進、分組、說明）。
+ * - overrides：目前的覆寫（只含與預設不同的欄位）；顯示值＝覆寫優先，否則預設（valueOf）。
+ * - onChange：回傳新的覆寫物件；改回預設值的欄位由 setOverride 移除，請求只帶差異。
+ * - invalidField／invalidMessage：前端不做範圍驗證，由後端驗證後回 INVALID_CONFIG 指出欄位，這裡負責標紅。
+ */
 export function ParamForm({
   schema,
   overrides,
@@ -20,8 +27,10 @@ export function ParamForm({
   invalidField?: string
   invalidMessage?: string
 }) {
+  // 依 field.group 分組；Map 保留插入順序，所以分組與組內欄位都維持 schema 宣告的順序
   const groups = new Map<string, ConfigField[]>()
   for (const f of schema.fields) groups.set(f.group, [...(groups.get(f.group) ?? []), f])
+  // 已修改的項數＝覆寫的鍵數（呼叫端若有本表單以外的欄位，應先濾掉再傳入，例如 BarcodePage 的 scalars()）
   const changed = Object.keys(overrides).length
 
   return (
@@ -35,6 +44,7 @@ export function ParamForm({
           全部還原
         </Button>
       </div>
+      {/* 每組一個 fieldset＋legend，讓輔助技術知道欄位所屬的分組 */}
       {[...groups].map(([group, fields]) => (
         <fieldset key={group} className="space-y-3">
           <legend className="text-ink mb-1.5 text-xs font-semibold">{groupText(group)}</legend>
@@ -54,6 +64,10 @@ export function ParamForm({
   )
 }
 
+/**
+ * 單一欄位列：標籤（含已修改圓點、說明提示、「待校準」徽章）＋單欄還原按鈕＋輸入元件。
+ * bool 欄位用開關；數值欄位用數字框，若 schema 同時有 min 與 max 再加一條滑桿。
+ */
 function FieldRow({
   field,
   value,
@@ -67,6 +81,8 @@ function FieldRow({
   error?: string
   onChange: (v: Value) => void
 }) {
+  // 由欄位名產生 id，讓 <label htmlFor> 對應到數字框或開關。
+  // 注意：同一頁若同時有兩個 ParamForm 含同名欄位，id 會重複
   const id = `param-${field.name}`
   const label = (
     <div className="flex min-w-0 items-center gap-1.5">
@@ -77,9 +93,11 @@ function FieldRow({
       <Hint text={field.help}>
         <CircleHelp className="text-muted size-3.5 shrink-0" aria-label={`${field.label}說明`} />
       </Hint>
+      {/* calibrate：此參數的預設值是暫定的，之後要以實驗資料校準 */}
       {field.calibrate && <Badge tone="accent">待校準</Badge>}
     </div>
   )
+  // 單欄還原：只在已修改時出現；設回預設值後 setOverride 會移除該覆寫
   const reset = changed && (
     <button
       type="button"
@@ -104,6 +122,7 @@ function FieldRow({
   }
 
   const num = value as number
+  // 只有上下限都有時才能畫滑桿；數字框本身不限制範圍（可輸入超出滑桿的值，由後端驗證）
   const hasRange = field.min !== undefined && field.max !== undefined
   return (
     <div className={cn('space-y-1.5', error && 'bg-danger-soft -mx-2 rounded-lg px-2 py-1')}>
@@ -117,6 +136,7 @@ function FieldRow({
             step={field.step ?? undefined}
             format={(v) => formatValue(field, v)}
             onCommit={(v) => onChange(normalize(field, v))}
+            // 有錯誤時才加 aria-invalid（沒有錯誤時不輸出屬性，而非 aria-invalid="false"）
             aria-invalid={error ? true : undefined}
             className={cn(error && 'border-danger')}
           />
@@ -127,8 +147,11 @@ function FieldRow({
           aria-label={field.label}
           min={field.min}
           max={field.max}
+          // 沒有指定步進時：int 為 1、float 為 0.01
           step={field.step ?? (field.type === 'int' ? 1 : 0.01)}
+          // 值超出範圍（例如數字框輸入或匯入）時，滑桿把手停在端點，實際值仍以數字框為準
           value={[clamp(num, field.min!, field.max!)]}
+          // Radix Slider 以陣列傳值（支援多把手），這裡只有一個把手
           onValueChange={([v]) => v !== undefined && onChange(normalize(field, v))}
         />
       )}

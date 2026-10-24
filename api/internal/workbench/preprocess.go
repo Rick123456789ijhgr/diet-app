@@ -11,11 +11,17 @@ import (
 )
 
 // 條碼、發票 QR、營養標示、食物照片：把工作台的請求轉成 PreprocessService 呼叫（階段 2）。
+//
+// 共同模式：前端以 image_id 指定先前暫存在 Python 的影像（不重傳影像本體），參數只送與預設值
+// 不同的覆寫（ConfigOverride JSON）；回應中的 *_json 欄位在這裡解析成物件，空清單補成 []，
+// 讓前端拿到的 JSON 形狀固定。Go 不做任何影像處理或判斷，只轉接。
 
+// byID 以暫存影像 ID 指定輸入；暫存區只在 Python 開發模式存在。
 func byID(id string) *dietaiv1.ImageInput {
 	return &dietaiv1.ImageInput{Source: &dietaiv1.ImageInput_ImageId{ImageId: id}}
 }
 
+// override 把前端的設定覆寫轉成 proto；沒有覆寫時 Json 為空字串，Python 全部用預設值。
 func override(o *api.ConfigOverride) (*dietaiv1.ConfigOverride, error) {
 	s, err := overrideJSON(o)
 	if err != nil {
@@ -25,6 +31,9 @@ func override(o *api.ConfigOverride) (*dietaiv1.ConfigOverride, error) {
 }
 
 // DecodeBarcode 以條碼逐步升級解碼。
+//
+// Ladder 為各階（rung）的開關與參數，Zxing 為解碼器參數。Attempts 是每一階的嘗試紀錄
+// （含被拒絕的結果與是否略過），供工作台逐階檢視；SuccessIndex 為 -1 表示失敗。
 func (s *Service) DecodeBarcode(ctx context.Context, req api.LadderRequest) (api.BarcodeResult, error) {
 	var out api.BarcodeResult
 	ladder, err := override(req.Ladder)
@@ -57,6 +66,7 @@ func (s *Service) DecodeBarcode(ctx context.Context, req api.LadderRequest) (api
 		Warnings:     nonNil(resp.GetWarnings()),
 		Steps:        steps,
 	}
+	// 失敗時 proto 為空字串，轉成 OpenAPI 的選填欄位（省略）
 	if r := resp.GetSuccessRung(); r != "" {
 		out.SuccessRung = &r
 	}
@@ -89,6 +99,7 @@ func (s *Service) LocateInvoiceQr(ctx context.Context, req api.LadderRequest) (a
 		return out, err
 	}
 	out = api.InvoiceQrResult{Attempts: attempts, Warnings: nonNil(resp.GetWarnings()), Steps: steps}
+	// 左右 QR 各自可能找不到；找不到時保持 nil（JSON 省略），不以空物件表示
 	if resp.GetLeft() != nil {
 		h := hit(resp.GetLeft())
 		out.Left = &h
@@ -101,6 +112,9 @@ func (s *Service) LocateInvoiceQr(ctx context.Context, req api.LadderRequest) (a
 }
 
 // PreprocessLabel 定位並校正營養標示。
+//
+// Image 為校正後的影像（以 artifact_id 參照，前端再經 GetArtifact 取得）；Quad 為原圖上的四角，
+// QuadMethod 為找到四角所用的方法（contour／hough，找不到時省略）。GlareRatio 在光斑步驟未啟用時為 -1。
 func (s *Service) PreprocessLabel(ctx context.Context, req api.ConfigRequest) (api.LabelResult, error) {
 	var out api.LabelResult
 	cfg, err := override(req.Config)
@@ -143,6 +157,7 @@ func (s *Service) PreprocessFood(ctx context.Context, req api.ConfigRequest) (ap
 	if err != nil {
 		return out, err
 	}
+	// Whole 為送給 VLM 的整張影像，Crops 為各道菜的裁切；兩者都只回傳 artifact 參照
 	whole, err := vlmImage(resp.GetWhole())
 	if err != nil {
 		return out, err
@@ -181,6 +196,8 @@ func (s *Service) PreprocessFood(ctx context.Context, req api.ConfigRequest) (ap
 	}, nil
 }
 
+// hit 轉換一筆解碼結果。Raw 為原始位元組（JSON 中以 base64 表示），發票 QR 的中文
+// 由之後的發票模組自行解碼，這裡不轉成字串。
 func hit(h *dietaiv1.DecodeHit) api.DecodeHit {
 	return api.DecodeHit{
 		Format:  h.GetFormat(),
@@ -198,6 +215,7 @@ func hitList(hits []*dietaiv1.DecodeHit) []api.DecodeHit {
 	return out
 }
 
+// attemptList 轉換逐階嘗試紀錄；Python 回傳的參數 JSON 解析失敗時視為內部錯誤（500）。
 func attemptList(attempts []*dietaiv1.RungAttempt) ([]api.RungAttempt, error) {
 	out := make([]api.RungAttempt, 0, len(attempts))
 	for _, a := range attempts {
@@ -237,6 +255,7 @@ func imageOutput(o *dietaiv1.ImageOutput) (api.ImageOutput, error) {
 	return api.ImageOutput{ArtifactId: id, Width: o.GetWidth(), Height: o.GetHeight()}, nil
 }
 
+// vlmImage 轉換送給 VLM 的影像；影像同樣必須是 artifact 參照，NumBytes 與 Scale 原樣轉傳。
 func vlmImage(v *dietaiv1.VlmImage) (api.VlmImage, error) {
 	img, err := imageOutput(v.GetImage())
 	if err != nil {

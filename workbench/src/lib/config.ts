@@ -2,6 +2,7 @@
 // 覆寫只含與預設值不同的欄位：表單欄位（param() 宣告的數字、布林）與序列欄位（例如 rungs）。
 import type { ConfigClass, ConfigField, ConfigOverride, OverrideValue } from '@/api/client'
 
+/** 表單欄位的值（param() 只宣告數字與布林）。 */
 export type Value = number | boolean
 
 /** 表單欄位的目前值：有覆寫用覆寫，否則用預設值。 */
@@ -24,6 +25,7 @@ export function sequenceOf<T extends string | number>(
   overrides: ConfigOverride,
   name: string,
 ): T[] {
+  // 回傳複本：呼叫端可以直接排序或增刪，不會改到覆寫或 schema.defaults
   return ((overrides[name] ?? schema.defaults[name] ?? []) as T[]).slice()
 }
 
@@ -37,6 +39,7 @@ export function setSequence(
   return setValue(overrides, name, value, schema.defaults[name])
 }
 
+// 不可變更新：一律回傳新物件，React state 與查詢鍵才會偵測到變更
 function setValue(
   overrides: ConfigOverride,
   name: string,
@@ -49,6 +52,7 @@ function setValue(
   return next
 }
 
+// 以 JSON 字串比較，陣列（序列欄位）才能依內容判斷相等；順序不同視為不同
 function sameValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
@@ -62,6 +66,7 @@ export function exportJson(schema: ConfigClass, overrides: ConfigOverride): stri
   )
 }
 
+// 單一值轉成 Python 字面值；float 欄位的整數補上 .0，貼回 Python 時型別與 dataclass 宣告一致
 function pyScalar(value: string | number | boolean, float: boolean): string {
   if (typeof value === 'boolean') return value ? 'True' : 'False'
   if (typeof value === 'string') return `'${value}'`
@@ -73,6 +78,7 @@ function pyValue(schema: ConfigClass, name: string, value: OverrideValue): strin
   const field = schema.fields.find((f) => f.name === name)
   if (Array.isArray(value)) {
     // 序列欄位在 Python 端為 tuple；數字序列（例如 scales）為浮點數
+    // 只有一個元素時要寫成 (x,)，否則 Python 會當成加括號的純量
     const items = value.map((v) => pyScalar(v, true))
     return items.length === 1 ? `(${items[0]},)` : `(${items.join(', ')})`
   }
@@ -89,6 +95,7 @@ export function pythonCtor(schema: ConfigClass, overrides: ConfigOverride): stri
   return `${schema.name}(${args.join(', ')})`
 }
 
+/** 匯入設定失敗；訊息為中文，可直接顯示給使用者。 */
 export class ConfigImportError extends Error {}
 
 /**
@@ -106,6 +113,7 @@ export function importJson(schema: ConfigClass, text: string): ConfigOverride {
     throw new ConfigImportError('設定 JSON 必須是物件')
   }
   let values = data as Record<string, unknown>
+  // 有 values 鍵就當成 exportJson 的格式；沒有 class 時不檢查類別
   if ('values' in values) {
     if (values.class !== undefined && values.class !== schema.name) {
       throw new ConfigImportError(
@@ -119,6 +127,7 @@ export function importJson(schema: ConfigClass, text: string): ConfigOverride {
   for (const [name, value] of Object.entries(values)) {
     const field = fields.get(name)
     if (field) {
+      // int 欄位拒絕小數；float 欄位接受整數（JSON 的 150 與 150.0 無法區分）
       const ok =
         field.type === 'bool'
           ? typeof value === 'boolean'
@@ -126,8 +135,10 @@ export function importJson(schema: ConfigClass, text: string): ConfigOverride {
       if (!ok) {
         throw new ConfigImportError(`${name} 必須是 ${field.type}，收到 ${JSON.stringify(value)}`)
       }
+      // 經 setOverride 寫入：與預設值相同的欄位自動略過，匯入完整匯出檔後只留下真正的修改
       overrides = setOverride(overrides, field, value as Value)
     } else if (Array.isArray(schema.defaults[name])) {
+      // 不是表單欄位、但預設值是陣列：視為序列欄位
       if (!Array.isArray(value)) throw new ConfigImportError(`${name} 必須是陣列`)
       overrides = setSequence(schema, overrides, name, value as (string | number)[])
     } else {
@@ -141,6 +152,7 @@ export function importJson(schema: ConfigClass, text: string): ConfigOverride {
 export function formatValue(field: ConfigField, value: Value): string {
   if (typeof value === 'boolean') return value ? '開' : '關'
   if (field.type === 'int') return String(value)
+  // 例如 step 0.05 → 2 位、0.5 → 1 位、1 → 0 位；最多 4 位
   const step = field.step ?? 0.01
   const decimals = Math.min(4, Math.max(0, Math.ceil(-Math.log10(step))))
   return value.toFixed(decimals)

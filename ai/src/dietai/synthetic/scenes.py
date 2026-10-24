@@ -9,6 +9,7 @@ from dietai.preprocess.barcode import ean13_check_digit
 from dietai.preprocess.ops import order_quad
 from dietai.preprocess.types import Ellipse, Image, Quad
 
+# ``label_scene`` 的繪製基準尺寸（1080p）；座標與字級都以此為準，最後再縮放
 _BASE_H, _BASE_W = 1080, 1920
 
 
@@ -19,12 +20,14 @@ def label_scene(height: int = 1080, width: int = 1920, seed: int = 0) -> Image:
     """
     rng = np.random.default_rng(seed)
     img = np.full((_BASE_H, _BASE_W, 3), (190, 200, 205), dtype=np.uint8)  # 一般光線下的紙張
+    # 表格：每 60 px 一條水平線、三條垂直線，第一欄每列一段「品項 克數」文字
     for y in range(120, _BASE_H - 80, 60):
         cv2.line(img, (100, y), (_BASE_W - 100, y), (0, 0, 0), 2)
     for x in (100, 900, _BASE_W - 100):
         cv2.line(img, (x, 120), (x, _BASE_H - 140), (0, 0, 0), 2)
     for i, y in enumerate(range(160, _BASE_H - 80, 60)):
         cv2.putText(img, f"Item {i} 12.{i}g", (130, y), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
+    # 右半部 8 個隨機位置、隨機顏色的實心方塊；唯一用到 seed 的部分
     for _ in range(8):
         x, y = int(rng.integers(950, _BASE_W - 250)), int(rng.integers(150, _BASE_H - 300))
         color = tuple(int(c) for c in rng.integers(0, 200, 3))
@@ -41,7 +44,7 @@ _PAPER = (235, 240, 242)  # 白色包裝／感熱紙
 
 def _symbol(content: str | bytes, fmt_name: str, module_px: int) -> Image:
     """以 zxing-cpp 產生條碼影像（灰階，含靜區），每個模組 ``module_px`` 像素。"""
-    import zxingcpp
+    import zxingcpp  # 延遲匯入：只有產生條碼／QR 的場景需要 zxing-cpp
 
     fmt = getattr(zxingcpp.BarcodeFormat, fmt_name)
     symbol = zxingcpp.create_barcode(content, fmt).to_image(scale=module_px)
@@ -49,6 +52,10 @@ def _symbol(content: str | bytes, fmt_name: str, module_px: int) -> Image:
 
 
 def _paste(canvas: Image, symbol: Image, x: int, y: int) -> None:
+    """把灰階條碼 ``symbol`` 以「乘法」印到 ``canvas`` 的 (x, y) 處（就地修改 ``canvas``）。
+
+    白色處保留紙色、黑色處變成墨色（灰階 20），中間灰階線性混合；呼叫端須確保放得下。
+    """
     h, w = symbol.shape
     region = canvas[y : y + h, x : x + w]
     ink = symbol[..., None].astype(np.float32) / 255  # 白色處保留紙色、黑色處印上墨色
@@ -64,6 +71,8 @@ def ean13_codes(n: int, seed: int = 0, prefix: str = "471") -> list[str]:
         raise ValueError(f"prefix {prefix!r} 之下不足 {n} 個不同的條碼")
     rng = np.random.default_rng(seed)
     codes: dict[str, None] = {}  # 保留產生順序
+    # 隨機補足 12 位本體再算檢查碼；抽到重複的就再抽，直到湊滿 n 個不同的條碼。
+    # 上面已確認可能的組合數 ≥ n，迴圈必定結束（n 接近上限時會抽很多次）。
     while len(codes) < n:
         body = prefix + "".join(str(d) for d in rng.integers(0, 10, 12 - len(prefix)))
         codes.setdefault(body + str(ean13_check_digit(body)), None)
@@ -88,6 +97,7 @@ def ean13_scene(
     img = np.full((height, width, 3), _PAPER, dtype=np.uint8)
     x, y = (width - sw) // 2, (height - sh) // 2
     _paste(img, symbol, x, y)
+    # 干擾文字：條碼上方的淨重、下方的人類可讀數字（同真實包裝），字級隨模組寬縮放
     font, size = cv2.FONT_HERSHEY_SIMPLEX, max(0.4, module_px / 5)
     cv2.putText(img, "NET WT 350g", (20, max(20, y - 20)), font, size, (40, 40, 40), 1)
     cv2.putText(img, code, (x, min(height - 10, y + sh + 30)), font, size, (40, 40, 40), 1)
@@ -107,6 +117,7 @@ def invoice_qr_scene(
     """
     qr_left, qr_right = (_symbol(c, "QRCode", module_px) for c in (left, right))
     qh = max(qr_left.shape[0], qr_right.shape[0])
+    # 畫布大小依兩個 QR 的實際尺寸決定：左右留邊、上方 220 px 放四行文字、兩 QR 間隔 gap_px
     margin, header = 40, 220
     width = qr_left.shape[1] + qr_right.shape[1] + gap_px + 2 * margin
     height = header + qh + margin
@@ -145,6 +156,7 @@ def nutrition_label(height: int = 900, width: int = 640) -> Image:
     cv2.rectangle(img, (0, 0), (bw - 1, bh - 1), ink, 16)  # 線寬一半在畫布外，可見 8 px
     cv2.putText(img, "Nutrition Facts", (40, 80), font, 1.6, ink, 3)
     cv2.line(img, (8, 110), (bw - 8, 110), ink, 8)
+    # 標題下方的高度均分給各列：欄位名稱靠左、數值靠右對齊，列與列之間畫細分隔線
     row_h = (bh - 140) // len(_LABEL_ROWS)
     for i, (name, value) in enumerate(_LABEL_ROWS):
         y = 130 + i * row_h
@@ -154,6 +166,7 @@ def nutrition_label(height: int = 900, width: int = 640) -> Image:
         if i < len(_LABEL_ROWS) - 1:
             cv2.line(img, (8, y + row_h), (bw - 8, y + row_h), ink, 2)
     if (height, width) != (bh, bw):
+        # 縮小用 INTER_AREA 避免細線斷裂／鋸齒，放大用 INTER_LINEAR
         interp = cv2.INTER_AREA if height * width < bh * bw else cv2.INTER_LINEAR
         return np.asarray(cv2.resize(img, (width, height), interpolation=interp), dtype=np.uint8)
     return img
@@ -178,10 +191,12 @@ def label_perspective_scene(
 
     label = nutrition_label()
     lh, lw = label.shape[:2]
+    # 等比縮放使標示佔畫面高或寬（較緊者）的 60%，置中得到正視時的四角 base
     scale = min(0.6 * height / lh, 0.6 * width / lw)
     qw, qh = lw * scale, lh * scale
     x0, y0 = (width - qw) / 2, (height - qh) / 2
     base = np.array([[x0, y0], [x0 + qw, y0], [x0 + qw, y0 + qh], [x0, y0 + qh]])
+    # 四角各自在 x、y 方向獨立隨機位移，幅度分別以標示的寬、高為單位
     jitter = rng.uniform(-strength, strength, (4, 2)) * np.array([qw, qh])
     pad = 0.02 * min(height, width)  # 四角留在畫面內
     corners = np.clip(base + jitter, [pad, pad], [width - pad, height - pad])
@@ -190,6 +205,7 @@ def label_perspective_scene(
     # 干擾色塊只放在標示外接框之外，避免與外框相連而改變真實四角
     bx0, by0 = quad.min(axis=0) - pad
     bx1, by1 = quad.max(axis=0) + pad
+    # 最多放 6 個，最多嘗試 200 次；落在外接框內的位置就丟棄重抽（放不滿也不報錯）
     placed = 0
     for _ in range(200):
         if placed == 6:
@@ -205,9 +221,12 @@ def label_perspective_scene(
         cv2.rectangle(img, (x, y), (x + size, y + size), color, -1)
         placed += 1
 
+    # 標示原圖四角（左上起順時針，與 quad 的順序一致）對應到真實四角，求透視矩陣
     src = np.array([[0, 0], [lw, 0], [lw, lh], [0, lh]], dtype=np.float32)
     m = cv2.getPerspectiveTransform(src, quad)
     warped = cv2.warpPerspective(label, m, (width, height), flags=cv2.INTER_LINEAR)
+    # 以同一矩陣變形一張全白遮罩當作 alpha：標示內為 1、外為 0，邊緣因內插有半透明過渡，
+    # 再與桌面背景混合，避免直接覆蓋時邊界出現黑邊（warpPerspective 的預設邊界為 0）
     cover = cv2.warpPerspective(np.full((lh, lw), 255, np.uint8), m, (width, height))
     alpha = (cover.astype(np.float32) / 255)[..., None]
     out = img.astype(np.float32) * (1 - alpha) + warped.astype(np.float32) * alpha
@@ -239,14 +258,18 @@ def food_scene(
         raise ValueError(f"n_dishes 不得為負，收到 {n_dishes}")
     rng = np.random.default_rng(seed)
     short = min(height, width)
+    # 木紋：沿 y 方向的正弦條紋（相位隨機）加上逐像素高斯雜訊，三色版共用同一份紋理
     rows = np.arange(height, dtype=np.float32)[:, None, None]
     grain = 6 * np.sin(rows / 9 + rng.uniform(0, np.pi)) + rng.normal(0, 3, (height, width, 1))
     img = np.clip(np.array(_TABLE, np.float32) + grain, 0, 255).astype(np.uint8)
 
+    # 盤子越多就越小，才放得下；major 為長軸全長（不是半軸）
     gap = 0.04 * short
     major_range = (0.28 * short, 0.4 * short) if n_dishes <= 4 else (0.2 * short, 0.3 * short)
     plates: list[Ellipse] = []
     boxes: list[tuple[float, float, float, float]] = []
+    # 拒絕取樣：隨機產生橢圓，外接框貼近畫面邊緣或與已放的盤子（含間距 gap）重疊就丟棄。
+    # 最多嘗試 2000 次，仍放不滿就丟 ValueError（同一 seed 結果固定，可重現）。
     for _ in range(2000):
         if len(plates) == n_dishes:
             break
@@ -258,7 +281,7 @@ def food_scene(
             major * float(rng.uniform(1 - tilt, 1)),
             float(rng.uniform(-15, 15) % 180),
         )
-        b = e.bbox()
+        b = e.bbox()  # 旋轉後橢圓的軸對齊外接框
         if b.x < gap or b.y < gap or b.x1 > width - gap or b.y1 > height - gap:
             continue
         if any(
@@ -271,6 +294,8 @@ def food_scene(
     if len(plates) < n_dishes:
         raise ValueError(f"{width}×{height} 的畫面放不下 {n_dishes} 個盤子")
 
+    # 繪製：cv2.ellipse 的 axes 是半軸長，因此 major／minor 除以 2；
+    # 白色實心盤面、0.82 倍大小的淺灰內圈盤緣，再畫食物
     for e in plates:
         center = (round(e.cx), round(e.cy))
         axes = (round(e.major / 2), round(e.minor / 2))
@@ -281,6 +306,8 @@ def food_scene(
         t = np.radians(e.angle)
         for _ in range(5):  # 幾個重疊的圓組成不規則食物（留在內圈之內），不應被當成盤緣橢圓
             r = float(rng.uniform(0.25, 0.4)) * e.minor / 2
+            # 在單位圓內均勻取點（半徑取平方根才是面積均勻），縮到 0.35 倍後
+            # 依盤子的半軸拉伸成橢圓座標 (u, v)，再旋轉 angle 度、平移到盤心
             rho, phi = 0.35 * np.sqrt(rng.uniform()), rng.uniform(0, 2 * np.pi)
             u, v = rho * np.cos(phi) * e.major / 2, rho * np.sin(phi) * e.minor / 2
             fc = (
@@ -297,6 +324,7 @@ def food_scene(
             for x0, y0, x1, y1 in boxes
         ):
             continue
+        # 兩根平行的細線，間隔 2 倍線寬；佔用高度約 3 倍線寬（與上面的碰撞檢查一致）
         for dy in (0, 2 * thick):
             cv2.line(img, (x, y + dy), (x + length, y + dy), (40, 60, 90), thick)
         break

@@ -28,6 +28,12 @@ import { cn } from '@/lib/cn'
 import { valueOf } from '@/lib/config'
 import { warningText } from '@/lib/text'
 
+// 以下型別是本頁自行宣告的 SSE 事件形狀（規格中只定義請求 BatchRequest）。
+
+/**
+ * 一張影像的品質檢查結果。讀取失敗時 error 為錯誤訊息，其餘指標欄位不存在（所以皆為選填）；
+ * error 為 null 表示成功。index 為處理順序，作為表格列的 key 與選取比對。
+ */
 interface Row {
   type: 'row'
   index: number
@@ -44,6 +50,7 @@ interface Row {
   error: string | null
 }
 
+/** 全部處理完後的彙整（被取消時不會收到）。pass_rate 由後端計算，可能為 null（顯示「—」）。 */
 interface Summary {
   type: 'summary'
   count: number
@@ -53,8 +60,10 @@ interface Summary {
   warning_counts: Record<string, number>
 }
 
+/** SSE 事件順序：start（總張數）→ 每張一筆 row → summary。 */
 type BatchEvent = { type: 'start'; total: number; folder: string } | Row | Summary
 
+/** 「分數分布」可選的指標 → （中文標籤, 對應的 QualityConfig 門檻欄位；平均亮度沒有單一門檻）。 */
 const DIST = {
   blur_score: { label: '模糊分數', threshold: 'blur_min' },
   dark_ratio: { label: '過暗比例', threshold: 'dark_ratio_max' },
@@ -75,9 +84,16 @@ function downloadCsv(rows: Row[]) {
   a.href = url
   a.download = 'quality_batch.csv'
   a.click()
+  // 點擊後立即釋放物件 URL，避免累積記憶體
   URL.revokeObjectURL(url)
 }
 
+/**
+ * 把批次結果轉成 CSV 字串（中文欄名）。
+ * - 每格都以雙引號包起並把內部的 " 轉成 ""，路徑或錯誤訊息含逗號、換行時也不會錯欄。
+ * - undefined／null 輸出為空字串（讀取失敗的列沒有指標）。
+ * - 開頭加 UTF-8 BOM、換行用 CRLF，讓 Excel 直接開啟時能正確辨識中文。
+ */
 function toCsv(rows: Row[]): string {
   const head = [
     '檔案',
@@ -113,29 +129,42 @@ function toCsv(rows: Row[]): string {
   return '﻿' + [head.map(cell).join(','), ...lines].join('\r\n')
 }
 
+/**
+ * 資料夾批次頁：對伺服器本機資料夾內的照片逐張做品質檢查，結果經 SSE 逐張回報。
+ * 主檢視有三個分頁：每張結果（可點選檢視單張）、分數分布（附門檻線）、警告次數。
+ * 與其他工具頁不同，參數修改後不會自動重算（整批可能數千張），要按「執行」才以新參數重跑。
+ */
 export function BatchPage() {
   const quality = useConfigClass('QualityConfig').schema
   const [folder, setFolder] = useState('')
   const [limit, setLimit] = useState(500)
   const [recursive, setRecursive] = useState(false)
+  // 目前表單上的參數覆寫
   const [config, setConfig] = useState<ConfigOverride>({})
+  // 最近一次執行時使用的參數；門檻線與單張診斷檢視用它，才會與表格中的結果一致
   const [ranWith, setRanWith] = useState<ConfigOverride | null>(null)
   const [view, setView] = useState('table')
   const [dist, setDist] = useState<DistKey>('blur_score')
   const [selected, setSelected] = useState<Row | null>(null)
+  // SSE 串流；useStream 每 100 ms 才把累積的事件更新到畫面，離開頁面時自動取消
   const stream = useStream<BatchEvent>('/workbench/v1/dev/batches')
 
+  // 由事件清單推導各種狀態（每次重繪重新篩選；事件以 100 ms 批次更新，所以成本可接受）
   const start = stream.events.find((e) => e.type === 'start')
   const rows = stream.events.filter((e): e is Row => e.type === 'row')
   const summary = stream.events.find((e): e is Summary => e.type === 'summary')
+  // 成功讀取的影像；分布圖與警告比例只用這些，讀取失敗的不計入
   const ok = rows.filter((r) => r.error === null)
   const running = stream.status === 'running'
 
+  // 開始一次新的批次：清掉舊的選取（舊列已不存在），並記下這次使用的參數
   const run = () => {
     setSelected(null)
     setRanWith(config)
     void stream.run({ folder, limit, recursive, config: overrideBody(config) })
   }
+  // 依欄位名稱取門檻值：優先用執行時的參數，尚未執行時用表單目前的參數；
+  // 沒有對應門檻（或設定結構尚未載入）時回傳 undefined，分布圖就不畫門檻線
   const threshold = (name: string | null) => {
     const f = name ? quality?.fields.find((x) => x.name === name) : undefined
     return f ? (valueOf(f, ranWith ?? config) as number) : undefined
@@ -158,6 +187,7 @@ export function BatchPage() {
       <TabsContent value="folder" className="px-4 pt-2 pb-4">
         <form
           className="space-y-3 text-sm"
+          // 用 form 讓輸入框按 Enter 也能執行；路徑空白時不送出
           onSubmit={(e) => {
             e.preventDefault()
             if (folder.trim()) run()
@@ -185,6 +215,7 @@ export function BatchPage() {
                 min={1}
                 max={5000}
                 value={limit}
+                // 限制在 1–5000；清空或非數字時視為 1
                 onChange={(e) => setLimit(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
                 className="border-card-border bg-sunken readout h-6 w-20 rounded-lg border px-1.5 text-right"
               />
@@ -221,8 +252,11 @@ export function BatchPage() {
   )
 
   const total = start?.type === 'start' ? start.total : 0
+  // 執行後參數又被修改：提示使用者目前畫面上的結果是舊參數算的。
+  // 以 JSON 字串比較內容（物件參照每次編輯都會變）
   const changed = ranWith !== null && JSON.stringify(ranWith) !== JSON.stringify(config)
 
+  // 每張結果表格；只畫前 MAX_TABLE_ROWS 列。讀取失敗的列以一格合併顯示錯誤，且不可選取
   const table = (
     <table className="w-full text-[13px]" aria-label="每張影像的品質檢查結果">
       <thead className="bg-card sticky top-0">
@@ -288,6 +322,7 @@ export function BatchPage() {
       }
     >
       <div className="flex h-full min-h-0 flex-col">
+        {/* 進度條：已收到的列數 ÷ start 事件的總張數（還沒收到 start 時為 0%） */}
         {running && (
           <div
             className="bg-card mx-1 mb-3 h-1.5 shrink-0 overflow-hidden rounded-full"
@@ -307,6 +342,7 @@ export function BatchPage() {
             <ErrorBox error={stream.error} />
           </div>
         ) : null}
+        {/* 尚未執行 → 提示；資料夾沒有影像 → 提示；其餘（執行中、完成、取消、錯誤）顯示已收到的結果 */}
         {stream.status === 'idle' ? (
           <EmptyState icon={<FolderOpen className="size-8" aria-hidden />}>
             在左側「資料夾」輸入路徑後按「執行」。
@@ -318,6 +354,8 @@ export function BatchPage() {
             <Split
               readout={
                 <ReadoutBlock title="彙整">
+                  {/* 完成後用後端 summary；執行中或被取消（沒有 summary）時張數暫用已收到的列數，
+                      通過率與警告次數則等 summary 才顯示 */}
                   <MetricGrid>
                     <Metric label="張數" value={String(summary?.count ?? rows.length)} />
                     <Metric
@@ -335,6 +373,7 @@ export function BatchPage() {
               }
               main={
                 <MainView
+                  // 每張結果分頁自行切分表格與單張檢視並各自捲動，因此不讓整個主檢視捲動
                   scroll={view !== 'table'}
                   toolbar={
                     <>
@@ -379,6 +418,7 @@ export function BatchPage() {
                   }
                 >
                   {view === 'dist' ? (
+                    // 只用成功讀取的影像；門檻取執行時的參數（見 threshold）
                     <ValueHistogram
                       label={`${DIST[dist].label}的分布與目前門檻`}
                       xLabel={DIST[dist].label}
@@ -386,6 +426,7 @@ export function BatchPage() {
                       threshold={threshold(DIST[dist].threshold)}
                     />
                   ) : view === 'warn' ? (
+                    // 長條長度＝出現該警告的張數 ÷ 成功讀取的張數；警告次數來自 summary，完成前為空
                     <BarList
                       label="各警告的張數"
                       rows={Object.entries(summary?.warning_counts ?? {}).map(([code, n]) => ({
@@ -423,15 +464,26 @@ export function BatchPage() {
   )
 }
 
+/**
+ * 單張檢視：載入選取列的原圖，並可切換到後端產生的診斷檢視
+ * （邊緣響應＝Laplacian，對應模糊分數；曝光遮罩，對應過暗／過亮比例）。
+ *
+ * @param row 選取的結果列（必為成功讀取的列）
+ * @param config 算出這批結果時的參數，讓診斷檢視與表格數字一致
+ */
 function Detail({ row, config }: { row: Row; config: ConfigOverride }) {
+  // 把伺服器本機路徑載入暫存區取得 image_id
   const image = useLocalImage(row.path)
   const [view, setView] = useState<'original' | 'laplacian' | 'exposure'>('original')
+  // hook 不能條件式呼叫，所以一律呼叫：看原圖時以 enabled = false 停用查詢，
+  // 檢視名稱暫填 'laplacian' 只是為了滿足型別
   const rendered = useRenderView(
     image.data?.image_id,
     view === 'original' ? 'laplacian' : view,
     config,
     view !== 'original',
   )
+  // 目前要顯示的影像：原圖或診斷檢視的輸出；尚未載入時為 undefined
   const shown = view === 'original' ? image.data : rendered.data?.image
   return (
     <div className="flex min-h-0 flex-1 flex-col">

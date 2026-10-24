@@ -34,6 +34,10 @@ import { useStream } from '@/hooks/useStream'
 import { cn } from '@/lib/cn'
 import { outcomeText, rungText } from '@/lib/text'
 
+// 以下型別是本頁自行宣告的後端回應形狀（E1 路由的回應在規格中是自由 JSON：FreeJson），
+// 取得時以 `as Promise<unknown> as Promise<…>` 轉型；欄位改名時這裡不會有型別錯誤提醒。
+
+/** GET /dev/e1/runs：結果資料夾、其中各次執行，以及可選的實驗組（arms）與預設勾選的實驗組。 */
 interface RunList {
   root: string
   runs: { name: string; path: string }[]
@@ -41,6 +45,11 @@ interface RunList {
   default_arms: string[]
 }
 
+/**
+ * 一個實驗組（或一個實驗組在某分組值下）的彙整統計，全部由後端 dietai.evaluation 算好。
+ * rate／ci_low／ci_high 在 n = 0 時為 null；p_value 是對基準組的 McNemar 檢定，基準組本身沒有。
+ * 索引簽章用來容納分組條件欄位（例如 `blur: 'high'`），GroupView 以 `r[group]` 取值。
+ */
 interface Summary {
   arm: string
   n: number
@@ -58,6 +67,11 @@ interface Summary {
   [tag: string]: unknown
 }
 
+/**
+ * 一筆失敗紀錄（某影像在某實驗組下的結果）。outcome 為 FAILURE_KINDS 之一；
+ * truth 空字串表示負樣本（影像中沒有條碼）；image 是伺服器本機路徑，檢視時經 useLocalImage 載入。
+ * 索引簽章容納各拍攝條件欄位（與 Run.tags 對應），表格逐欄顯示。
+ */
 interface Failure {
   id: string
   arm: string
@@ -70,6 +84,14 @@ interface Failure {
   [tag: string]: string
 }
 
+/**
+ * GET /dev/e1/runs/{run_id}：一次執行的完整結果。
+ * - overall：以「基準實驗組」為鍵，值為各實驗組的彙整（p 值是對該基準組算的，所以每個基準各一份）。
+ * - by_tag：以分組條件為鍵，值為「實驗組 × 該條件各值」的彙整列。
+ * - rescues：各實驗組成功於哪一階（rung）的影像數。
+ * - attempts：每張影像每一階的嘗試紀錄（欄位不固定，原樣以表格顯示）。
+ * - meta.include_test：納入測試集時不可檢視失敗影像（測試集鎖定，見根目錄 CLAUDE.md 規則 7）。
+ */
 interface Run {
   name: string
   meta: {
@@ -87,25 +109,40 @@ interface Run {
   attempts: Record<string, string>[]
 }
 
+/** 快速執行的 SSE 事件：start（產生合成資料後開始）→ 多筆 progress → done（帶新執行的名稱）。 */
 type E1Event =
   | { type: 'start'; total: number }
   | { type: 'progress'; done: number; total: number }
   | { type: 'done'; name: string; path: string }
 
+/** 失敗種類（誤讀、漏讀、誤報、執行錯誤），也是「失敗影像」篩選按鈕的順序。 */
 const FAILURE_KINDS = ['misread', 'missed', 'false_positive', 'error']
+/** 解碼階梯由簡到繁的固定順序，讓「成功階」堆疊長條的顏色與圖例順序固定。 */
 const RUNG_ORDER = ['raw', 'gray', 'binarize', 'sharpen', 'denoise', 'deskew', 'multiscale']
 
+/**
+ * E1 條碼消融頁。左側面板分兩頁：「執行結果」選資料夾／執行／基準組／分組條件；
+ * 「快速執行」以合成條碼經 SSE 跑一次實驗。右側由 RunView 顯示選定執行的結果。
+ * 本頁只顯示後端算好的統計（成功率、Wilson 信賴區間、McNemar p 值），不在前端重算。
+ */
 export function E1Page() {
   const qc = useQueryClient()
+  // 結果資料夾：空字串代表用後端預設路徑。打字時以 400 ms 防抖，避免每個字元都重新列出資料夾
   const [root, setRoot] = useState('')
   const debouncedRoot = useDebounced(root, 400)
+  // 使用者選的執行；可能不在目前清單中（換資料夾後），實際使用的是下方的 current
   const [runName, setRunName] = useState<string | null>(null)
+  // 使用者選的基準組；同理可能不在新執行的實驗組中，實際使用的是下方的 base
   const [baseline, setBaseline] = useState<string | null>(null)
+  // 分組條件（tag 名稱）；空字串為不分組
   const [group, setGroup] = useState('')
+  // 快速執行勾選的實驗組；null 代表使用者還沒動過，沿用後端的 default_arms
   const [picked, setPicked] = useState<string[] | null>(null)
   const [nCodes, setNCodes] = useState(2)
+  // 快速執行走 SSE（POST 同一路徑）；離開頁面時 useStream 會自動取消，後端隨之停止
   const stream = useStream<E1Event>('/workbench/v1/dev/e1/runs')
 
+  // 列出資料夾中的執行。查詢鍵含防抖後的資料夾，換資料夾就是新查詢；signal 讓舊請求被取消
   const list = useQuery({
     queryKey: ['e1-runs', debouncedRoot],
     queryFn: ({ signal }) =>
@@ -120,6 +157,8 @@ export function E1Page() {
   // 換了資料夾（或原本沒有結果）時，選取值不在清單中：改選最新的一次
   const current = runs.some((r) => r.name === runName) ? runName : (runs[0]?.name ?? null)
 
+  // 載入選定執行的完整結果。已寫入磁碟的執行結果不會再變，所以 staleTime: Infinity 不重新抓取；
+  // 沒有任何執行（current 為 null）時不查詢
   const run = useQuery({
     queryKey: ['e1-run', debouncedRoot, current],
     queryFn: ({ signal }) =>
@@ -136,9 +175,12 @@ export function E1Page() {
     staleTime: Infinity,
   })
   const data = run.data
+  // 基準組：使用者選的若不在這次執行的實驗組中（或還沒選），退回第一個實驗組
   const base = data && baseline && data.arms.includes(baseline) ? baseline : data?.arms[0]
   const arms = picked ?? list.data?.default_arms ?? []
 
+  // 快速執行：收到 done 時切換到新產生的執行，並讓所有 e1-runs 清單查詢失效以重新列出
+  // （前綴比對，不論資料夾）。注意這裡帶的是防抖後的資料夾。
   const quickRun = () =>
     void stream.run({ arms, n_codes: nCodes, root: debouncedRoot || undefined }, (e) => {
       if (e.type === 'done') {
@@ -146,8 +188,10 @@ export function E1Page() {
         void qc.invalidateQueries({ queryKey: ['e1-runs'] })
       }
     })
+  // 最新一筆進度事件（複製後反轉再找，不改動 stream.events 本身）；還沒有進度時為 undefined
   const progress = [...stream.events].reverse().find((e) => e.type === 'progress')
 
+  // 左側控制面板
   const panel = (
     <Tabs defaultValue="runs">
       <div className="bg-card sticky top-0 z-10 p-3 pb-2">
@@ -156,6 +200,7 @@ export function E1Page() {
           <TabsTrigger value="quick">快速執行</TabsTrigger>
         </TabsList>
       </div>
+      {/* 「執行結果」：選資料夾、執行、基準組、分組條件 */}
       <TabsContent value="runs" className="space-y-3 px-4 pt-2 pb-4 text-sm">
         <label className="flex flex-col gap-1">
           <span className="text-muted text-xs">結果資料夾（空白為預設）</span>
@@ -174,6 +219,7 @@ export function E1Page() {
           options={runs.map((r) => ({ value: r.name, label: r.name }))}
           empty="尚無執行結果"
         />
+        {/* 基準組與分組條件依執行內容而定，載入執行後才顯示 */}
         {data && (
           <>
             <Select
@@ -195,6 +241,7 @@ export function E1Page() {
           </>
         )}
       </TabsContent>
+      {/* 「快速執行」：以合成條碼跑選取的實驗組（SSE 回報進度） */}
       <TabsContent value="quick" className="space-y-3 px-4 pt-2 pb-4 text-sm">
         <p className="text-muted text-xs">
           以合成條碼產生資料（寫到
@@ -204,6 +251,7 @@ export function E1Page() {
         <fieldset>
           <legend className="text-muted mb-1 text-xs">實驗組</legend>
           <div className="flex flex-wrap gap-1.5">
+            {/* 膠囊切換按鈕；第一次點選時由 default_arms 複製出 picked，之後就以 picked 為準 */}
             {(list.data?.arms ?? []).map((a) => {
               const on = arms.includes(a)
               return (
@@ -233,10 +281,12 @@ export function E1Page() {
             min={1}
             max={20}
             value={nCodes}
+            // 限制在 1–20；清空或非數字時視為 1
             onChange={(e) => setNCodes(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
             className="border-card-border bg-sunken readout h-6 w-16 rounded-lg border px-1.5 text-right"
           />
         </label>
+        {/* 執行中顯示停止鈕與進度條；還沒收到 progress（後端仍在產生合成資料）時，進度條先顯示 5% */}
         {stream.status === 'running' ? (
           <>
             <Button className="w-full" onClick={stream.cancel}>
@@ -294,6 +344,7 @@ export function E1Page() {
         )
       }
     >
+      {/* 主區依序判斷：清單錯誤 → 沒有任何執行 → 執行載入錯誤 → 載入中 → 顯示結果 */}
       {list.error ? (
         <div className="p-4">
           <ErrorBox error={list.error} />
@@ -318,6 +369,11 @@ export function E1Page() {
   )
 }
 
+/**
+ * 本頁用的精簡下拉選單（原生 select）。
+ * - options 為空時停用，並顯示 empty 作為唯一的佔位選項。
+ * - help 以 title 屬性顯示為滑鼠停留提示。
+ */
 function Select({
   label,
   value,
@@ -354,11 +410,23 @@ function Select({
   )
 }
 
+/** 比例轉百分比字串（一位小數）；null／undefined（例如 n = 0 沒有成功率）顯示為「—」。 */
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`)
 
+/**
+ * 一次執行的結果檢視：右側讀數欄（警示、執行資訊、基準組）＋主檢視的四個分頁
+ * （整體成功率、依條件分組、成功階、失敗影像）。
+ * 父層以 key={data.name} 掛載，換執行時整個重建，分頁與子元件的選取狀態都會重置。
+ *
+ * @param data 執行結果
+ * @param base 基準實驗組（已確認存在於 data.arms）
+ * @param group 分組條件；空字串表示不分組
+ */
 function RunView({ data, base, group }: { data: Run; base: string; group: string }) {
   const [tab, setTab] = useState('overall')
+  // 以目前基準組算出的整體彙整（p 值才會是對這個基準組）
   const overall = data.overall[base] ?? []
+  // 所有實驗組的誤讀次數加總；誤讀比漏讀危險（會被當成另一個商品），有就顯示紅色警示
   const misreads = overall.reduce((a, r) => a + r.misread, 0)
   const git = data.meta.git
   const readout = (
@@ -402,6 +470,7 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
       readout={readout}
       main={
         <MainView
+          // 失敗影像分頁自行切分表格與影像兩塊並各自捲動，因此不讓整個主檢視捲動
           scroll={tab !== 'fail'}
           toolbar={
             <Segmented
@@ -453,6 +522,7 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
                   r.missed,
                   r.median_ms?.toFixed(1) ?? '—',
                   r.mean_attempts?.toFixed(2) ?? '—',
+                  // 基準組自己不做檢定；其他組的 p 值取三位有效數字，轉回 number 去掉多餘的 0
                   r.arm === base
                     ? '基準'
                     : r.p_value != null
@@ -475,6 +545,8 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
                 <p className="text-muted mb-2 text-xs">
                   各階由原圖獨立產生，因此成功階就是救回該影像的步驟。
                 </p>
+                {/* 堆疊的階依 RUNG_ORDER 排序，只留這次執行實際出現的階；
+                    每個實驗組一列，值為 {rung: 影像數} */}
                 <StackedBars
                   label="各實驗組成功於各階的影像數"
                   keys={RUNG_ORDER.filter((r) => data.rescues.some((x) => x.rung === r))}
@@ -497,8 +569,14 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
   )
 }
 
+/**
+ * 依拍攝條件分組的熱度圖：列為實驗組、欄為該條件的各個值，格子顏色為成功率。
+ * 滑鼠停留提示列出成功率、正確數／樣本數與誤讀數。
+ */
 function GroupView({ data, group }: { data: Run; group: string }) {
+  // 排除沒有樣本的組合（成功率為 null，畫出來沒有意義）
   const rows = (data.by_tag[group] ?? []).filter((r) => r.n > 0)
+  // 欄＝該條件出現過的值，去重後依出現順序排列（未另外排序）；統一轉字串以便比對
   const cols = [...new Set(rows.map((r) => String(r[group])))]
   return (
     <Heatmap
@@ -507,6 +585,7 @@ function GroupView({ data, group }: { data: Run; group: string }) {
       cols={cols}
       value={(arm, col) => {
         const r = rows.find((x) => x.arm === arm && String(x[group]) === col)
+        // 找不到（這個實驗組在該值下沒有樣本）時回傳 undefined，熱度圖畫成空格
         return (
           r && {
             rate: r.rate,
@@ -518,12 +597,19 @@ function GroupView({ data, group }: { data: Run; group: string }) {
   )
 }
 
+/**
+ * 失敗影像分頁：上方選實驗組與失敗種類，中間是失敗清單，點選一列後下方左側顯示影像、
+ * 右側顯示該影像每一階的嘗試紀錄。納入測試集的執行不顯示影像（測試集鎖定）。
+ */
 function Failures({ data }: { data: Run }) {
+  // 預設看最後一個實驗組；data.arms 若為空，這裡會是 undefined
   const [arm, setArm] = useState(data.arms[data.arms.length - 1]!)
   const [kinds, setKinds] = useState(FAILURE_KINDS)
   const [selected, setSelected] = useState<Failure | null>(null)
+  // 換實驗組或篩選條件時清除選取：舊的選取列可能已不在清單中，也避免把別組的嘗試紀錄配到這一組
   useEffect(() => setSelected(null), [arm, kinds])
   const failed = data.failures.filter((f) => f.arm === arm && kinds.includes(f.outcome))
+  // 選取影像在目前實驗組下的嘗試紀錄（每一階一列）
   const attempts = selected
     ? data.attempts.filter((a) => a.id === selected.id && a.arm === arm)
     : []
@@ -562,6 +648,7 @@ function Failures({ data }: { data: Run }) {
         <EmptyState>這個實驗組沒有符合條件的失敗影像。</EmptyState>
       ) : (
         <>
+          {/* 失敗清單：沒有選取時撐滿；選取後縮到 38% 高，留空間給下方的影像與嘗試紀錄 */}
           <div className={cn('overflow-auto', selected ? 'max-h-[38%] shrink-0' : 'flex-1')}>
             <table className="w-full text-[13px]" aria-label="失敗影像清單">
               <thead className="bg-card sticky top-0">
@@ -591,6 +678,7 @@ function Failures({ data }: { data: Run }) {
                   >
                     <td className="readout px-2 py-1 text-xs">{f.id}</td>
                     <td className="px-2">
+                      {/* 漏讀用 accent 色調；誤讀、誤報、錯誤用紅色（danger） */}
                       <Badge tone={f.outcome === 'missed' ? 'accent' : 'danger'}>
                         {outcomeText(f.outcome)}
                       </Badge>
@@ -618,6 +706,7 @@ function Failures({ data }: { data: Run }) {
                 <FailureImage path={selected.image} id={selected.id} />
               )}
               <div className="overflow-auto pl-4">
+                {/* 嘗試紀錄的欄位不固定：以第一列的鍵為欄名，去掉已知的 id、arm，rung 轉中文 */}
                 <DataTable
                   label="這張影像每一階的嘗試紀錄"
                   columns={Object.keys(attempts[0] ?? {}).filter((c) => c !== 'id' && c !== 'arm')}
@@ -640,6 +729,10 @@ function Failures({ data }: { data: Run }) {
   )
 }
 
+/**
+ * 顯示一張失敗影像：以 useLocalImage 把伺服器本機路徑載入暫存區取得 image_id，再交給 ImageViewer。
+ * 影像載入失敗（暫存影像被淘汰、Python 重啟）時呼叫 reload 重新載入（有最短間隔限制）。
+ */
 function FailureImage({ path, id }: { path: string; id: string }) {
   const image = useLocalImage(path)
   if (image.error)

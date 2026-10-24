@@ -40,13 +40,16 @@ from dietai.preprocess.config import LadderConfig, ZxingConfig
 from dietai.preprocess.decoders import Decoder, PyzbarDecoder, ZxingDecoder
 from dietai.preprocess.types import Image, Rung
 
-EXPERIMENT = "e1_barcode"
+EXPERIMENT = "e1_barcode"  # 寫入 run.json，區分不同實驗的紀錄
 DECODERS = ("zxing", "pyzbar")
 RESULTS_FILE = "results.csv"
 ATTEMPTS_FILE = "attempts.csv"
 META_FILE = "run.json"
+# 實驗組 JSON 允許的頂層欄位；拼錯的欄位會被拒絕，而不是靜默使用預設值
 _ARM_KEYS = frozenset({"name", "description", "decoder", "zxing", "ladder"})
+# 只接受 ASCII 數字（\d 會接受全形等 Unicode 數字）；搭配 fullmatch 使用
 _GTIN_12_13 = re.compile(r"[0-9]{12,13}")
+# 記錄到 run.json 的套件版本：解碼結果可能隨這些套件的版本而變
 _PACKAGES = ("dietai", "numpy", "opencv-python-headless", "zxing-cpp", "pyzbar")
 
 
@@ -75,6 +78,7 @@ class Arm:
     ladder: LadderConfig = LadderConfig()
 
     def __post_init__(self) -> None:
+        # 名稱會寫進 CSV、以 ``|`` 串接的欄位與命令列 ``--only``（逗號分隔），故禁用這些字元
         if not self.name or any(c in self.name for c in ",|\n"):
             raise ValueError(f"實驗組名稱不得為空或含逗號、直線、換行：{self.name!r}")
         if self.decoder not in DECODERS:
@@ -157,10 +161,14 @@ def load_arms(source: str | Path | Iterable[str | Path], only: Sequence[str] = (
 
 def judge(result: LadderResult, truth: str) -> Outcome:
     """依模組說明的規則判定 ``decode_with_ladder`` 的結果。"""
+    # 負樣本：``hits`` 只含已確認（達 ``min_agree`` 票）的結果，失敗時為空；
+    # 因此未達確認票數的零星解碼不算誤報
     if not truth:
         return Outcome.FALSE_POSITIVE if result.hits else Outcome.TRUE_NEGATIVE
     if not result.success:
         return Outcome.MISSED
+    # 成功時任一已確認結果與真值相符即算對（同一張可能同時解出多個條碼）；
+    # 兩邊都先正規化成 GTIN-13，避免 UPC-A 與 EAN-13 表示法不同而誤判為誤讀
     if any(_gtin13(h.text) == _gtin13(truth) for h in result.hits):
         return Outcome.CORRECT
     return Outcome.MISREAD
@@ -168,6 +176,7 @@ def judge(result: LadderResult, truth: str) -> Outcome:
 
 def _gtin13(code: str) -> str:
     """12 位（UPC-A）與 13 位數字補成 GTIN-13；其他內容（EAN-8、QR 等）原樣回傳。"""
+    # UPC-A 等於開頭為 0 的 EAN-13，左補 0 後檢查碼不變；13 位時 zfill 不做任何事
     return code.zfill(13) if _GTIN_12_13.fullmatch(code) else code
 
 
@@ -192,6 +201,8 @@ def new_run_dir(root: str | Path, label: str = "") -> Path:
     """在 ``root`` 下以時間戳記（加上 ``label``）命名一個尚不存在的執行資料夾路徑。"""
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     base = f"{stamp}_{label}" if label else stamp
+    # 同一秒內重複執行時依序加上 -2、-3…；只回傳路徑、不建立資料夾（檢查與建立之間
+    # 沒有鎖，同時啟動的兩個行程仍可能撞名，由 run_experiment 的非空檢查擋下）
     path, i = Path(root) / base, 1
     while path.exists():
         i += 1
@@ -221,12 +232,15 @@ def run_experiment(
     manifest 沒有任何影像（例如全部是測試集而被排除）時丟 ``ValueError``，不建立資料夾。
     ``decoder_factory`` 供測試替換解碼器。
     """
+    # 第二道防線：read_manifest 預設已排除測試集；這裡擋下「以 include_test=True 讀入、
+    # 卻沒有以正式實驗執行」的情形，確保兩處的設定一致
     if not include_test and any(i.is_test for i in manifest.items):
         raise ValueError("manifest 含測試集，但未標記 include_test（正式實驗）")
     if not arms:
         raise ValueError("沒有任何實驗組設定")
     if not manifest.items:
         raise ValueError(f"manifest 沒有可執行的影像（排除測試集 {manifest.excluded_test} 張）")
+    # 標籤欄與結果欄寫在同一列，同名會互相覆蓋，事先拒絕
     clash = set(manifest.tag_columns) & set(RESULT_COLUMNS)
     if clash:
         raise ValueError(f"manifest 的標籤欄與結果欄同名：{sorted(clash)}")
@@ -235,6 +249,7 @@ def run_experiment(
         raise FileExistsError(f"輸出資料夾已存在且非空，實驗結果不覆寫：{out}")
     out.mkdir(parents=True, exist_ok=True)
 
+    # 每個實驗組只建立一次解碼器，整批影像共用
     factory = decoder_factory or Arm.make_decoder
     decoders = [factory(a) for a in arms]
     started = datetime.now().astimezone()
@@ -251,6 +266,8 @@ def run_experiment(
         attempts = csv.DictWriter(af, fieldnames=ATTEMPT_COLUMNS)
         results.writeheader()
         attempts.writeheader()
+        # 外層逐張影像、內層逐實驗組：每張影像只讀一次，所有實驗組用同一份輸入，
+        # 結果可依 id 配對（McNemar 檢定需要）。結果邊跑邊寫，中斷時已完成的列仍保留。
         for item in manifest.items:
             img: Image | None = None
             load_error = ""
@@ -263,6 +280,7 @@ def run_experiment(
                 base = {"id": item.id, "arm": arm.name, "truth": item.truth, "split": item.split}
                 row: dict[str, Any] = {**base, "image": str(item.image), **item.tags}
                 if img is None:
+                    # 讀檔失敗：每個實驗組都記一列 error，讓各組的列數一致
                     row.update(outcome=Outcome.ERROR.value, error=load_error)
                 else:
                     try:
@@ -271,6 +289,8 @@ def run_experiment(
                         row.update(outcome=Outcome.ERROR.value, error=f"{type(e).__name__}: {e}")
                     else:
                         row.update(_result_fields(outcome, res))
+                        # 每次階梯嘗試另寫一列，供分析各階耗時與被拒絕的結果；
+                        # index 對應 results.csv 的 success_index
                         for i, a in enumerate(res.attempts):
                             attempts.writerow(
                                 {
@@ -294,6 +314,7 @@ def run_experiment(
                 if progress is not None:
                     progress(done, total)
 
+    # run.json 在所有結果寫完後才寫出；list_runs 以它判斷一次執行是否完整
     duration = time.perf_counter() - t0
     meta = {
         "experiment": EXPERIMENT,
@@ -360,14 +381,21 @@ def first_rung(res: LadderResult) -> Rung | None:
     """
     if not res.success:
         return None
+    # 依嘗試順序找第一個解出任一採用結果的嘗試；各階由原圖獨立產生，
+    # 因此這一階單獨就能解出，即「之前的階都沒解出、這一階救回」
     accepted = {(h.format, h.text) for h in res.hits}
     for a in res.attempts:
         if any((h.format, h.text) in accepted for h in a.hits):
             return a.rung
+    # 防禦性後備：採用結果必定出現在某次嘗試中，正常情況不會走到這裡
     return res.success_rung
 
 
 def _result_fields(outcome: Outcome, res: LadderResult) -> dict[str, Any]:
+    """``results.csv`` 一列中的判定與階梯欄位（失敗時階與索引為空字串）。
+
+    ``elapsed_ms`` 為所有嘗試耗時的總和（整條階梯）；多個值以 ``|`` 串接。
+    """
     return {
         "outcome": outcome.value,
         "success_rung": res.success_rung.value if res.success_rung else "",
@@ -389,6 +417,7 @@ def read_run(run_dir: str | Path) -> tuple[dict[str, Any], list[dict[str, str]]]
     """讀取一次執行的（``run.json`` 內容, ``results.csv`` 各列）。"""
     run = Path(run_dir)
     meta = json.loads((run / META_FILE).read_text(encoding="utf-8"))
+    # utf-8-sig：結果檔若被 Excel 另存而加上 BOM 仍可讀
     with (run / RESULTS_FILE).open(encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
     return meta, rows
@@ -399,6 +428,8 @@ def list_runs(root: str | Path) -> list[Path]:
     root = Path(root)
     if not root.is_dir():
         return []
+    # 資料夾名稱以時間戳記開頭，路徑字串反向排序即新的在前；
+    # 沒有 run.json 的資料夾（執行中或中斷）不列出
     return sorted((p.parent for p in root.glob(f"*/{META_FILE}")), reverse=True)
 
 
@@ -418,6 +449,7 @@ def summarize(
     ``lost``（基準對、本組錯）、``gained``（基準錯、本組對）、``p_value``。
     實驗組依第一次出現的順序排列，組內標籤值可轉成數字者依數值排序。
     """
+    # 分組鍵為（實驗組, by 各欄的值…）；CSV 讀入的值都是字串
     groups: dict[tuple[str, ...], list[Mapping[str, str]]] = {}
     for r in rows:
         groups.setdefault((r["arm"], *(r.get(k, "") for k in by)), []).append(r)
@@ -426,6 +458,7 @@ def summarize(
         raise ValueError(f"找不到基準實驗組 {baseline!r}；可用：{arm_order}")
 
     def correct_by_id(arm: str, key: tuple[str, ...]) -> dict[str, bool]:
+        """某實驗組在同一標籤分組中，各正樣本 ``id`` 是否為 correct（排除 error）。"""
         return {
             r["id"]: r["outcome"] == Outcome.CORRECT
             for r in groups.get((arm, *key), [])
@@ -433,14 +466,19 @@ def summarize(
         }
 
     out: list[dict[str, Any]] = []
+    # 排序：實驗組依出現順序，標籤值依 _natural（數字依數值、在文字之前）
     for key in sorted(groups, key=lambda k: (arm_order.index(k[0]), *map(_natural, k[1:]))):
         group = groups[key]
+        # error 不計入分母：讀檔或處理失敗不代表條碼辨識失敗，另以 errors 回報
         valid = [r for r in group if r["outcome"] != Outcome.ERROR]
         pos = [r for r in valid if r["truth"]]
         neg = [r for r in valid if not r["truth"]]
+        # Outcome 是 StrEnum，可直接以成員查詢以字串為鍵的 Counter
         oc = Counter(r["outcome"] for r in group)
+        # 成功率 = correct／正樣本數（不含 error）；誤讀與漏讀都算失敗
         n, k = len(pos), oc[Outcome.CORRECT]
         lo, hi = wilson_interval(k, n)
+        # 耗時與嘗試次數也含負樣本（沒解出時會跑完整條階梯，通常較慢）
         ms = [float(r["elapsed_ms"]) for r in valid if r["elapsed_ms"]]
         tries = [int(r["attempts"]) for r in valid if r["attempts"]]
         entry: dict[str, Any] = {
@@ -448,6 +486,7 @@ def summarize(
             **dict(zip(by, key[1:], strict=True)),
             "n": n,
             "correct": k,
+            # 沒有正樣本的分組（例如只有負樣本）成功率與信賴區間為 None，報告顯示「—」
             "rate": k / n if n else None,
             "ci_low": lo if n else None,
             "ci_high": hi if n else None,
@@ -460,6 +499,8 @@ def summarize(
             "mean_attempts": statistics.fmean(tries) if tries else None,
         }
         if baseline is not None:
+            # 在相同標籤分組內，只取兩組都有有效結果的影像依 id 配對；
+            # 基準組與自己比較時 lost = gained = 0、p = 1
             ref = correct_by_id(baseline, key[1:])
             mine = correct_by_id(key[0], key[1:])
             ids = sorted(ref.keys() & mine.keys())
@@ -479,15 +520,18 @@ def rescue_counts(
     ``arms`` 為 ``run.json`` 的 ``arms``，組內依該實驗組設定的階梯順序排列；未提供或
     找不到該組時依 ``Rung`` 的定義順序。
     """
+    # 只統計 correct：誤讀雖然也有成功階，但不算「救回」
     counts: Counter[tuple[str, str]] = Counter(
         (r["arm"], r.get("first_rung") or r["success_rung"])
         for r in rows
         if r["outcome"] == Outcome.CORRECT
     )
     arm_order = list(dict.fromkeys(r["arm"] for r in rows))
+    # 各實驗組設定的階梯順序（run.json 中 ladder.rungs 為階的代碼字串）
     rungs = {str(a["name"]): list(a.get("ladder", {}).get("rungs", ())) for a in arms}
 
     def key(kv: tuple[tuple[str, str], int]) -> tuple[int, int]:
+        """排序鍵：（實驗組出現順序, 該階在階梯中的位置）。"""
         (arm, rung), _ = kv
         return arm_order.index(arm), _rung_index(rung, rungs.get(arm) or [r.value for r in Rung])
 
@@ -532,6 +576,7 @@ def report_markdown(
 
 
 def _table(summary: Sequence[Mapping[str, Any]], by: Sequence[str]) -> str:
+    """把 ``summarize`` 的結果排成 Markdown 表格；有 ``baseline`` 時多兩欄 McNemar。"""
     has_p = bool(summary) and "p_value" in summary[0]
     head = ["arm", *by, "n", "成功率", "95% CI", "誤讀", "漏讀", "負樣本誤報", "耗時中位數 ms"]
     if has_p:
@@ -554,6 +599,11 @@ def _table(summary: Sequence[Mapping[str, Any]], by: Sequence[str]) -> str:
 
 
 def _config_section(cls: type[Any], data: Any) -> Any:
+    """由 JSON 物件建立設定 dataclass（``ZxingConfig``、``LadderConfig``）。
+
+    接受已建好的實例、欄位物件，或工作台匯出的 ``{"class": ..., "values": {...}}``；
+    未知欄位丟 ``ValueError``，欄位值的型別與範圍由設定類別的 ``__post_init__`` 驗證。
+    """
     if isinstance(data, cls):
         return data
     if not isinstance(data, Mapping):
@@ -569,6 +619,7 @@ def _config_section(cls: type[Any], data: Any) -> Any:
 
 
 def _rung_index(rung: str, order: Sequence[str]) -> int:
+    """``rung`` 在 ``order`` 中的位置；不在其中時排到最後。"""
     return order.index(rung) if rung in order else len(order)
 
 
@@ -581,6 +632,7 @@ def _natural(value: str) -> tuple[int, float, str]:
 
 
 def _jsonable(value: Any) -> Any:
+    """遞迴把 Enum 轉成其值、tuple 轉成 list、鍵轉成字串，讓設定可寫成 JSON。"""
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, Mapping):
@@ -592,6 +644,8 @@ def _jsonable(value: Any) -> Any:
 
 def _git_info() -> dict[str, Any] | None:
     """目前程式碼的 commit 與是否有未提交變更；不在 git 中時回傳 ``None``。"""
+    # 在本檔所在位置執行 git，不受呼叫端工作目錄影響；
+    # 沒裝 git（OSError）或不在儲存庫中（非 0 結束碼）時回傳 None
     cwd = Path(__file__).parent
     try:
         commit = subprocess.run(
@@ -606,6 +660,7 @@ def _git_info() -> dict[str, Any] | None:
 
 
 def _package_versions() -> dict[str, str]:
+    """``_PACKAGES`` 中已安裝套件的版本；未安裝者（例如沒裝 pyzbar）略過。"""
     versions: dict[str, str] = {}
     for name in _PACKAGES:
         try:

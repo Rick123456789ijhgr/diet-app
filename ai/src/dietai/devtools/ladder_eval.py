@@ -14,6 +14,7 @@ from typing import Any
 from dietai.preprocess import Decoder, LadderConfig, Rung, decode_with_ladder
 from dietai.preprocess.types import Image
 
+# 明細列以中文為鍵；給前端的 JSON 由 sweep.barcode_sweep 轉成英文鍵（raw／ladder）
 RAW = "只用原圖"
 LADDER = "逐步升級"
 
@@ -30,10 +31,12 @@ def ladder_sweep(
     每列欄位：等級、樣本（索引）、只用原圖（bool）、逐步升級（bool）、
     成功階（階的代碼，失敗為空字串）、嘗試次數。
     """
+    # 對照組只保留 raw 階、其餘設定相同，兩者的差異就只在「有沒有逐步升級」
     raw_cfg = replace(cfg, rungs=(Rung.RAW,))
     rows: list[dict[str, Any]] = []
     for level in levels:
         for i, sample in enumerate(samples):
+            # 同一張退化影像同時餵給兩種方法，比較才公平
             img = degrade(sample, level)
             raw = decode_with_ladder(img, decoder, raw_cfg)
             full = decode_with_ladder(img, decoder, cfg)

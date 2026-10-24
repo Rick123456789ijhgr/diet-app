@@ -40,6 +40,7 @@ import { QUAD_METHOD_TEXT } from '@/lib/text'
 
 type ViewKind = 'located' | 'edges' | 'glare' | 'output' | 'steps'
 
+/** 主檢視的分頁；edges／glare 另向後端要診斷檢視（RenderView）。 */
 const VIEWS = [
   { value: 'located' as const, label: withIcon(Crop, '定位') },
   { value: 'edges' as const, label: withIcon(ScanLine, '邊緣') },
@@ -48,10 +49,22 @@ const VIEWS = [
   { value: 'steps' as const, label: withIcon(ListOrdered, '步驟') },
 ]
 
+/**
+ * 營養標示工具頁（`LabelConfig`）。
+ *
+ * 資料流：
+ * 1. `useImagePipeline('nutrition')` 產生合成標示或上傳照片，再套用模擬退化，得到 `image`。
+ * 2. `useAnalysis` 以「影像 id＋參數覆寫（防抖後）」呼叫 `/dev/label`，取得四角、定位方法、
+ *    光斑比例與輸出影像；參數改變時保留上一次結果並淡化，舊請求經 `signal` 取消。
+ * 3. 「邊緣」「光斑遮罩」分頁另外查詢診斷檢視（`useRenderView`），只在分頁開啟時送出。
+ *
+ * 唯一在前端計算的數字是「四角誤差」（與合成真值比較，`lib/geometry.ts`），屬評測顯示的例外。
+ */
 export function LabelPage() {
   const label = useConfigClass('LabelConfig')
   const degradationSchema = useConfigClass('Degradation').schema
   const pipeline = useImagePipeline('nutrition')
+  // 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）
   const [config, setConfig] = useState<ConfigOverride>({})
   const [view, setView] = useState<ViewKind>('located')
   const image = pipeline.image
@@ -68,6 +81,8 @@ export function LabelPage() {
         }),
       ),
   })
+  // 邊緣與光斑兩個分頁共用一個查詢；其他分頁時 enabled 為 false，view 名稱只是佔位。
+  // useRenderView 只在同一種檢視之間沿用舊結果，切換 edges↔glare 時不會閃出另一種影像。
   const rendered = useRenderView(
     image?.image_id,
     view === 'glare' ? 'glare_mask' : 'label_edges',
@@ -76,6 +91,7 @@ export function LabelPage() {
   )
 
   /** 某組參數的目前值（顯示門檻與說明用）；結果區用算出該結果的那組參數 */
+  // 未覆寫時回到結構中的預設值；結構未載入或欄位不存在時回傳 undefined
   const valuesOf = (cfg: ConfigOverride) => (name: string) => {
     const f = label.schema?.fields.find((x) => x.name === name)
     return f ? valueOf(f, cfg) : undefined
@@ -97,6 +113,7 @@ export function LabelPage() {
             schema={label.schema}
             overrides={config}
             onChange={setConfig}
+            // 後端回 INVALID_CONFIG 時，在對應欄位旁標出錯誤
             invalidField={analysis.configError?.field}
             invalidMessage={analysis.configError?.message}
           />
@@ -123,9 +140,12 @@ export function LabelPage() {
         )
       }
     >
+      {/* AnalysisFrame 只在影像與結果屬於同一張圖時才呼叫 children，避免舊四角疊到新影像上 */}
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!label.schema}>
         {({ data: r, roundTripMs, config: used }, img) => {
+          // 門檻與說明用「算出這個結果的參數」（used），防抖期間才不會與結果對不上
           const current = valuesOf(used as ConfigOverride)
+          // 只有合成影像帶真值四角；上傳照片或經旋轉、縮放退化後沒有，errors 為 null
           const truth = img.truth?.quad as Point[] | undefined
           const errors = quadErrors(r.quad, truth)
           const glareMax = current('glare_max_ratio') as number
@@ -144,6 +164,7 @@ export function LabelPage() {
               />
               <ReadoutBlock title="指標">
                 <MetricGrid>
+                  {/* 定位方法：校正關閉 → 未啟用；有 quad_method → 中文名稱（無對應時顯示原代碼）；否則找不到 */}
                   <Metric
                     wide
                     label="定位方法"
@@ -169,6 +190,7 @@ export function LabelPage() {
                     good={errors ? mean(errors) < 10 : undefined}
                     help="與合成影像真實四角的平均距離（原圖像素）；上傳照片或旋轉、縮小後沒有真值。"
                   />
+                  {/* glare_ratio 為負值代表光斑步驟未啟用（規格約定為 -1） */}
                   <Metric
                     label="光斑比例"
                     value={r.glare_ratio < 0 ? '未啟用' : pct(r.glare_ratio)}
@@ -193,6 +215,7 @@ export function LabelPage() {
               )}
             </>
           )
+          // 除了步驟表，其餘分頁都是撐滿的影像
           const isImage = view !== 'steps'
           return (
             <Split
@@ -204,6 +227,7 @@ export function LabelPage() {
                     <>
                       <Segmented label="檢視" value={view} onChange={setView} options={VIEWS} />
                       <span className="flex-1" />
+                      {/* 輸出分頁才提供下載前處理後的 PNG */}
                       {view === 'output' && (
                         <a
                           href={artifactUrl(r.image.artifact_id)}
@@ -227,10 +251,12 @@ export function LabelPage() {
                     ) : view === 'edges' ? (
                       `縮小到短邊 ${current('detect_short_side')} px 後的 Canny 邊緣（門檻 ${current('canny_low')}／${current('canny_high')}，已膨脹 3×3）；輪廓與直線都在這張圖上找。`
                     ) : view === 'glare' && rendered.data?.data?.enabled !== false ? (
+                      // 條件中的 enabled !== false：光斑步驟關閉時主檢視已顯示「未啟用」，就不顯示門檻說明
                       `紅色為光斑：亮度 ≥ ${current('glare_v_min')} 且飽和度 ≤ ${current('glare_s_max')}，再擴張 ${current('glare_dilate_px')} px；疊在校正後、修補前的影像上。`
                     ) : undefined
                   }
                 >
+                  {/* 主檢視：定位疊圖 → 輸出 → 步驟表 → 診斷檢視（錯誤／載入中／未啟用／影像） */}
                   {view === 'located' ? (
                     <ImageViewer
                       fill
@@ -238,6 +264,8 @@ export function LabelPage() {
                       width={img.width}
                       height={img.height}
                       alt="找到的表格四角"
+                      // 疊圖座標為原圖像素（SVG 與影像同尺寸），px 用來把線寬換算成固定的螢幕粗細；
+                      // 真值先畫、找到的後畫，重疊時找到的在上層
                       overlay={(px) => (
                         <>
                           {truth && <Quad points={truth} color={TRUTH} px={px} dashed />}

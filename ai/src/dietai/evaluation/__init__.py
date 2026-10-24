@@ -5,6 +5,7 @@
 需要 ``vision`` extra（讀取影像與解碼）。
 """
 
+# E1 條碼消融：實驗組設定、單張判定、批次執行、讀取與彙整報告
 from dietai.evaluation.barcode import (
     Arm,
     Outcome,
@@ -22,6 +23,8 @@ from dietai.evaluation.barcode import (
     run_experiment,
     summarize,
 )
+
+# manifest 讀寫與測試集鎖定、影像讀寫（支援中文路徑）
 from dietai.evaluation.manifest import (
     Manifest,
     ManifestItem,
@@ -32,6 +35,8 @@ from dietai.evaluation.manifest import (
     write_image,
     write_manifest,
 )
+
+# 統計：Wilson 信賴區間、McNemar 精確檢定與其配對計數
 from dietai.evaluation.stats import mcnemar_exact, paired_counts, wilson_interval
 
 __all__ = [
