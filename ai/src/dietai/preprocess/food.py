@@ -18,8 +18,6 @@ from dietai.preprocess import ops
 from dietai.preprocess.config import FoodConfig
 from dietai.preprocess.types import Box, Ellipse, Image, PreprocessWarning, StepRecord
 
-_COVERAGE_BINS = 36  # 計算圓周覆蓋時把橢圓周分成的角度格數（每格 10°）
-
 
 @dataclass(frozen=True)
 class VlmImage:
@@ -161,11 +159,14 @@ def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[El
     # 在縮小後的影像上偵測，像素門檻（盤徑、輪廓點數）才與原圖解析度無關
     small, factor = _detect_scale(img, cfg.detect_short_side)
     gray = ops.to_gray(small)
-    # 5×5 高斯平滑先壓掉食物紋理等細小邊緣，Canny 才主要留下盤緣這類明顯的長邊緣；
+    # 高斯平滑（預設 5×5）先壓掉食物紋理等細小邊緣，Canny 才主要留下盤緣這類明顯的長邊緣；
     # sigma 傳 0 表示由核大小自動推算
-    edges = cv2.Canny(cv2.GaussianBlur(gray, (5, 5), 0), cfg.plate_canny_low, cfg.plate_canny_high)
-    # 以 3×3 膨脹把盤緣上斷開的邊緣接起來，否則一圈盤緣會被切成許多短弧
-    edges = cv2.dilate(edges, np.ones((3, 3), np.uint8))
+    k = cfg.plate_blur_ksize
+    blurred = cv2.GaussianBlur(gray, (k, k), 0)
+    edges = cv2.Canny(blurred, cfg.plate_canny_low, cfg.plate_canny_high)
+    # 膨脹（預設 3×3）把盤緣上斷開的邊緣接起來，否則一圈盤緣會被切成許多短弧
+    d = cfg.plate_dilate_ksize
+    edges = cv2.dilate(edges, np.ones((d, d), np.uint8))
     # RETR_LIST 取出所有輪廓（不分內外層、含巢狀在其他輪廓內者），全部當作候選；
     # CHAIN_APPROX_NONE 保留每個輪廓點，供橢圓擬合與殘差、覆蓋率計算。
     # 膨脹後的邊緣有寬度，同一條盤緣會產生內、外兩個輪廓，由下面的去重複處理
@@ -189,7 +190,7 @@ def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[El
             continue
         pts = contour.reshape(-1, 2).astype(np.float64)
         # 殘差：輪廓是否貼合橢圓；覆蓋：輪廓是否繞了橢圓大半圈（避免只憑短弧擬合）
-        residual, coverage = _fit_quality(e, pts)
+        residual, coverage = _fit_quality(e, pts, cfg.plate_coverage_bins)
         if residual <= cfg.plate_max_residual and coverage >= cfg.plate_min_coverage:
             candidates.append(e)
     # 去重複：由大到小保留，中心落在已保留橢圓內部（正規化半徑 < 1）的候選視為
@@ -232,6 +233,7 @@ def preprocess_food(img: Image, cfg: FoodConfig = FoodConfig()) -> FoodResult:
                 {
                     "count": len(dishes),
                     "detect_short_side": cfg.detect_short_side,
+                    "bg_blur_ksize": cfg.bg_blur_ksize,
                     "bg_border_ratio": cfg.bg_border_ratio,
                     "bg_distance": cfg.bg_distance,
                     "morph_px": cfg.morph_px,
@@ -257,12 +259,15 @@ def preprocess_food(img: Image, cfg: FoodConfig = FoodConfig()) -> FoodResult:
                 _ms_since(start),
                 {
                     "count": len(plates),
+                    "plate_blur_ksize": cfg.plate_blur_ksize,
                     "plate_canny_low": cfg.plate_canny_low,
                     "plate_canny_high": cfg.plate_canny_high,
+                    "plate_dilate_ksize": cfg.plate_dilate_ksize,
                     "plate_min_size_ratio": cfg.plate_min_size_ratio,
                     "plate_min_axis_ratio": cfg.plate_min_axis_ratio,
                     "plate_max_residual": cfg.plate_max_residual,
                     "plate_min_coverage": cfg.plate_min_coverage,
+                    "plate_coverage_bins": cfg.plate_coverage_bins,
                     "plate_min_contour_points": cfg.plate_min_contour_points,
                 },
             )
@@ -319,8 +324,9 @@ def _foreground(img: Image, cfg: FoodConfig) -> tuple[npt.NDArray[np.bool_], flo
     small, factor = _detect_scale(img, cfg.detect_short_side)
     # 灰階輸入轉成三通道，讓後面的 LAB 流程一致（此時只有 L 有差異，a／b 皆為 0）
     bgr = small if small.ndim == 3 else cv2.cvtColor(small, cv2.COLOR_GRAY2BGR)
-    # 先以 5×5 高斯平滑壓掉像素雜訊與細紋理，再轉 LAB（色差在 LAB 中較接近人眼感受）
-    lab = cv2.cvtColor(cv2.GaussianBlur(bgr, (5, 5), 0), cv2.COLOR_BGR2LAB).astype(np.float32)
+    # 先以高斯平滑（預設 5×5）壓掉像素雜訊與細紋理，再轉 LAB（色差在 LAB 中較接近人眼感受）
+    k = cfg.bg_blur_ksize
+    lab = cv2.cvtColor(cv2.GaussianBlur(bgr, (k, k), 0), cv2.COLOR_BGR2LAB).astype(np.float32)
     # OpenCV 的 8 位元 LAB：L 縮放到 0–255、a／b 加 128；換回 CIELAB 單位使門檻即為 ΔE
     lab[..., 0] *= 100 / 255
     lab[..., 1:] -= 128
@@ -382,8 +388,11 @@ def _fit_ellipse(contour: cv2.typing.MatLike) -> Ellipse | None:
     return Ellipse(float(cx), float(cy), float(d1), float(d2), float(angle % 180))
 
 
-def _fit_quality(e: Ellipse, pts: npt.NDArray[np.float64]) -> tuple[float, float]:
-    """（平均殘差, 圓周覆蓋比例）：殘差為輪廓點正規化半徑與 1 的平均差。"""
+def _fit_quality(e: Ellipse, pts: npt.NDArray[np.float64], n_bins: int) -> tuple[float, float]:
+    """（平均殘差, 圓周覆蓋比例）：殘差為輪廓點正規化半徑與 1 的平均差。
+
+    ``n_bins`` 為計算覆蓋時把橢圓周分成的角度格數（``FoodConfig.plate_coverage_bins``）。
+    """
     # 把輪廓點旋轉到橢圓的主軸座標系，再除以半軸長：橢圓因此變成單位圓，
     # 點在橢圓上時 hypot(u, v) == 1（與 ``Ellipse.normalized_radius`` 相同的算式）
     t = np.radians(e.angle)
@@ -392,10 +401,10 @@ def _fit_quality(e: Ellipse, pts: npt.NDArray[np.float64]) -> tuple[float, float
     v = (-dx * np.sin(t) + dy * np.cos(t)) / (e.minor / 2)
     # 正規化後的殘差與橢圓大小無關，大小盤子可共用同一個門檻
     residual = float(np.abs(np.hypot(u, v) - 1).mean())
-    # 覆蓋：在單位圓上把每個點的角度（arctan2 範圍 [-π, π]）對應到 0…_COVERAGE_BINS 格，
+    # 覆蓋：在單位圓上把每個點的角度（arctan2 範圍 [-π, π]）對應到 0…n_bins 格，
     # 有點落入的格數比例即覆蓋率。角度恰為 π 時會算出等於格數的索引，以 clip 併入最後一格
-    bins = ((np.arctan2(v, u) + np.pi) / (2 * np.pi) * _COVERAGE_BINS).astype(int)
-    coverage = len(np.unique(np.clip(bins, 0, _COVERAGE_BINS - 1))) / _COVERAGE_BINS
+    bins = ((np.arctan2(v, u) + np.pi) / (2 * np.pi) * n_bins).astype(int)
+    coverage = len(np.unique(np.clip(bins, 0, n_bins - 1))) / n_bins
     return residual, coverage
 
 

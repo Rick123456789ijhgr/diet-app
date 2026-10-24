@@ -318,11 +318,35 @@ def test_preprocess_food_rejects_bad_input(bad):
         {"plate_min_contour_points": 4},
         {"vlm_jpeg_quality": 0},
         {"morph_px": -1},
+        {"bg_blur_ksize": 4},
+        {"plate_blur_ksize": 0},
+        {"plate_dilate_ksize": 0},
+        {"plate_coverage_bins": 3},
     ],
 )
 def test_config_validation(kwargs):
     with pytest.raises(ValueError):
         FoodConfig(**kwargs)
+
+
+def test_kernel_params_defaults_and_effect():
+    # 原本寫死在 food.py 的值（review C1）：預設不變
+    cfg = FoodConfig()
+    assert (cfg.bg_blur_ksize, cfg.plate_blur_ksize, cfg.plate_dilate_ksize) == (5, 5, 3)
+    assert cfg.plate_coverage_bins == 36
+    # 參數確實生效：1 表示不平滑／不膨脹，仍可正常執行
+    img, _ = food_scene(2, seed=0)
+    raw = FoodConfig(bg_blur_ksize=1, plate_blur_ksize=1, plate_dilate_ksize=1)
+    assert dish_foreground(img, raw).shape == dish_foreground(img).shape
+    detect_plate_ellipse(img, raw)
+    # 覆蓋格數：角度 0–100° 的點在 36 格中占 11 格（0–110°），在 4 格中占 2 格
+    from dietai.preprocess.food import _fit_quality
+
+    e = Ellipse(0.0, 0.0, 20.0, 20.0, 0.0)
+    t = np.radians(np.linspace(0, 100, 200))
+    pts = np.stack([10 * np.cos(t), 10 * np.sin(t)], axis=1)
+    assert _fit_quality(e, pts, 36)[1] == pytest.approx(11 / 36)
+    assert _fit_quality(e, pts, 4)[1] == pytest.approx(2 / 4)
 
 
 @pytest.mark.slow
