@@ -97,6 +97,31 @@ describe('品質檢查頁', () => {
     expect(within(alert).getByText(/Python 服務沒有回應/)).toBeInTheDocument()
   })
 
+  it('指標的通過與否取自後端警告，不由前端拿數值比門檻', async () => {
+    // 數值都在門檻內，但後端判定過暗：過暗比例要標 ✕，其餘標 ✓
+    server.use(
+      http.post('*/workbench/v1/dev/quality', () =>
+        HttpResponse.json({
+          passed: false,
+          blur_score: 900,
+          mean_brightness: 183,
+          dark_ratio: 0.05,
+          bright_ratio: 0,
+          resolution_ok: true,
+          warnings: ['TOO_DARK'],
+          steps: [],
+        }),
+      ),
+    )
+    renderAt('/m1/quality')
+    expect(await screen.findByText('未通過', {}, { timeout: 3000 })).toBeInTheDocument()
+    const mark = (label: string) => screen.getByText(label).parentElement!.textContent
+    expect(mark('過暗比例')).toContain('✕')
+    expect(mark('模糊分數')).toContain('✓')
+    expect(mark('過亮比例')).toContain('✓')
+    expect(mark('短邊')).toContain('✓')
+  })
+
   it('直方圖檢視標出門檻', async () => {
     const user = userEvent.setup()
     renderAt('/m1/quality')
