@@ -17,7 +17,8 @@ from dietai.synthetic import label_scene
     [
         ({"axis": "moon"}, "axis"),
         ({"axis": "blur_sigma", "lo": 5, "hi": 1}, "lo"),
-        ({"axis": "blur_sigma", "hi": 999}, "lo"),
+        ({"axis": "blur_sigma", "hi": 999}, "hi"),
+        ({"axis": "blur_sigma", "lo": -1, "hi": 999}, "lo"),
         ({"axis": "blur_sigma", "n": 2}, "n"),
         ({"axis": "blur_sigma", "lo": "x"}, "lo"),
     ],

@@ -43,6 +43,19 @@ def test_override_errors_name_the_field(override, field):
     assert info.value.field == field
 
 
+def test_field_in_matches_whole_identifiers():
+    from dietai.devtools.configs import _field_in
+
+    # a 是 a_max 的前綴：訊息只提到 a_max 時不可歸給 a（不論覆寫字典的順序）
+    assert _field_in("a_max 必須大於 0", {"a": 1, "a_max": 2}) == "a_max"
+    assert _field_in("a_max 必須大於 0", {"a_max": 2, "a": 1}) == "a_max"
+    # 欄位名緊接中文也找得到；多個欄位時取訊息中最早出現者
+    assert _field_in("須滿足 blur_min必須 ≤ x，dark_level", {"dark_level": 1, "blur_min": 2}) == (
+        "blur_min"
+    )
+    assert _field_in("沒有提到", {"a": 1}) is None
+
+
 def test_override_accepts_sequence_fields():
     cfg = config_from_override(LadderConfig, {"rungs": ["raw", "gray"], "scales": [2]})
     assert [r.value for r in cfg.rungs] == ["raw", "gray"]
@@ -137,6 +150,16 @@ def test_store_detached_derived_survives_eviction_pass():
         store.put(_img(), "filler")
     assert store.derived("barcode-sweep:1:3:0", "k") is None
     assert not store._detached
+
+
+def test_decode_image_rejects_too_many_pixels(monkeypatch):
+    from dietai.devtools import images
+
+    data = images.encode_png(np.zeros((20, 30, 3), dtype=np.uint8))
+    assert images.decode_image(data).shape == (20, 30, 3)
+    monkeypatch.setattr(images, "MAX_DECODE_PIXELS", 599)
+    with pytest.raises(ValueError, match="像素過多"):
+        images.decode_image(data)
 
 
 def test_store_encodes_jpeg_once():

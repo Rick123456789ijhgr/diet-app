@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import fields
 from typing import Any, TypeVar, cast, get_type_hints
 
@@ -98,8 +99,15 @@ def config_from_override(cls: type[C], override: str | dict[str, Any] | None) ->
 
 
 def _field_in(message: str, values: dict[str, Any]) -> str | None:
-    """在錯誤訊息中找第一個出現的覆寫欄位名稱；找不到回傳 ``None``。
+    """在錯誤訊息中找最早出現的覆寫欄位名稱；找不到回傳 ``None``。
 
-    以子字串比對，名稱互為前綴時（例如 ``a`` 與 ``a_max``）可能歸錯欄位（依覆寫字典的順序）。
+    以完整識別字比對（前後不得緊鄰英數字或底線），名稱互為前綴時（例如 ``a`` 與 ``a_max``）
+    不會把 ``a_max`` 的錯誤歸給 ``a``。不用 ``\\b``：Unicode 模式下中文也算 ``\\w``，
+    訊息中「blur_min必須…」之類緊接中文的欄位名會比對不到。
     """
-    return next((name for name in values if name in message), None)
+    best: tuple[int, str] | None = None
+    for name in values:
+        m = re.search(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])", message)
+        if m and (best is None or m.start() < best[0]):
+            best = (m.start(), name)
+    return best[1] if best else None
