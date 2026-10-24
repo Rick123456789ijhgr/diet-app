@@ -85,3 +85,36 @@ def test_pyzbar_corners_are_distinct_at_45_degrees():
     assert len({(round(x), round(y)) for x, y in hit.corners}) == 4
     assert hit.area == pytest.approx(5000, rel=0.01)
     assert hit.center == pytest.approx((50, 50), abs=0.5)
+
+
+def _fake_pyzbar(result):
+    from dietai.preprocess import PyzbarDecoder
+
+    decoder = PyzbarDecoder.__new__(PyzbarDecoder)  # 不載入 ZBar，直接替換解碼函式
+    decoder._decode = lambda gray: [result]
+    return decoder
+
+
+def test_pyzbar_empty_polygon_falls_back_to_rect():
+    from types import SimpleNamespace
+
+    result = SimpleNamespace(polygon=[], rect=(10, 20, 30, 40), type="EAN13", data=b"1")
+    (hit,) = _fake_pyzbar(result)(np.zeros((100, 100), dtype=np.uint8))
+    corners = tuple((round(x), round(y)) for x, y in hit.corners)
+    assert corners == ((10, 20), (40, 20), (40, 60), (10, 60))
+
+
+@pytest.mark.parametrize(
+    ("orientation", "first"),
+    [("UP", (0, 0)), (None, (0, 0)), ("RIGHT", (40, 0)), ("DOWN", (40, 20)), ("LEFT", (0, 20))],
+)
+def test_pyzbar_corners_follow_symbol_orientation(orientation, first):
+    from types import SimpleNamespace
+
+    rect = [SimpleNamespace(x=x, y=y) for x, y in ((0, 0), (40, 0), (40, 20), (0, 20))]
+    result = SimpleNamespace(polygon=rect, type="EAN13", data=b"1", orientation=orientation)
+    (hit,) = _fake_pyzbar(result)(np.zeros((50, 50), dtype=np.uint8))
+    # 條碼本身的左上角：由上往下讀（RIGHT）時落在影像右上，依此類推；四角仍依序繞行
+    corners = [(round(x), round(y)) for x, y in hit.corners]  # boxPoints 有浮點誤差
+    assert corners[0] == first
+    assert set(corners) == {(0, 0), (40, 0), (40, 20), (0, 20)}
