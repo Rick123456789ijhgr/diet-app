@@ -86,6 +86,20 @@ def test_judge_accepts_any_matching_hit(fake_decoder):
     assert judge(result, "4718652300015") is Outcome.CORRECT
 
 
+def test_judge_negative_ignores_unconfirmed_decodes(fake_decoder):
+    # 模組說明（review B2）：負樣本只看已確認（達 min_agree 票）的 hits，零星解碼不算誤報
+    cfg = LadderConfig(rungs=(Rung.RAW, Rung.GRAY, Rung.BINARIZE), min_agree=2)
+    result = decode_with_ladder(IMG, fake_decoder([[_hit("4710088410108")], [], []]), cfg)
+    assert any(a.hits for a in result.attempts) and not result.hits
+    assert judge(result, "") is Outcome.TRUE_NEGATIVE
+
+
+def test_evaluation_all_is_sorted():
+    import dietai.evaluation as evaluation
+
+    assert list(evaluation.__all__) == sorted(evaluation.__all__)
+
+
 # ---- 實驗組設定 ----
 
 
