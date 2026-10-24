@@ -113,12 +113,9 @@ export function FoodPage() {
   // 前景遮罩只在該分頁開啟時查詢；用目前參數（config 為 state，本身就是穩定物件）
   const mask = useRenderView(image?.image_id, 'food_mask', config, view === 'mask')
   // 尺寸試算沿用目前的 JPEG 品質（防抖後），讓表格與主分析可比較；結構未載入時暫用 85
-  const quality = food.schema
-    ? (valueOf(
-        food.schema.fields.find((f) => f.name === 'vlm_jpeg_quality')!,
-        debounced,
-      ) as number)
-    : 85
+  // 欄位不存在（後端改名）時同樣退回 85，不以 find(...)! 崩潰
+  const qualityField = food.schema?.fields.find((f) => f.name === 'vlm_jpeg_quality')
+  const quality = qualityField ? (valueOf(qualityField, debounced) as number) : 85
   // 每個候選長邊一個查詢；關掉切菜與盤緣，只算整張影像的縮放壓縮。
   // 查詢鍵含 image_id 與品質，換圖或改品質時重算；未設 placeholderData，重算期間表格顯示「…」。
   const sizes = useQueries({
@@ -192,8 +189,10 @@ export function FoodPage() {
           const truthBoxes = img.truth?.plate_boxes as Box[] | undefined
           // VLM 實際會收到的總大小：整張＋所有裁切
           const total = r.whole.num_bytes + r.crops.reduce((a, c) => a + c.num_bytes, 0)
-          // 盤緣步驟開啟時用主結果；關閉時改用試算結果（尚未回來則為空陣列）
-          const plates = r.plates_enabled ? r.plates : (plateTrial.shown?.data.plates ?? [])
+          // 盤緣步驟開啟時用主結果；關閉時改用試算結果。試算結果要屬於畫面上這張影像，
+          // 否則（換圖後試算尚未回來）為空陣列，不把舊影像的橢圓疊到新影像上
+          const trial = plateTrial.shown?.imageId === img.image_id ? plateTrial.shown : undefined
+          const plates = r.plates_enabled ? r.plates : (trial?.data.plates ?? [])
           const readout = (
             <>
               <StatusCard

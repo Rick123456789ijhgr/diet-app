@@ -39,7 +39,7 @@ import {
 import { ToolPanel } from '@/components/ToolPanel'
 import { Badge, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
-import { useAnalysis } from '@/hooks/useAnalysis'
+import { useAnalysis, usePairedResult } from '@/hooks/useAnalysis'
 import { useConfigClass, useConfigSchemas } from '@/hooks/useConfigSchemas'
 import { syntheticSource, useImagePipeline } from '@/hooks/useImagePipeline'
 import { useRenderView } from '@/hooks/useRenderView'
@@ -134,8 +134,10 @@ export function BarcodePage() {
     enabled: mode === 'barcode',
   })
 
+  // 與 AnalysisFrame 相同的影像與結果配對：換圖期間嘗試選單與畫面上的結果才會是同一組
+  const pair = usePairedResult(analysis.shown, image)
   // shown 在計算中或出錯時沿用上一次結果，可能還是切換前模式的結果，所以要比對 mode
-  const result = analysis.shown?.data
+  const result = pair?.result.data
   const attempts: RungAttempt[] = result && result.mode === mode ? result.data.attempts : []
   // 預設顯示成功的那一次；發票模式或全部失敗時顯示最後一次
   const defaultAttempt =
@@ -147,14 +149,16 @@ export function BarcodePage() {
     0,
     Math.min(attempt ?? defaultAttempt, Math.max(0, attempts.length - 1)),
   )
+  // 各階影像用算出這組嘗試的影像與階梯參數（不是畫面上最新的），序號才會對得上
+  const pairedLadder = (pair?.result.config as LadderBody | undefined)?.ladder
   // 物件要穩定，否則每次重繪都會重設防抖計時器
   const variantConfig = useMemo(
-    () => ({ ladder: body.ladder, index: shownAttempt }),
-    [body.ladder, shownAttempt],
+    () => ({ ladder: pairedLadder ?? {}, index: shownAttempt }),
+    [pairedLadder, shownAttempt],
   )
   // 只在「各階影像」分頁且已有嘗試紀錄時查詢
   const variant = useRenderView(
-    image?.image_id,
+    pair?.image.image_id,
     'ladder_variant',
     variantConfig,
     view === 'rung' && attempts.length > 0,
@@ -267,8 +271,8 @@ export function BarcodePage() {
             r.mode === 'barcode'
               ? r.data.hits.map((h) => h.text)
               : ([r.data.left && 'L', r.data.right && 'R'].filter(Boolean) as string[])
-          // 只用原圖的對照結果；還沒回來或不是條碼結果時顯示「…」
-          const base = baseline.shown?.data
+          // 只用原圖的對照結果；還沒回來、不是這張影像的結果或不是條碼結果時顯示「…」
+          const base = baseline.shown?.imageId === img.image_id ? baseline.shown.data : undefined
           const readout = (
             <>
               {/* 讀數欄：條碼與發票的狀態卡、指標不同，解碼結果表共用 */}
@@ -445,7 +449,7 @@ export function BarcodePage() {
                           onChange={(e) => setAttempt(Number(e.target.value))}
                           className="border-card-border bg-card h-7 rounded-lg border px-2 text-xs"
                         >
-                          {r.data.attempts.map((a, i) => (
+                          {attempts.map((a, i) => (
                             <option key={i} value={i}>
                               #{i + 1} {rungText(a.rung)}
                             </option>

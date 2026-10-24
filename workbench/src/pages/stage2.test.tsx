@@ -82,6 +82,65 @@ describe('條碼頁', () => {
   })
 })
 
+describe('影像與結果配對（條碼、食物）', () => {
+  it('條碼：換圖後只用原圖的對照尚未回來時顯示「…」，不沿用舊影像的結果', async () => {
+    const { http, delay } = await import('msw')
+    const { server } = await import('@/test/server')
+    server.use(
+      http.post('*/workbench/v1/dev/barcode', async ({ request }) => {
+        const body = (await request.clone().json()) as {
+          image_id: string
+          ladder?: { rungs?: string[] }
+        }
+        // 新影像的對照組一直不回來
+        if (body.image_id.endsWith('-deg') && body.ladder?.rungs?.length === 1) {
+          await delay('infinite')
+        }
+        return undefined
+      }),
+    )
+    const user = userEvent.setup()
+    renderAt('/m1/barcode')
+    expect(await screen.findByText(/只用原圖：失敗/, {}, WAIT)).toBeInTheDocument()
+    const sigma = screen.getByLabelText('模糊 σ', { selector: 'input' })
+    await user.clear(sigma)
+    await user.type(sigma, '4')
+    expect(await screen.findByText(/只用原圖：…/, {}, WAIT)).toBeInTheDocument()
+  })
+
+  it('食物：換圖後盤緣試算尚未回來時，不把舊影像的橢圓疊到新影像', async () => {
+    const { http, delay } = await import('msw')
+    const { server } = await import('@/test/server')
+    server.use(
+      http.post('*/workbench/v1/dev/food', async ({ request }) => {
+        const body = (await request.clone().json()) as {
+          image_id: string
+          config?: { enable_plate?: boolean }
+        }
+        if (body.image_id.includes('seed1') && body.config?.enable_plate) await delay('infinite')
+        return undefined
+      }),
+    )
+    const user = userEvent.setup()
+    renderAt('/m1/food')
+    await screen.findByText('處理完成', {}, WAIT)
+    await user.click(screen.getByRole('radio', { name: /盤緣/ }))
+    expect(await screen.findByRole('table', { name: '找到的盤緣橢圓' }, WAIT)).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('種子'))
+    await user.type(screen.getByLabelText('種子'), '1')
+    // 新影像的主結果回來後，舊影像的試算橢圓不再顯示
+    await waitFor(
+      () => expect(screen.queryByRole('table', { name: '找到的盤緣橢圓' })).not.toBeInTheDocument(),
+      WAIT,
+    )
+    expect(
+      bodies('/workbench/v1/dev/food').some((b) =>
+        (b as { image_id: string }).image_id.includes('seed1'),
+      ),
+    ).toBe(true)
+  })
+})
+
 describe('營養標示頁', () => {
   it('與合成真值比較四角誤差', async () => {
     renderAt('/m1/label')
