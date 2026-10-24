@@ -46,6 +46,9 @@ describe('設定覆寫', () => {
     ['{"nope": 1}', '沒有欄位 nope'],
     ['{"min_short_side": 1.5}', 'min_short_side 必須是 int'],
     ['{"blur_min": "x"}', 'blur_min 必須是 float'],
+    ['{"values": null}', 'values 必須是物件'],
+    ['{"values": [1]}', 'values 必須是物件'],
+    ['{"class": "QualityConfig", "values": 3}', 'values 必須是物件'],
   ])('匯入 %s 時報錯', (text, message) => {
     expect(() => importJson(qualitySchema, text)).toThrow(ConfigImportError)
     expect(() => importJson(qualitySchema, text)).toThrow(message)
@@ -91,6 +94,10 @@ describe('序列欄位與位元組、幾何', () => {
     )
     expect(importJson(ladderSchema, '{"rungs": ["raw"]}')).toEqual({ rungs: ['raw'] })
     expect(() => importJson(ladderSchema, '{"rungs": "raw"}')).toThrow('rungs 必須是陣列')
+    // 字串中的單引號與反斜線要跳脫，產生的 Python 字面值才合法
+    expect(pythonCtor(ladderSchema, setSequence(ladderSchema, {}, 'rungs', ["a'b\\c"]))).toBe(
+      "LadderConfig(rungs=('a\\'b\\\\c',))",
+    )
   })
 
   it('位元組顯示', async () => {
