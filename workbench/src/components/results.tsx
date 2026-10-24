@@ -34,6 +34,8 @@ export function AnalysisFrame<T>({
   const pair = useLastDefined(
     shown && image && shown.imageId === image.image_id ? { result: shown, image } : undefined,
   )
+  // 「致命」錯誤：原圖或劣化圖本身取得失敗。INVALID_CONFIG（參數不合法）不算，
+  // 那類錯誤只需提示使用者修正欄位，結果區仍保留上一次的結果。
   const fatal = [pipeline.base.error, pipeline.degraded.error].find(
     (e) => e && !(e instanceof ApiError && e.code === 'INVALID_CONFIG'),
   )
@@ -44,6 +46,7 @@ export function AnalysisFrame<T>({
       </EmptyState>
     )
   }
+  // 還沒有任何一組可顯示的結果：有錯誤就顯示錯誤（此時沒有舊結果可淡化），否則顯示載入中
   if (!pair || !ready) {
     const err = fatal ?? query.error
     return err ? (
@@ -54,6 +57,7 @@ export function AnalysisFrame<T>({
       <EmptyState>載入中…</EmptyState>
     )
   }
+  // 已有結果時，錯誤顯示在上方：參數錯誤（configError）另附修正提示，其餘錯誤歸為 other，兩者不重複顯示
   const other = fatal ?? (query.error && !configError ? query.error : undefined)
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -66,6 +70,7 @@ export function AnalysisFrame<T>({
       <div
         className={cn(
           'min-h-0 flex-1 transition-opacity',
+          // 淡化條件：查詢進行中或出錯（stale），或目前顯示的這組不是最新影像／最新結果（仍在沿用舊配對）
           (stale || pair.image !== image || pair.result !== shown) && 'opacity-60',
         )}
       >
@@ -75,6 +80,7 @@ export function AnalysisFrame<T>({
   )
 }
 
+/** 結果狀態的語氣：通過／警告／失敗，對應綠、琥珀、紅與不同圖示。 */
 export type Tone = 'ok' | 'warn' | 'bad'
 
 /**
@@ -108,12 +114,14 @@ export function StatusCard({
         >
           <Icon className="size-[18px]" aria-hidden />
         </span>
+        {/* role="status"（隱含 aria-live=polite）：結果標題改變時螢幕閱讀器會朗讀，不打斷使用者 */}
         <span className="text-[16px] font-semibold" role="status">
           {title}
         </span>
       </div>
       {badges && <div className="mt-3 flex flex-wrap gap-1">{badges}</div>}
       <ul className="text-muted mt-3 space-y-0.5 text-xs">
+        {/* 以文字內容當 key：同一張卡內的說明行預期不重複 */}
         {detail.map((d) => (
           <li key={d} className="tabular break-all">
             {d}
@@ -124,7 +132,10 @@ export function StatusCard({
   )
 }
 
-/** 警告代碼的徽章（中文）。 */
+/**
+ * 警告代碼的徽章（中文）。codes 為後端回傳的英文警告代碼（如 `TOO_BLURRY`），
+ * 經 warningText 轉成中文顯示；tone 預設紅色，accent 用於較輕微的提示。
+ */
 export function WarningBadges({
   codes,
   tone = 'danger',
@@ -146,6 +157,7 @@ export function WarningBadges({
 /** 讀數小卡的排列：讀數欄裡兩欄、主檢視裡依寬度增加欄數。 */
 export function MetricGrid({ children }: { children: ReactNode }) {
   return (
+    // auto-fill＋minmax(120px,1fr)：每張卡至少 120px，欄數依容器寬度自動決定，不必寫斷點
     <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2">{children}</div>
   )
 }
@@ -153,6 +165,8 @@ export function MetricGrid({ children }: { children: ReactNode }) {
 /**
  * 一張讀數小卡：標籤、大數字，下方為與門檻的差距（綠 ✓／紅 ✕ 小膠囊）；
  * good 為 undefined 時差距不上色。
+ * value、delta 皆為呼叫端格式化好的字串（數字由後端決定，這裡只負責顯示）；
+ * help 以原生 title 顯示說明，長文字被截斷時 delta 也以 title 顯示全文。
  */
 export function Metric({
   label,
@@ -187,6 +201,7 @@ export function Metric({
                 'inline-flex h-4.5 shrink-0 items-center rounded-full px-1.5 font-medium',
                 good ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger',
               )}
+              // ✓／✕ 只是視覺輔助，對螢幕閱讀器隱藏；判讀依據是旁邊的 delta 文字
               aria-hidden
             >
               {good ? '✓' : '✕'}
@@ -199,6 +214,11 @@ export function Metric({
   )
 }
 
+/**
+ * 錯誤框（role="alert"，出現時螢幕閱讀器立即朗讀）。
+ * error 為後端的 ApiError 時，標題顯示錯誤代碼的中文與出錯欄位，內文為後端訊息；
+ * 其他例外（例如網路錯誤）標題為「發生錯誤」，內文為 String(error)。hint 附在內文後方。
+ */
 export function ErrorBox({
   error,
   hint,
@@ -223,7 +243,7 @@ export function ErrorBox({
   )
 }
 
-/** 圖例：色塊＋文字。 */
+/** 圖例：色塊＋文字（疊圖用，例如「找到」／「真值」）。label 同時作為 key，須唯一。 */
 export function Legend({ items }: { items: { color: string; label: string }[] }) {
   return (
     <p className="text-muted mt-2 flex flex-wrap gap-4 text-xs">
@@ -237,7 +257,10 @@ export function Legend({ items }: { items: { color: string; label: string }[] })
   )
 }
 
-/** 簡單表格（中文表頭）。 */
+/**
+ * 簡單表格（中文表頭）。rows 為二維陣列，每格可放任意 ReactNode；
+ * 列與格以索引為 key（表格內容為靜態顯示、不重新排序）。label 作為表格的 aria-label。
+ */
 export function DataTable({
   label,
   columns,

@@ -2,6 +2,10 @@
 //
 // 開發工具（/workbench/v1/dev/*）只在 WORKBENCH_DEV_TOOLS=1 時啟用；
 // 冷啟動上傳與登入於階段 5 加入（ADR 0003）。
+//
+// 分層：handler.go（HTTP 轉接、錯誤輸出）→ Service（REST 型別 ↔ proto 型別）→ AIClient（gRPC）。
+// Go 不做影像處理，只負責參數轉換、錯誤代碼轉換（errors.go）與 SSE 串流（stream.go）。
+// Service 回傳的錯誤保持原樣（*aiclient.Error 或 *Error），由 handler 統一轉成 HTTP 狀態。
 package workbench
 
 import (
@@ -24,11 +28,13 @@ type Service struct {
 	ai AIClient
 }
 
+// NewService 以 Python 客戶端建立 Service。
 func NewService(ai AIClient) *Service {
 	return &Service{ai: ai}
 }
 
 // ConfigSchemas 回傳參數表單結構（由 Python 的 param() 宣告產生）。
+// 結構以 JSON 字串經 gRPC 傳遞，新增或修改參數欄位不必改 proto（ADR 0003 第 4 點）。
 func (s *Service) ConfigSchemas(ctx context.Context) (api.ConfigSchemas, error) {
 	var out api.ConfigSchemas
 	resp, err := s.ai.GetConfigSchemas(ctx, &dietaiv1.GetConfigSchemasRequest{})
@@ -41,7 +47,7 @@ func (s *Service) ConfigSchemas(ctx context.Context) (api.ConfigSchemas, error) 
 	return out, nil
 }
 
-// PutImage 暫存一張影像。
+// PutImage 暫存一張影像。暫存在 Python 端，之後的呼叫只帶 image_id，不再重傳影像本體。
 func (s *Service) PutImage(ctx context.Context, name string, encoded []byte) (api.ImageRef, error) {
 	resp, err := s.ai.PutImage(ctx, &dietaiv1.PutImageRequest{Encoded: encoded, Name: name})
 	if err != nil {
@@ -80,7 +86,7 @@ func (s *Service) Degrade(ctx context.Context, imageID string, d api.ConfigOverr
 	return imageRef(resp.GetImage())
 }
 
-// RenderView 產生診斷影像（Image）或圖表資料（Data）。
+// RenderView 產生診斷影像（Image）或圖表資料（Data）；依視圖種類兩者可能只有其一，沒有的欄位省略。
 func (s *Service) RenderView(ctx context.Context, req api.RenderViewRequest) (api.RenderViewResult, error) {
 	var out api.RenderViewResult
 	cfg, err := overrideJSON(req.Config)
@@ -107,6 +113,7 @@ func (s *Service) RenderView(ctx context.Context, req api.RenderViewRequest) (ap
 }
 
 // Artifact 取得暫存影像或診斷影像的編碼位元組與 content type。
+// 整張影像一次讀進記憶體；大小受 gRPC 訊息上限（aiclient.MaxMessageBytes）限制。
 func (s *Service) Artifact(ctx context.Context, id string) ([]byte, string, error) {
 	resp, err := s.ai.GetArtifact(ctx, &dietaiv1.GetArtifactRequest{Id: id})
 	if err != nil {
@@ -145,6 +152,7 @@ func (s *Service) CheckQuality(ctx context.Context, req api.ConfigRequest) (api.
 	}, nil
 }
 
+// imageRef 轉換暫存影像的參照；Truth 為合成影像的真值（實拍照片沒有，為 nil）。
 func imageRef(ref *dietaiv1.ImageRef) (api.ImageRef, error) {
 	truth, err := freeJSON(ref.GetTruthJson())
 	if err != nil {
@@ -159,6 +167,8 @@ func imageRef(ref *dietaiv1.ImageRef) (api.ImageRef, error) {
 	}, nil
 }
 
+// stepList 轉換前處理各步驟的紀錄（名稱、耗時、實際使用的參數），供工作台顯示流程。
+// 參數 JSON 解析失敗表示 Python 回傳格式有誤，視為內部錯誤（500）。
 func stepList(steps []*dietaiv1.Step) ([]api.Step, error) {
 	out := make([]api.Step, 0, len(steps))
 	for _, s := range steps {
@@ -181,6 +191,7 @@ func overrideJSON(o *api.ConfigOverride) (string, error) {
 	return objectJSON((*map[string]any)(o))
 }
 
+// objectJSON 把選填的 JSON 物件編成字串；nil 或空物件都回傳空字串，與「沒有覆寫」同義。
 func objectJSON(m *map[string]any) (string, error) {
 	if m == nil || len(*m) == 0 {
 		return "", nil

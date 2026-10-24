@@ -6,9 +6,17 @@ import type { Box, Ellipse, Point } from '@/api/client'
 export const FOUND = 'var(--series-1)'
 export const TRUTH = 'var(--series-2)'
 
+// 共用線條樣式：non-scaling-stroke 讓線寬固定為 2 個螢幕像素，不隨 ImageViewer 的縮放變粗變細；
+// fill none 只畫外框，不遮住底下的影像
 const STROKE = { vectorEffect: 'non-scaling-stroke' as const, strokeWidth: 2, fill: 'none' }
 
-/** 四邊形（例如條碼四角、標示表格框）；左上角以實心圓標示方向。 */
+/**
+ * 四邊形（例如條碼四角、標示表格框）；左上角以實心圓標示方向。
+ * - points：影像座標的頂點，依序連成多邊形；第一點視為「左上角」，畫實心圓並把標籤放在它旁邊。
+ * - px：一個螢幕像素等於幾個影像像素；圓點半徑、標籤位移都乘上 px，維持固定的螢幕大小。
+ * - dashed：虛線（慣例上用於真值 TRUTH）。
+ * 沒有頂點時不渲染。
+ */
 export function Quad({
   points,
   color,
@@ -40,6 +48,7 @@ export function Quad({
   )
 }
 
+/** 軸對齊矩形（例如食物偵測框）；box 為影像座標的左上角與寬高，標籤放在框內左上角。 */
 export function Rect({
   box,
   color,
@@ -69,6 +78,10 @@ export function Rect({
   )
 }
 
+/**
+ * 旋轉橢圓（例如盤子輪廓）＋中心點。major／minor 為長、短軸「全長」，所以半徑要除以 2。
+ * 以 SVG rotate(angle cx cy) 繞中心旋轉；rotate 的單位是「度」，angle 須為度（規格未註明單位）。
+ */
 export function EllipseShape({
   e,
   color,
@@ -96,6 +109,10 @@ export function EllipseShape({
   )
 }
 
+/**
+ * 疊圖文字標籤。字級與描邊都乘上 px，維持固定螢幕大小；
+ * paintOrder="stroke" 先畫描邊再畫填色，形成一圈 halo（--overlay-halo），在任何底色的影像上都看得清楚。
+ */
 function Label({
   x,
   y,

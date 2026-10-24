@@ -3,6 +3,7 @@ import createClient from 'openapi-fetch'
 
 import type { components, paths } from './gen/workbench'
 
+// 常用 schema 的簡短別名，元件一律從這裡 import，不直接引用 gen/
 export type Schemas = components['schemas']
 export type ImageRef = Schemas['ImageRef']
 export type ConfigClass = Schemas['ConfigClass']
@@ -37,10 +38,12 @@ export type ConflictError = Schemas['ConflictError']
 export type NutritionIssue = Schemas['NutritionIssue']
 /** 設定覆寫的值：表單欄位為數字或布林；序列欄位（例如 LadderConfig.rungs）為陣列 */
 export type OverrideValue = number | boolean | string | (string | number)[]
+/** 設定覆寫：只含與預設值不同的欄位（見 lib/config.ts），原樣以 JSON 送給後端 */
 export type ConfigOverride = Record<string, OverrideValue>
 
 // 用絕對網址：瀏覽器與測試環境（jsdom）都能用；開發時由 Vite 代理轉給 Go。
 // fetch 在呼叫時才取用，測試中的 MSW 才攔截得到。
+/** 型別安全的 Go API 客戶端（openapi-fetch）；路徑與請求、回應型別都由 paths 檢查。搭配 unwrap 取出結果。 */
 export const api = createClient<paths>({
   baseUrl: globalThis.location?.origin ?? '',
   fetch: (request) => globalThis.fetch(request),
@@ -66,19 +69,26 @@ export class ApiError extends Error {
   }
 }
 
+// openapi-fetch 回傳的結構（只取這裡用得到的欄位）
 type FetchResult<T> = { data?: T; error?: unknown; response: Response }
 
-/** 取出 openapi-fetch 的結果；失敗時丟 ApiError。 */
+/**
+ * 取出 openapi-fetch 的結果；失敗時丟 ApiError。
+ * openapi-fetch 對 HTTP 錯誤不會丟例外，而是放在 error；這裡統一轉成例外，React Query 才會把查詢標成失敗。
+ */
 export async function unwrap<T>(promise: Promise<FetchResult<T>>): Promise<T> {
   let result: FetchResult<T>
   try {
     result = await promise
   } catch (err) {
+    // 取消（signal）原樣丟出，React Query 會當成取消而不是錯誤；其他例外（連不上伺服器）視為網路錯誤，status 為 0
     if (err instanceof DOMException && err.name === 'AbortError') throw err
     throw new ApiError(0, 'NETWORK', err instanceof Error ? err.message : String(err))
   }
   const { data, error, response } = result
+  // data 為 undefined 也視為失敗（例如成功狀態卻沒有內容），避免呼叫端拿到 undefined
   if (response.ok && data !== undefined) return data
+  // 錯誤回應不是預期的 Error 格式時（例如代理回的 HTML），退回依 HTTP 狀態推定代碼
   const body = (error ?? {}) as Partial<Schemas['Error']>
   throw new ApiError(
     response.status,

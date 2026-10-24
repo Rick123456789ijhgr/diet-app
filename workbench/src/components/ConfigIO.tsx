@@ -6,6 +6,11 @@ import type { ConfigClass, ConfigOverride } from '@/api/client'
 import { Button } from '@/components/ui/primitives'
 import { ConfigImportError, exportJson, importJson, pythonCtor } from '@/lib/config'
 
+/**
+ * 設定的匯出入。
+ * - schema／overrides：目前的設定結構與覆寫；匯出內容每次渲染由兩者推導，不另存狀態。
+ * - onImport：匯入成功後回傳新的覆寫（取代目前的覆寫）。
+ */
 export function ConfigIO({
   schema,
   overrides,
@@ -20,6 +25,8 @@ export function ConfigIO({
   const [text, setText] = useState('')
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
+  // importJson 會檢查 JSON 格式、類別名稱與欄位型別，不合法時丟 ConfigImportError（訊息已是中文）；
+  // 其他非預期例外只顯示通用訊息
   const doImport = () => {
     try {
       const o = importJson(schema, text)
@@ -45,6 +52,7 @@ export function ConfigIO({
         <CodeBlock text={json} />
         <Button
           size="sm"
+          // 以 Blob URL＋暫時的 <a download> 觸發下載（不需後端）；點擊後立即釋放 URL，避免記憶體洩漏
           onClick={() => {
             const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
             const a = document.createElement('a')
@@ -72,6 +80,7 @@ export function ConfigIO({
           匯入
         </Button>
         {message && (
+          // role="status"：匯入結果出現時螢幕閱讀器會朗讀
           <p className={message.ok ? 'text-ok text-xs' : 'text-danger text-xs'} role="status">
             {message.text}
           </p>
@@ -81,6 +90,7 @@ export function ConfigIO({
   )
 }
 
+/** 唯讀程式碼區塊＋右上角複製按鈕；複製成功後圖示短暫（1.2 秒）變成打勾。 */
 function CodeBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (

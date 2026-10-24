@@ -1,4 +1,9 @@
-"""模擬退化設定，實際運算全部呼叫 ``dietai.synthetic``。"""
+"""模擬退化設定，實際運算全部呼叫 ``dietai.synthetic``。
+
+``Degradation`` 與前處理設定走同一套流程：以 ``param()`` 宣告欄位（列在
+``schema.SCHEMA_CLASSES``，自動產生表單），前端送來的覆寫經 ``configs.config_from_override``
+驗證。``SWEEP_AXES`` 則定義參數掃描（``sweep``）可選的退化種類。
+"""
 
 from __future__ import annotations
 
@@ -99,6 +104,7 @@ class Degradation:
     )
 
     def __post_init__(self) -> None:
+        """只擋會讓退化函式出錯或無意義的值；``param()`` 的 min／max 只用於表單，不在此強制。"""
         if not 0 < self.scale <= 1:
             raise ValueError(f"scale 必須介於 0（不含）與 1，收到 {self.scale}")
         for name in ("blur_sigma", "gain", "gradient", "glare", "noise_std", "seed"):
@@ -106,6 +112,7 @@ class Degradation:
                 raise ValueError(f"{name} 不得為負，收到 {getattr(self, name)}")
 
     def is_identity(self) -> bool:
+        """是否不做任何退化（只改種子不算）；server 端據此直接回傳原圖，不另存一份。"""
         return self.active_count() == 0
 
     def active_count(self) -> int:
@@ -118,7 +125,12 @@ class Degradation:
 
 
 def apply(img: Image, d: Degradation) -> Image:
-    """依序套用退化；回傳新陣列。"""
+    """依序套用退化；回傳新陣列。
+
+    順序固定為：旋轉 → 縮小 → 模糊 → 亮度 → 梯度 → 光斑 → 雜訊（同欄位順序）。
+    值為預設值的項目整個跳過，未啟用的退化不會碰到影像；光斑與雜訊共用 ``seed``，
+    相同參數產生相同結果。
+    """
     out = img.copy()
     if d.rotate_deg:
         out = synthetic.rotate(out, d.rotate_deg)
@@ -139,14 +151,17 @@ def apply(img: Image, d: Degradation) -> Image:
 
 @dataclass(frozen=True)
 class SweepAxis:
-    """參數掃描的一個維度。"""
+    """參數掃描的一個維度。
+
+    ``fn(影像, 等級)`` 只收兩個參數，因此光斑與雜訊使用 ``synthetic`` 函式的預設種子。
+    """
 
     label: str  # 中文
     label_en: str
-    lo: float
-    hi: float
-    default_lo: float
-    default_hi: float
+    lo: float  # 允許的範圍下限（sweep.parse_axis 檢查）
+    hi: float  # 允許的範圍上限
+    default_lo: float  # 前端未指定時的掃描起點
+    default_hi: float  # 前端未指定時的掃描終點
     fn: Callable[[Image, float], Image]
 
 
@@ -172,7 +187,10 @@ SWEEP_AXES: dict[str, SweepAxis] = {
 
 
 def first_trigger(levels: list[float], warnings: list[str], code: str) -> float | None:
-    """掃描結果中第一個出現 ``code`` 警告的等級；都沒有則回傳 ``None``。"""
+    """掃描結果中第一個出現 ``code`` 警告的等級；都沒有則回傳 ``None``。
+
+    ``warnings`` 每個元素是該等級以「, 」串接的警告代碼（``sweep.quality_sweep`` 產生）。
+    """
     for level, codes in zip(levels, warnings, strict=True):
         if code in codes.split(", "):
             return level

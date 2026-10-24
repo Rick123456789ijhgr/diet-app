@@ -23,6 +23,7 @@ import (
 // MaxUploadBytes 是上傳影像的上限，與 gRPC 訊息上限一致。
 const MaxUploadBytes = aiclient.MaxMessageBytes - 1<<20 // 留 1 MB 給其他欄位
 
+// devPrefix 是開發工具路由的前綴；Options.DevTools 為 false 時，NewHTTPHandler 在進入路由前就擋下。
 const devPrefix = "/workbench/v1/dev/"
 
 // Options 設定工作台路由。
@@ -38,6 +39,10 @@ type Options struct {
 }
 
 // NewHTTPHandler 回傳 /workbench/v1/* 的 HTTP handler。
+//
+// 組成由外而內：開發工具開關 → 讀取工作階段 Cookie（withSession）→ oapi-codegen 產生的路由
+// （路徑、查詢參數驗證）→ strict server（解析 JSON／multipart 本文）→ handler → Service。
+// 所有錯誤統一輸出 {"code","message","field"}，與成功回應一樣由 OpenAPI 規格定義。
 func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 	logger := opts.Logger
 	if logger == nil {
@@ -48,9 +53,12 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 		h.cs = coldstart.NewService(nil, nil, nil, logger) // 所有操作回 ErrUnavailable
 	}
 	strict := api.NewStrictHandlerWithOptions(h, nil, api.StrictHTTPServerOptions{
+		// 請求本文無法解析（JSON 格式錯誤、multipart 標頭錯誤等）一律 400
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), ""})
 		},
+		// handler 回傳的 error 都會到這裡：轉成 HTTP 狀態與錯誤代碼（見 toError），只有 5xx 記錄日誌。
+		// 產生的程式碼在 Visit*Response（例如 SSE 寫出）失敗時也會呼叫這裡。
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			e := toError(err)
 			// 使用者取消（換參數、離開頁面）與「沒有設定資料庫」（設定問題，回應已說明）不記成錯誤
@@ -68,10 +76,12 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 	})
 	routes := api.HandlerWithOptions(strict, api.StdHTTPServerOptions{
 		BaseRouter: mux,
+		// 路徑或查詢參數綁定失敗（例如型別不符）時呼叫
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			writeError(w, &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), ""})
 		},
 	})
+	// 開發工具開關放在最外層：關閉時連請求本文都不解析，也不查詢工作階段
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, devPrefix) && !opts.DevTools {
 			writeError(w, errDevToolsOff)
@@ -89,7 +99,11 @@ type handler struct {
 	secureCookie bool
 }
 
+// 編譯期檢查：OpenAPI 規格新增操作而 handler 未實作時，這裡會編譯失敗。
 var _ api.StrictServerInterface = (*handler)(nil)
+
+// 以下各方法的 ctx 即 r.Context()：使用者中止請求（換參數、離開頁面）時會被取消，
+// 進行中的 gRPC 呼叫也隨之取消。單次呼叫的逾時由 aiclient 補上（預設 30 秒），參數掃描另見 sweepTimeout。
 
 func (h *handler) GetConfigSchemas(ctx context.Context, _ api.GetConfigSchemasRequestObject) (api.GetConfigSchemasResponseObject, error) {
 	out, err := h.svc.ConfigSchemas(ctx)
@@ -99,6 +113,7 @@ func (h *handler) GetConfigSchemas(ctx context.Context, _ api.GetConfigSchemasRe
 	return api.GetConfigSchemas200JSONResponse(out), nil
 }
 
+// PutImage 接收 multipart 上傳的影像，交給 Python 暫存並回傳 image_id。
 func (h *handler) PutImage(ctx context.Context, req api.PutImageRequestObject) (api.PutImageResponseObject, error) {
 	name, data, err := readUpload(req.Body)
 	if err != nil {
@@ -135,6 +150,7 @@ func (h *handler) RenderView(ctx context.Context, req api.RenderViewRequestObjec
 	return api.RenderView200JSONResponse(out), nil
 }
 
+// GetArtifact 回傳影像位元組而非 JSON，因此使用自訂的 artifactResponse。
 func (h *handler) GetArtifact(ctx context.Context, req api.GetArtifactRequestObject) (api.GetArtifactResponseObject, error) {
 	data, contentType, err := h.svc.Artifact(ctx, req.ArtifactId)
 	if err != nil {
@@ -193,6 +209,9 @@ func (h *handler) RunSweep(ctx context.Context, req api.RunSweepRequestObject) (
 	return api.RunSweep200JSONResponse(out), nil
 }
 
+// RunBatch 與 StartE1Run 回傳 SSE 串流。Service 已先收下第一筆（見 openStream），
+// 因此一開始就失敗的情況仍以一般 HTTP 錯誤回應；串流開始後的錯誤改以 event: error 回報。
+// 串流沒有額外期限，持續到 Python 結束或使用者中止請求（ctx 取消）。
 func (h *handler) RunBatch(ctx context.Context, req api.RunBatchRequestObject) (api.RunBatchResponseObject, error) {
 	events, err := h.svc.RunBatch(ctx, *req.Body)
 	if err != nil {
@@ -231,6 +250,7 @@ type artifactResponse struct {
 	contentType string
 }
 
+// VisitGetArtifactResponse 寫出影像；回傳的錯誤（通常是使用者已離開）交給 ResponseErrorHandlerFunc。
 func (r artifactResponse) VisitGetArtifactResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", r.contentType)
 	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
@@ -244,6 +264,8 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 	if mr == nil {
 		return "", nil, &Error{http.StatusBadRequest, "IMAGE_REQUIRED", "缺少影像檔", "file"}
 	}
+	// 產生的程式碼提供串流式的 multipart.Reader，這裡逐段讀取；
+	// 只有 file 與 name 兩段會讀進記憶體，且都以 LimitReader 限制大小，其餘欄位略過。
 	var name string
 	var data []byte
 	for {
@@ -256,6 +278,7 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 		}
 		switch part.FormName() {
 		case "file":
+			// 多讀 1 位元組：讀到的長度超過上限即表示檔案過大，不必讀完整個本文
 			data, err = io.ReadAll(io.LimitReader(part, MaxUploadBytes+1))
 			if err != nil {
 				return "", nil, &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), "file"}
@@ -264,10 +287,12 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 				return "", nil, &Error{http.StatusRequestEntityTooLarge, "IMAGE_TOO_LARGE",
 					fmt.Sprintf("影像檔超過 %d MB", MaxUploadBytes>>20), "file"}
 			}
+			// 明確的 name 欄位優先；沒有時才用上傳檔名
 			if name == "" {
 				name = part.FileName()
 			}
 		case "name":
+			// 顯示用名稱，只取前 256 位元組
 			b, _ := io.ReadAll(io.LimitReader(part, 256))
 			name = string(b)
 		}
@@ -279,6 +304,7 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 	return name, data, nil
 }
 
+// deref 把選填的查詢參數轉成字串；未提供時為空字串（交給 Python 用預設值）。
 func deref(s *string) string {
 	if s == nil {
 		return ""
@@ -287,6 +313,7 @@ func deref(s *string) string {
 }
 
 // canceled 判斷請求是否因使用者取消而失敗（瀏覽器中止請求後，呼叫 Python 會以 Canceled 結束）。
+// 三種情況都算：錯誤本身是 context.Canceled、請求的 context 已取消，或 Python 回傳 gRPC Canceled。
 func canceled(r *http.Request, err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(r.Context().Err(), context.Canceled) {
 		return true

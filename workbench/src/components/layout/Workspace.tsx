@@ -10,9 +10,15 @@ import type { ReactNode } from 'react'
 
 import { cn } from '@/lib/cn'
 
+// 左側控制面板與右側讀數欄的固定寬度（px）；中間主檢視吃掉剩餘寬度
 export const PANEL_WIDTH = 312
 export const READOUT_WIDTH = 296
 
+/**
+ * 工具頁的外層版面：左側控制面板卡（panel，通常是 ToolPanel）＋右側「標題列＋內容」。
+ * 控制面板自行捲動（overflow-y-auto），內容區撐滿剩餘高度，整頁不捲動。
+ * - title／description：頁面大標題與一行說明（過長時截斷，完整內容放在 title 屬性）。
+ */
 export function Workspace({
   panel,
   title,
@@ -28,7 +34,9 @@ export function Workspace({
   children: ReactNode
 }) {
   return (
+    // min-h-0：flex 子項預設 min-height 為內容高度，不設的話內容會把版面撐高、內部捲動失效
     <div className="flex h-full min-h-0 gap-3 pr-3 pb-3">
+      {/* 具名的 section（aria-label）成為地標，螢幕閱讀器可直接跳到控制面板 */}
       <section
         aria-label="控制面板"
         className="bg-card shadow-card shrink-0 overflow-y-auto rounded-[20px]"
@@ -67,7 +75,10 @@ export function PageHeader({
   )
 }
 
-/** 主檢視卡＋右側讀數欄（多張小卡）。readout 為空時主檢視佔滿。 */
+/**
+ * 主檢視卡＋右側讀數欄（多張小卡）。readout 為空時主檢視佔滿。
+ * 主檢視與讀數欄各自垂直捲動；主檢視外層 overflow-hidden 讓內容不超出圓角。
+ */
 export function Split({ main, readout }: { main: ReactNode; readout?: ReactNode }) {
   return (
     <div className="flex h-full min-h-0 gap-3">
@@ -90,6 +101,7 @@ export function Split({ main, readout }: { main: ReactNode; readout?: ReactNode 
 /**
  * 主檢視：上方工具列（檢視切換等）＋佔滿剩餘高度的內容（影像檢視器會撐滿）。
  * scroll 為 true 時內容區自行捲動（表格、圖表等）。
+ * scroll 為 false 時內容區不捲動，讓 ImageViewer（fill）以 flex-1 撐滿剩餘高度。footer 固定在底部。
  */
 export function MainView({
   toolbar,
@@ -166,6 +178,7 @@ export function ReadoutBlock({
   )
 }
 
+/** 空狀態／載入中的置中提示（可附圖示），例如尚未選檔、載入中。 */
 export function EmptyState({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
   return (
     <div className="text-muted flex h-full min-h-48 flex-col items-center justify-center gap-2 p-6 text-center text-sm">

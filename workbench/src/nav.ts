@@ -18,6 +18,7 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 
+/** 模組內的一個工具頁；slug 為網址的第二段（/模組 id/slug）。 */
 export interface Tool {
   slug: string
   name: string
@@ -28,6 +29,7 @@ export interface Tool {
   ready: boolean
 }
 
+/** 左側圖示欄的一個模組；id 為網址的第一段。tools 為空時佔位頁顯示「尚無工具」。 */
 export interface Module {
   id: string
   short: string // 直欄上的短名稱
@@ -37,6 +39,7 @@ export interface Module {
   tools: Tool[]
 }
 
+/** 總覽（首頁）；id 為空字串，對應網址「/」。網址對不到任何模組時也歸到這裡。 */
 export const HOME: Module = {
   id: '',
   short: '總覽',
@@ -46,6 +49,7 @@ export const HOME: Module = {
   tools: [],
 }
 
+/** 所有模組，順序即左側圖示欄的順序。 */
 export const MODULES: Module[] = [
   {
     id: 'm1',
@@ -163,10 +167,12 @@ export const MODULES: Module[] = [
   },
 ]
 
+/** 工具頁的網址，例如 /m1/quality；須與 App.tsx 註冊的路由一致。 */
 export function toolPath(module: Module, tool: Tool): string {
   return `/${module.id}/${tool.slug}`
 }
 
+/** 模組的網址；總覽（id 為空）為「/」。 */
 export function modulePath(module: Module): string {
   return module.id ? `/${module.id}` : '/'
 }

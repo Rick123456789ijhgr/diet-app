@@ -32,6 +32,7 @@ class InvoiceQrResult:
 
     @property
     def complete(self) -> bool:
+        """左右兩個 QR 是否都找到。"""
         return self.left is not None and self.right is not None
 
 
@@ -46,18 +47,23 @@ def locate_invoice_qrs(
     ``INVOICE_QR_NOT_FOUND``；不丟例外。
     """
     ops.validate_image(img)
+    # 以原始位元組為鍵去重：同一個 QR 常在多個階都被解出，只保留第一次（最早的階）的結果
     found: dict[bytes, DecodeHit] = {}
     attempts: list[RungAttempt] = []
     # 格式限制是給商品條碼的；發票只取 QR（下方過濾），不受共用設定影響
     ladder = replace(cfg.ladder, accept_formats=())
+    # 不使用 ``min_agree`` 投票：QR 有 Reed–Solomon 錯誤更正，單次解出即可信
+    # （見 ``InvoiceQrConfig`` 說明）
     for _, attempt in iter_attempts(img, decoder, ladder):
         attempts.append(attempt)
         for hit in attempt.hits:
             if hit.format is CodeFormat.QR_CODE:
                 found.setdefault(hit.raw, hit)
+        # 每一階做完才檢查，因此同一階可能一次找到超過兩個（例如畫面中有其他 QR）
         if len(found) >= 2:
             break
 
+    # 先依面積取最大的兩個（排除背景中較小的其他 QR），再依中心 x 由左到右排序
     codes = sorted(found.values(), key=lambda h: h.area, reverse=True)[:2]
     codes.sort(key=lambda h: h.center[0])
     warnings: tuple[PreprocessWarning, ...] = ()

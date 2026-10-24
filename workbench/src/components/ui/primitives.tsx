@@ -6,7 +6,11 @@ import { cn } from '@/lib/cn'
 
 type ButtonVariant = 'primary' | 'outline' | 'ghost'
 
-/** 按鈕：膠囊形；primary 為黑底（深色模式反白）。 */
+/**
+ * 按鈕：膠囊形；primary 為黑底（深色模式反白）。
+ * 預設 type="button"，避免放在 <form> 內時被當成送出鈕；呼叫端仍可用 props 覆寫（{...props} 在後）。
+ * 焦點只在鍵盤操作時顯示外框（focus-visible）；disabled 時同時關閉滑鼠事件。
+ */
 export function Button({
   variant = 'outline',
   size = 'md',
@@ -31,6 +35,7 @@ export function Button({
   )
 }
 
+/** 白色大圓角卡片（20px）。 */
 export function Card({ className, ...props }: ComponentProps<'div'>) {
   return <div className={cn('bg-card shadow-card rounded-[20px]', className)} {...props} />
 }
@@ -59,6 +64,11 @@ export function Badge({
   )
 }
 
+/**
+ * 單把手滑桿（Radix Slider）。value／onValueChange 是陣列（Radix 支援多把手），這裡只畫一個 Thumb。
+ * aria-label 要另外傳給 Thumb：Radix 中真正可聚焦、帶 role="slider" 的是 Thumb，不是 Root。
+ * touch-none 讓觸控拖曳不會捲動頁面。
+ */
 export function Slider({
   className,
   ...props
@@ -79,6 +89,7 @@ export function Slider({
   )
 }
 
+/** 開關（Radix Switch，role="switch"）。開啟時 Radix 設定 data-state=checked，樣式據此切換底色與圓鈕位置。 */
 export function Switch({ className, ...props }: ComponentProps<typeof RSwitch.Root>) {
   return (
     <RSwitch.Root
@@ -94,11 +105,13 @@ export function Switch({ className, ...props }: ComponentProps<typeof RSwitch.Ro
   )
 }
 
+// Tabs 根元件與內容直接沿用 Radix（鍵盤左右鍵切換、aria 關聯都由 Radix 處理），只為 List／Trigger 套樣式
 export const Tabs = RTabs.Root
 
 /** 分頁：灰色膠囊軌道，選中的一格為白色膠囊。 */
 export function TabsList({ className, ...props }: ComponentProps<typeof RTabs.List>) {
   return (
+    // grid-flow-col＋auto-cols-fr：分頁數不固定，每個分頁自動等寬
     <RTabs.List
       className={cn('bg-sunken grid auto-cols-fr grid-flow-col gap-1 rounded-full p-1', className)}
       {...props}
@@ -106,6 +119,7 @@ export function TabsList({ className, ...props }: ComponentProps<typeof RTabs.Li
   )
 }
 
+/** 單一分頁按鈕；選中時 Radix 設定 data-state=active，樣式據此變成白色膠囊。 */
 export function TabsTrigger({ className, ...props }: ComponentProps<typeof RTabs.Trigger>) {
   return (
     <RTabs.Trigger
@@ -122,7 +136,11 @@ export function TabsTrigger({ className, ...props }: ComponentProps<typeof RTabs
 
 export const TabsContent = RTabs.Content
 
-/** 單選的分段按鈕（例如檢視切換）：灰色膠囊軌道，選中的一格為白色膠囊。 */
+/**
+ * 單選的分段按鈕（例如檢視切換）：灰色膠囊軌道，選中的一格為白色膠囊。
+ * 以 Radix ToggleGroup（type="single"）實作，鍵盤可用方向鍵切換；label 作為整組的 aria-label。
+ * options[].value 同時作為 key，須唯一。
+ */
 export function Segmented<T extends string>({
   value,
   onChange,
@@ -140,6 +158,7 @@ export function Segmented<T extends string>({
     <ToggleGroup.Root
       type="single"
       value={value}
+      // 再點一次已選的項目時 Radix 會回傳空字串（取消選取）；忽略它，確保永遠有一項被選取
       onValueChange={(v) => v && onChange(v as T)}
       aria-label={label}
       className={cn('bg-sunken inline-flex gap-0.5 rounded-full p-1', className)}
@@ -162,8 +181,14 @@ export function Segmented<T extends string>({
   )
 }
 
+// Radix Tooltip 需要上層有 Provider（在 App 根部包一次），Hint 才能運作
 export const TooltipProvider = Tooltip.Provider
 
+/**
+ * 懸停／聚焦時顯示的說明提示（Radix Tooltip，延遲 300ms）。
+ * Trigger 用 asChild：不額外包一層元素，直接把事件與 aria 屬性掛到 children 上，
+ * 因此 children 必須是單一、能接收 ref 與事件的元素。內容經 Portal 渲染到 body，不會被捲動容器裁切。
+ */
 export function Hint({
   text,
   children,
@@ -189,6 +214,7 @@ export function Hint({
   )
 }
 
+/** 原生數字輸入框的外觀包裝；aria-invalid="true" 時顯示紅框（由 aria 屬性驅動樣式，狀態與無障礙一致）。 */
 export function NumberInput({ className, ...props }: Omit<ComponentProps<'input'>, 'type'>) {
   return (
     <input
@@ -204,7 +230,14 @@ export function NumberInput({ className, ...props }: Omit<ComponentProps<'input'
   )
 }
 
-/** 數字輸入：打字時保留原字串，可以暫時清空；合法時才回報，離開欄位後恢復成目前值。 */
+/**
+ * 數字輸入：打字時保留原字串，可以暫時清空；合法時才回報，離開欄位後恢復成目前值。
+ * 採「草稿字串＋已提交數值」雙軌：text 是輸入框顯示的字串，value 是外部的實際值。
+ * 若直接以 value 受控，打到一半的「1.」「-」或清空會立刻被格式化回去，無法輸入。
+ * - format：數值 → 顯示字串（例如固定小數位）。
+ * - parse：字串 → 數值；回傳 undefined 或非有限數（NaN、Infinity）都視為不合法、不回報。
+ * - onCommit：每次輸入合法就立即回報（不等 blur），配合即時調參。
+ */
 export function DraftNumberInput({
   value,
   format = String,
@@ -220,6 +253,10 @@ export function DraftNumberInput({
 }) {
   const [text, setText] = useState(format(value))
   const [editing, setEditing] = useState(false)
+  // 不在編輯時，外部值改變（例如還原、匯入、拖滑桿）就同步顯示字串；編輯中不覆蓋使用者正在打的字。
+  // editing 列入依賴：blur（editing 變 false）時也會觸發，把不合法或未格式化的草稿恢復成目前值。
+  // 注意：呼叫端常傳內聯的 format 函式，每次渲染都是新參照，此 effect 會在每次渲染後執行；
+  // 因 setText 相同字串時 React 會略過重繪，結果正確，只是多做一點工。
   useEffect(() => {
     if (!editing) setText(format(value))
   }, [value, format, editing])
@@ -227,6 +264,7 @@ export function DraftNumberInput({
     <NumberInput
       {...props}
       value={text}
+      // 包裝 onFocus／onBlur 以追蹤編輯狀態，同時保留呼叫端傳入的同名處理器
       onFocus={(e) => {
         setEditing(true)
         props.onFocus?.(e)
@@ -237,6 +275,7 @@ export function DraftNumberInput({
       }}
       onChange={(e) => {
         setText(e.target.value)
+        // 空字串不回報（Number('') 會變成 0，不是使用者的意思）
         if (e.target.value.trim() === '') return
         const v = parse(e.target.value)
         if (v !== undefined && Number.isFinite(v)) onCommit(v)

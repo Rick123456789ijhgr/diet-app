@@ -1,9 +1,12 @@
 // 合成影像的場景與參數（對應 Python 的 dietai.devtools.scenes.synthesize）。
 // 預設值與範圍沿用 Streamlit 版。
 
+/** 合成場景的代碼，與 Python 端 synthesize 的 scene 參數相同。 */
 export type SceneId = 'label' | 'ean13' | 'invoice' | 'nutrition' | 'food'
+/** 場景參數，原樣送給後端（/dev/images/synthesize 的 params）。 */
 export type SceneParams = Record<string, number | string>
 
+/** 場景參數表單的一個欄位（前端手寫；不像設定類別那樣由後端提供結構）。 */
 export interface SceneField {
   key: string
   label: string
@@ -17,6 +20,7 @@ export interface SceneField {
   wide?: boolean
 }
 
+/** 一種合成場景：名稱、參數欄位與預設值。 */
 export interface Scene {
   id: SceneId
   name: string
@@ -24,6 +28,7 @@ export interface Scene {
   defaults: SceneParams
 }
 
+/** 所有合成場景，依 SceneId 查表；min、max、step 為表單輸入的限制。 */
 export const SCENES: Record<SceneId, Scene> = {
   label: {
     id: 'label',
@@ -53,6 +58,7 @@ export const SCENES: Record<SceneId, Scene> = {
       { key: 'encoding', label: '編碼', kind: 'select', options: ['big5', 'utf-8'] },
       { key: 'module_px', label: '模組寬', kind: 'int', min: 1, max: 12 },
     ],
+    // 預設內容含中文品名，切換 encoding 可比較 Big5 與 UTF-8 兩種編碼
     defaults: {
       left: 'AB12345678 茶葉蛋:1:25',
       right: '**鮮奶:1:35',

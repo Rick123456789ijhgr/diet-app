@@ -16,15 +16,16 @@ from dietai.preprocess.ops import to_gray
 from dietai.preprocess.quality import exposure_masks, laplacian_map
 from dietai.preprocess.types import Image
 
-# BGR
-DARK_COLOR = (255, 80, 0)
-BRIGHT_COLOR = (0, 0, 255)
+# BGR（OpenCV 慣例）
+DARK_COLOR = (255, 80, 0)  # 藍：過暗像素
+BRIGHT_COLOR = (0, 0, 255)  # 紅：過亮像素
 MASK_COLOR = (0, 0, 255)  # 紅：光斑、前景等遮罩
 
 
 def laplacian_heatmap(img: Image, cfg: QualityConfig) -> Image:
     """拉普拉斯響應強度熱度圖（BGR）。以第 99 百分位正規化，避免少數強邊緣壓暗整張圖。"""
     mag = np.abs(laplacian_map(img, cfg))
+    # 幾乎全平坦（例如純色）的影像第 99 百分位為 0，改用 1 避免除以零
     top = float(np.percentile(mag, 99)) or 1.0
     norm = np.clip(mag / top * 255, 0, 255).astype(np.uint8)
     return np.asarray(cv2.applyColorMap(norm, cv2.COLORMAP_INFERNO), dtype=np.uint8)
@@ -34,6 +35,7 @@ def exposure_overlay(img: Image, cfg: QualityConfig, alpha: float = 0.6) -> Imag
     """在原圖上以藍色標出過暗、紅色標出過亮像素（BGR）。"""
     dark, bright = exposure_masks(img, cfg)
     base = img if img.ndim == 3 else cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    # 以 float 做 alpha 混色再轉回 uint8；遮罩外的像素維持原值
     out = base.astype(np.float32)
     for mask, color in ((dark, DARK_COLOR), (bright, BRIGHT_COLOR)):
         out[mask] = out[mask] * (1 - alpha) + np.array(color, dtype=np.float32) * alpha
@@ -54,7 +56,10 @@ def mask_overlay(img: Image, mask: npt.NDArray[np.bool_], alpha: float = 0.6) ->
 
 
 def mask_on_small(img: Image, mask: npt.NDArray[np.bool_]) -> Image:
-    """把縮小後算出的遮罩（如 ``food.dish_foreground``）疊在同尺寸的縮圖上（BGR）。"""
+    """把縮小後算出的遮罩（如 ``food.dish_foreground``）疊在同尺寸的縮圖上（BGR）。
+
+    把影像縮到遮罩的尺寸（而不是放大遮罩），兩者逐像素對齊；尺寸已相同時不縮放。
+    """
     h, w = mask.shape
     small = (
         img if img.shape[:2] == (h, w) else cv2.resize(img, (w, h), interpolation=cv2.INTER_AREA)

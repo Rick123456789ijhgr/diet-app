@@ -4,7 +4,10 @@
 ``write_barcode_dataset`` 把合成條碼寫成影像檔＋manifest，供 E1 實驗腳本端到端跑通。
 """
 
+# 合成實驗資料集：影像檔＋manifest（E1 端到端用）
 from dietai.synthetic.datasets import write_barcode_dataset
+
+# 已知程度的退化：模擬模糊、旋轉、縮小、光線不均、雜訊、反光等拍攝條件
 from dietai.synthetic.degrade import (
     add_glare,
     brightness_gradient,
@@ -14,6 +17,8 @@ from dietai.synthetic.degrade import (
     rotate,
     scale_brightness,
 )
+
+# 合成場景：條碼、電子發票 QR、營養標示（含透視變形）、餐桌食物
 from dietai.synthetic.scenes import (
     ean13_codes,
     ean13_scene,

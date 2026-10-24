@@ -19,25 +19,33 @@ from dietai.preprocess.quality import QUALITY_WARNINGS
 from dietai.preprocess.types import Image
 from dietai.synthetic import ean13_codes, ean13_scene
 
-THUMB_SHORT_SIDE = 200
+THUMB_SHORT_SIDE = 200  # 縮圖短邊（像素）
+# 點數與樣本數上限：條碼掃描的解碼次數約為「點數 × 樣本數 × 2（原圖＋完整階梯）」，
+# 限制單次請求的運算量
 MAX_POINTS = 30
 MAX_SAMPLES = 30
 
 
 @dataclass(frozen=True)
 class Thumb:
+    """某個等級的退化縮圖。"""
+
     level: float
     image: Image
 
 
 @dataclass(frozen=True)
 class SweepResult:
+    """掃描結果：``data`` 可直接序列化成 JSON；``thumbs`` 由 server 存進暫存區後換成 ID。"""
+
     data: dict[str, Any]
     thumbs: list[Thumb]
 
 
 @dataclass(frozen=True)
 class Axis:
+    """解析後的掃描維度：退化種類代碼、其定義，以及要掃的各等級。"""
+
     key: str
     axis: SweepAxis
     levels: list[float]
@@ -53,6 +61,7 @@ def parse_axis(params: Mapping[str, Any]) -> Axis:
     hi = _number(params, "hi", axis.default_hi)
     if not axis.lo <= lo < hi <= axis.hi:
         raise SceneError(f"範圍須滿足 {axis.lo} ≤ lo < hi ≤ {axis.hi}，收到 {lo}、{hi}", "lo")
+    # 至少 3 點，_thumbs 的最弱／中間／最強三張縮圖才會各不相同
     n = _int(params, "n", 9, 3, MAX_POINTS)
     return Axis(key, axis, sweep_levels(lo, hi, n))
 
@@ -77,6 +86,7 @@ def quality_sweep(img: Image, ax: Axis, cfg: QualityConfig) -> SweepResult:
                 "warnings": [w.value for w in r.warnings],
             }
         )
+    # 每個品質警告代碼都列出（沒觸發為 None），前端的欄位因此固定
     warnings = [", ".join(r["warnings"]) for r in rows]
     triggers = {
         code.value: first_trigger(ax.levels, warnings, code.value) for code in QUALITY_WARNINGS
@@ -97,6 +107,7 @@ def barcode_sweep(
     """合成 EAN-13 樣本（內容各不相同），每個等級比較只用原圖與完整階梯的成功率。"""
     scenes = [ean13_scene(code, module_px) for code in ean13_codes(samples, seed)]
     rows = ladder_eval.ladder_sweep(scenes, ax.axis.fn, ax.levels, ZxingDecoder(zxing), ladder)
+    # ladder_eval 以中文為鍵，這裡轉成 JSON 用的英文鍵
     methods = {ladder_eval.RAW: "raw", ladder_eval.LADDER: "ladder"}
     data = {
         "axis": ax.key,
@@ -123,6 +134,7 @@ def barcode_sweep(
             for r in rows
         ],
     }
+    # 縮圖只示意退化程度，取第一個樣本重新退化一次即可（ladder_sweep 不保留影像）
     first = scenes[0]
     return SweepResult(data, _thumbs(ax.levels, [ax.axis.fn(first, lv) for lv in ax.levels]))
 
@@ -134,6 +146,7 @@ def _thumbs(levels: list[float], images: list[Image]) -> list[Thumb]:
 
 
 def _number(params: Mapping[str, Any], key: str, default: float) -> float:
+    """取數字參數（int 或 float，缺少時用預設值）；bool 是 int 的子類別，須另外排除。"""
     value = params.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise SceneError(f"{key} 必須是數字", key)
@@ -141,6 +154,7 @@ def _number(params: Mapping[str, Any], key: str, default: float) -> float:
 
 
 def _int(params: Mapping[str, Any], key: str, default: int, lo: int, hi: int) -> int:
+    """取 ``lo``–``hi`` 間的整數參數（缺少時用預設值）；不接受 bool 與 float（含 3.0）。"""
     value = params.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
         raise SceneError(f"{key} 必須是 {lo}–{hi} 的整數", key)
@@ -148,7 +162,7 @@ def _int(params: Mapping[str, Any], key: str, default: int, lo: int, hi: int) ->
 
 
 def sample_params(params: Mapping[str, Any]) -> tuple[int, int, int]:
-    """條碼掃描的（樣本數, 模組寬, 種子）。"""
+    """條碼掃描的（樣本數, 模組寬, 種子），各自檢查範圍；超出時丟 ``SceneError``。"""
     return (
         _int(params, "samples", 5, 1, MAX_SAMPLES),
         _int(params, "module_px", 4, 1, 12),

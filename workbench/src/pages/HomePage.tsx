@@ -8,6 +8,7 @@ import { useConfigSchemas } from '@/hooks/useConfigSchemas'
 import { cn } from '@/lib/cn'
 import { MODULES, modulePath, toolPath } from '@/nav'
 
+/** 依本機時間（0–23 時）回傳問候語；只在畫面重繪時計算，不會隨時間自動更新。 */
 function greeting(hour: number) {
   if (hour < 5) return '夜深了'
   if (hour < 11) return '早安'
@@ -16,15 +17,26 @@ function greeting(hour: number) {
   return '晚安'
 }
 
+/**
+ * 工作台首頁（總覽）。
+ *
+ * 數字卡的來源：
+ * - 可用工具／研究模組：前端靜態的 `MODULES` 導覽表（`nav.ts`），不需要呼叫後端。
+ * - 待校準門檻：參數結構（`useConfigSchemas`）中標記 `calibrate` 的欄位數；載入前顯示「…」。
+ * - 測試集：固定顯示「鎖定」，對應根目錄規則 7（splits/test 不得用於調參）。
+ */
 export function HomePage() {
   const tools = MODULES.flatMap((m) => m.tools)
   const ready = tools.filter((t) => t.ready).length
+  // 「已開始」＝至少有一個工作台頁面（不論是否已可用）的模組
   const started = MODULES.filter((m) => m.tools.length > 0).length
   const schemas = useConfigSchemas()
+  // 所有設定類別中需要校準的欄位；schemas 尚未載入時為 undefined
   const calibrate = schemas.data?.classes.flatMap((c) => c.fields.filter((f) => f.calibrate))
 
   return (
     <div className="h-full overflow-y-auto pr-3 pb-3">
+      {/* 問候與說明 */}
       <div className="px-1 pt-1 pb-5">
         <h1 className="text-[30px] leading-tight font-semibold tracking-tight">
           {greeting(new Date().getHours())}，歡迎回到開發工作台
@@ -34,6 +46,7 @@ export function HomePage() {
         </p>
       </div>
 
+      {/* 重點數字卡：第一張 hero（橘色） */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatCard hero label="可用工具" value={`${ready} / ${tools.length}`} note="模組一" />
         <StatCard label="研究模組" value={`${started} / ${MODULES.length}`} note="已有工作台頁面" />
@@ -46,10 +59,12 @@ export function HomePage() {
       </div>
 
       <div className="mt-3 grid gap-3 xl:grid-cols-[1fr_380px]">
+        {/* 左欄：各研究模組與其工具連結 */}
         <section className="bg-card shadow-card rounded-[20px] p-5">
           <h2 className="mb-3 text-[16px] font-semibold">研究模組</h2>
           <ul className="space-y-1">
             {MODULES.map((m) => (
+              // group：滑過整列時一起改變圖示底色與工具膠囊底色
               <li key={m.id} className="hover:bg-sunken group rounded-2xl px-3 py-2.5">
                 <Link to={modulePath(m)} className="flex items-start gap-3">
                   <span className="bg-sunken group-hover:bg-card flex size-9 shrink-0 items-center justify-center rounded-full">
@@ -68,6 +83,7 @@ export function HomePage() {
                     aria-hidden
                   />
                 </Link>
+                {/* 工具膠囊放在模組連結外面，避免 <a> 巢狀；pl-12 對齊上方的模組名稱 */}
                 {m.tools.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5 pl-12">
                     {m.tools.map((t) => (
@@ -78,6 +94,7 @@ export function HomePage() {
                       >
                         <t.icon className="size-3.5" aria-hidden />
                         {t.name}
+                        {/* 已可用顯示「可用」，否則顯示預計完成的任務書階段 */}
                         {t.ready ? <Badge tone="ok">可用</Badge> : <Badge>階段 {t.stage}</Badge>}
                       </Link>
                     ))}
@@ -88,6 +105,7 @@ export function HomePage() {
           </ul>
         </section>
 
+        {/* 右欄：使用規則（對應根目錄 CLAUDE.md 的不可違反規則） */}
         <section className="bg-card shadow-card rounded-[20px] p-5">
           <h2 className="mb-3 text-[16px] font-semibold">使用規則</h2>
           <div className="space-y-2">
@@ -113,6 +131,11 @@ export function HomePage() {
   )
 }
 
+/**
+ * 首頁的重點數字卡。
+ * @param hero 為 true 時套用橘色 `.hero-card`（文字改白色系）；每頁只給第一張用。
+ * @param note 卡片底部的膠囊說明文字。
+ */
 function StatCard({
   label,
   value,
@@ -144,6 +167,7 @@ function StatCard({
   )
 }
 
+/** 「使用規則」卡中的一條規則：圖示＋標題，下方為說明（children）。 */
 function Rule({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
   return (
     <div className="bg-sunken rounded-2xl px-4 py-3">
