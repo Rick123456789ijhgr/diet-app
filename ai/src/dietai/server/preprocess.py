@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 import grpc
 
@@ -20,6 +19,7 @@ from dietai.preprocess import (
     LabelConfig,
     LadderConfig,
     QualityConfig,
+    VlmImage,
     ZxingConfig,
     ZxingDecoder,
     check_quality,
@@ -115,7 +115,7 @@ class PreprocessServicer(preprocess_pb2_grpc.PreprocessServiceServicer):
         result = preprocess_food(self._image(request.image), cfg)
         key = convert.config_key(cfg)
 
-        def vlm(v: Any, role: str, description: str) -> preprocess_pb2.VlmImage:
+        def vlm(v: VlmImage, role: str, description: str) -> preprocess_pb2.VlmImage:
             """``food.VlmImage`` → proto ``VlmImage``；``role`` 區分整張與第幾道菜的暫存鍵。"""
             # 直接沿用 resize_for_vlm 產生的 JPEG 位元組，使 num_bytes 與實際送出的大小一致
             image = self._output(

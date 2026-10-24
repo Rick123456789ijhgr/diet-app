@@ -472,3 +472,60 @@ def test_to_rpc_error_only_maps_user_paths_to_not_found():
     assert to_rpc_error(PathNotFoundError("x")).reason == "PATH_NOT_FOUND"
     assert to_rpc_error(FileNotFoundError("configs")).reason == "INTERNAL"
     assert to_rpc_error(NotADirectoryError("configs")).reason == "INTERNAL"
+
+
+def test_to_rpc_error_maps_value_error_to_invalid_argument():
+    """前處理函式自己丟的 ValueError 屬輸入問題；ValueError 的子類別仍保有各自的代碼。"""
+    from dietai.devtools.configs import ConfigError
+    from dietai.evaluation.manifest import SplitLockedError
+    from dietai.server.rpc import to_rpc_error
+
+    err = to_rpc_error(ValueError("影像必須是 uint8"))
+    assert (err.code, err.reason, str(err)) == (
+        grpc.StatusCode.INVALID_ARGUMENT,
+        "INVALID_PARAMS",
+        "影像必須是 uint8",
+    )
+    assert to_rpc_error(ConfigError("x", "blur_min")).reason == "INVALID_CONFIG"
+    assert to_rpc_error(SplitLockedError("x")).reason == "SPLIT_LOCKED"
+    assert to_rpc_error(RuntimeError("x")).code == grpc.StatusCode.INTERNAL
+
+
+def test_stream_normal_completion_is_not_logged_as_cancelled(caplog):
+    """工作執行緒送出 done 後才關閉產生器；即使此時執行緒仍存活，也不應記成已取消。"""
+    import asyncio
+    import logging
+    from types import SimpleNamespace
+
+    from dietai.server.rpc import stream
+
+    class SlowClose:
+        """迭代完後 close() 仍要一段時間：工作執行緒在事件迴圈收到 done 時仍存活。"""
+
+        def __init__(self) -> None:
+            self._it = iter(range(3))
+
+        def __iter__(self):
+            return self
+
+        def __next__(self) -> int:
+            return next(self._it)
+
+        def close(self) -> None:
+            time.sleep(0.3)
+
+    class Svc:
+        @stream
+        def Run(self, request):
+            return SlowClose()
+
+    context = SimpleNamespace(invocation_metadata=lambda: ())
+
+    async def collect() -> list[int]:
+        return [x async for x in Svc().Run(None, context)]
+
+    with caplog.at_level(logging.INFO, logger="dietai.server"):
+        assert asyncio.run(collect()) == [0, 1, 2]
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("已取消" in m for m in messages)
+    assert any("OK 3 筆" in m for m in messages)

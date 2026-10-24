@@ -58,7 +58,8 @@ def to_rpc_error(exc: Exception) -> RpcError:
     if isinstance(exc, RpcError):
         return exc
     # 只對應「呼叫端的輸入有問題」的例外；ConfigError、SceneError 帶有 field，
-    # 讓前端把錯誤標在對應的參數欄位上。這幾個例外彼此沒有繼承關係，比對順序不影響結果
+    # 讓前端把錯誤標在對應的參數欄位上。ConfigError、SceneError、SplitLockedError 都是
+    # ValueError 的子類別，必須排在最後的 ValueError 之前
     if isinstance(exc, ConfigError):
         return RpcError(grpc.StatusCode.INVALID_ARGUMENT, "INVALID_CONFIG", str(exc), exc.field)
     if isinstance(exc, SceneError):
@@ -69,6 +70,10 @@ def to_rpc_error(exc: Exception) -> RpcError:
         return RpcError(grpc.StatusCode.PERMISSION_DENIED, "SPLIT_LOCKED", str(exc))
     if isinstance(exc, PathNotFoundError):
         return RpcError(grpc.StatusCode.NOT_FOUND, "PATH_NOT_FOUND", str(exc))
+    # 前處理函式對不合法輸入丟的 ValueError（例如 validate_image 的影像格式、Ellipse 的軸長），
+    # 依專案慣例屬呼叫端的輸入問題；沿用前端已有中文說明的 INVALID_PARAMS（沒有 field）
+    if isinstance(exc, ValueError):
+        return RpcError(grpc.StatusCode.INVALID_ARGUMENT, "INVALID_PARAMS", str(exc))
     # 未預期的例外：訊息帶類別名稱方便除錯，traceback 由 unary／stream 記到日誌
     return RpcError(grpc.StatusCode.INTERNAL, "INTERNAL", f"{type(exc).__name__}: {exc}")
 
@@ -136,10 +141,6 @@ def unary(
     return wrapper
 
 
-# 哨兵物件；本檔目前沒有使用（stream 以 ("done", None) 表示結束）
-_DONE = object()
-
-
 def stream(
     fn: Callable[[S, Req], Iterator[Resp]],
 ) -> Callable[[S, Req, grpc.aio.ServicerContext[Req, Resp]], AsyncIterator[Resp]]:
@@ -193,6 +194,9 @@ def stream(
         thread = threading.Thread(target=work, name=f"rpc-{fn.__name__}", daemon=True)
         thread.start()
         count = 0
+        # 收到 "done" 或 "error" 時設為 True：工作執行緒送出 done 後才在 finally 關閉產生器，
+        # 此時執行緒可能仍存活，不能只憑 is_alive() 判斷是否被取消
+        ended = False
         try:
             while True:
                 kind, value = await items.get()
@@ -200,6 +204,7 @@ def stream(
                     count += 1
                     yield value
                 elif kind == "error":
+                    ended = True
                     err = to_rpc_error(value)
                     if err.code == grpc.StatusCode.INTERNAL:
                         logger.error(
@@ -214,11 +219,12 @@ def stream(
                     await context.abort(status.code, status.details, status.trailing_metadata)
                 # "done"：產生器正常結束
                 else:
+                    ended = True
                     break
         # 正常結束、abort 或呼叫端取消（await 處拋出 CancelledError）都會到這裡，通知工作執行緒停止
         finally:
             stop.set()
-            if thread.is_alive():
+            if not ended:
                 logger.info("%s request_id=%s 已取消（%d 筆）", fn.__name__, rid, count)
         logger.info(
             "%s request_id=%s OK %d 筆 %.1f ms",
