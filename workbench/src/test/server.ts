@@ -373,9 +373,10 @@ export const handlers = [
           { level: 0, method: 'ladder', rate: 1 },
           { level: 45, method: 'ladder', rate: 1 },
         ],
+        // 刻意不依階梯順序：前端要依 RUNG_ORDER 排列堆疊
         rung_counts: [
-          { level: 0, rung: 'raw', count: 2 },
           { level: 45, rung: 'deskew', count: 2 },
+          { level: 0, rung: 'raw', count: 2 },
         ],
         overall: { raw: 0.5, ladder: 1 },
         first_failure: { raw: 45, ladder: null },

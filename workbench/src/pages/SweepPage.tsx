@@ -19,6 +19,7 @@ import { useConfigClass, useConfigSchemas } from '@/hooks/useConfigSchemas'
 import { useImagePipeline } from '@/hooks/useImagePipeline'
 import { cn } from '@/lib/cn'
 import { valueOf } from '@/lib/config'
+import { orderRungs } from '@/lib/ordering'
 import { SWEEP_AXES, axisOf } from '@/lib/sweepAxes'
 import { rungText, warningText } from '@/lib/text'
 
@@ -148,8 +149,12 @@ export function SweepPage() {
           },
     [target, axisKey, range, n, image?.image_id, config, samples, ladder, zxing],
   )
+  // 下限必須小於上限；不成立時不送出請求，並在範圍輸入旁顯示錯誤
+  // （不在輸入時阻擋：使用者可能先改下限再改上限，中途暫時不成立）
+  const rangeError = range[0] < range[1] ? undefined : '下限必須小於上限'
   // 查詢鍵為 [`sweep-${target}`, imageId, 防抖後的 params]，兩種對象的結果各自快取
   const analysis = useAnalysis({
+    enabled: !rangeError,
     name: `sweep-${target}`,
     // 條碼掃描用合成樣本，不需要影像
     imageId: target === 'quality' ? image?.image_id : 'synthetic-ean13',
@@ -159,6 +164,8 @@ export function SweepPage() {
   })
   // 最近一次成功的結果；剛切換對象時可能仍是另一種對象的結果，下方以欄位判斷後才使用
   const result = analysis.shown?.data
+  // 參數不合法時，畫面上的舊結果要淡化（查詢沒有送出，analysis.stale 不會反映）
+  const stale = analysis.stale || !!rangeError
 
   // 換退化種類時一併重設範圍（各種類的單位與可用範圍不同，沿用舊範圍可能超出界限）
   const setAxis = (key: string) => {
@@ -200,8 +207,10 @@ export function SweepPage() {
               aria-label={`範圍${label}`}
               step={axis.step}
               value={range[i]!}
-              // 超出該退化種類的可用範圍時回傳 undefined，DraftNumberInput 不提交
-              // （未檢查下限是否小於上限）
+              aria-invalid={rangeError ? true : undefined}
+              aria-describedby={rangeError ? 'sweep-range-error' : undefined}
+              // 超出該退化種類的可用範圍時回傳 undefined，DraftNumberInput 不提交；
+              // 下限是否小於上限另由 rangeError 檢查
               parse={(t) => {
                 const v = Number(t)
                 return v >= axis.lo && v <= axis.hi ? v : undefined
@@ -223,6 +232,11 @@ export function SweepPage() {
           />
         </div>
       </div>
+      {rangeError && (
+        <p id="sweep-range-error" role="alert" className="text-danger text-xs">
+          {rangeError}
+        </p>
+      )}
       <p className="text-muted text-xs">
         可用範圍 {axis.lo}–{axis.hi}；在範圍內等距取點。
       </p>
@@ -324,13 +338,36 @@ export function SweepPage() {
                 invalidField={analysis.configError?.field}
                 invalidMessage={analysis.configError?.message}
               />
-              <ParamForm schema={zxingSchema} overrides={zxing} onChange={setZxing} />
+              {/* 後端回 INVALID_CONFIG 時兩個表單都傳入；只有含該欄位的表單會標紅 */}
+              <ParamForm
+                schema={zxingSchema}
+                overrides={zxing}
+                onChange={setZxing}
+                invalidField={analysis.configError?.field}
+                invalidMessage={analysis.configError?.message}
+              />
             </div>
           )
         }
-        // 匯出入只涵蓋 LadderConfig，不含 ZxingConfig
+        // 匯出入涵蓋 LadderConfig 與 ZxingConfig 兩組設定，各自匯出、匯入
         io={
-          ladderSchema && <ConfigIO schema={ladderSchema} overrides={ladder} onImport={setLadder} />
+          ladderSchema &&
+          zxingSchema && (
+            <div className="space-y-8">
+              <ConfigIO
+                title="階梯設定"
+                schema={ladderSchema}
+                overrides={ladder}
+                onImport={setLadder}
+              />
+              <ConfigIO
+                title="解碼器設定"
+                schema={zxingSchema}
+                overrides={zxing}
+                onImport={setZxing}
+              />
+            </div>
+          )
         }
       />
     )
@@ -384,7 +421,7 @@ export function SweepPage() {
         {!qualityResult && !barcodeResult ? (
           !analysis.query.error && <EmptyState>計算中…</EmptyState>
         ) : (
-          <div className={cn('min-h-0 flex-1 transition-opacity', analysis.stale && 'opacity-60')}>
+          <div className={cn('min-h-0 flex-1 transition-opacity', stale && 'opacity-60')}>
             {qualityResult && quality ? (
               <QualityResultView
                 r={qualityResult}
@@ -394,14 +431,16 @@ export function SweepPage() {
                 setMetric={setMetric}
                 view={view}
                 setView={setView}
-                threshold={(name) =>
-                  // 門檻用算出這條曲線的那組參數，而不是畫面上最新的參數
-                  valueOf(
-                    quality.fields.find((f) => f.name === name)!,
+                threshold={(name) => {
+                  // 門檻用算出這條曲線的那組參數，而不是畫面上最新的參數。
+                  // 欄位對不上（後端改名）時回傳 undefined，不畫門檻線，而不是崩潰
+                  const field = quality.fields.find((f) => f.name === name)
+                  if (!field) return undefined
+                  const used =
                     (analysis.shown?.config as { config?: ConfigOverride } | undefined)?.config ??
-                      {},
-                  ) as number
-                }
+                    {}
+                  return { value: valueOf(field, used) as number, label: field.label }
+                }}
               />
             ) : barcodeResult ? (
               <BarcodeResultView
@@ -446,7 +485,8 @@ function Thumbs({ thumbs, axisLabel }: { thumbs: Thumb[]; axisLabel: string }) {
  * 品質檢查掃描的結果檢視：讀數欄為各警告首次觸發的等級與縮圖；
  * 主檢視為所選指標隨退化等級變化的折線（附門檻線）或逐等級明細表。
  *
- * @param threshold 依欄位名稱取門檻值；由父層提供「算出這份結果時」的參數值
+ * @param threshold 依欄位名稱取門檻值與中文欄位名稱；由父層提供「算出這份結果時」的參數值，
+ *   欄位不存在時回傳 undefined（不畫門檻線）
  */
 function QualityResultView({
   r,
@@ -463,9 +503,10 @@ function QualityResultView({
   setMetric: (m: MetricKey) => void
   view: string
   setView: (v: string) => void
-  threshold: (name: string) => number
+  threshold: (name: string) => { value: number; label: string } | undefined
 }) {
   const m = METRICS[metric]
+  const t = m.threshold ? threshold(m.threshold) : undefined
   // 比例類指標的 y 軸固定 0–1 並顯示百分比；其他指標由圖表依資料自動決定範圍
   const isRatio = metric === 'dark_ratio' || metric === 'bright_ratio'
   return (
@@ -543,17 +584,9 @@ function QualityResultView({
                     points: r.rows.map((row) => ({ x: row.level, y: row[metric] })),
                   },
                 ]}
-                // 有對應門檻的指標畫一條水平門檻線（平均亮度沒有單一門檻，不畫）
-                thresholds={
-                  m.threshold
-                    ? [
-                        {
-                          y: threshold(m.threshold),
-                          label: `${m.threshold}（${m.kind}）= ${threshold(m.threshold)}`,
-                        },
-                      ]
-                    : []
-                }
+                // 有對應門檻的指標畫一條水平門檻線（平均亮度沒有單一門檻，不畫）；
+                // 標籤用表單結構中的中文欄位名稱
+                thresholds={t ? [{ y: t.value, label: `${t.label}（${m.kind}）= ${t.value}` }] : []}
               />
             </>
           )}
@@ -582,8 +615,8 @@ function BarcodeResultView({
     v === null ? '全部成功' : `首次失敗於 ${Number(v.toPrecision(3))}`
   // 逐步升級相對只用原圖的提升（百分點，可為負；顯示時自行加正負號）
   const gain = r.overall.ladder - r.overall.raw
-  // 結果中出現過的成功階，依出現順序（未依階梯順序排序）
-  const rungs = [...new Set(r.rung_counts.map((c) => c.rung))]
+  // 結果中出現過的成功階，依 RUNG_ORDER 排序（與 E1 頁相同；不在其中的新階接在最後）
+  const rungs = orderRungs(r.rung_counts.map((c) => c.rung))
   return (
     <Split
       readout={

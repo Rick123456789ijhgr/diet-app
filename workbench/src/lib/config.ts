@@ -57,6 +57,15 @@ function sameValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+/**
+ * 兩組覆寫內容是否相同；不受鍵順序影響（JSON.stringify 直接比會因鍵順序不同誤判為不同）。
+ * 序列欄位的陣列仍依順序比較（順序本身有意義）。
+ */
+export function sameOverrides(a: ConfigOverride, b: ConfigOverride): boolean {
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every((k) => k in b && sameValue(a[k], b[k]))
+}
+
 /** 匯出成 Python config_to_json 的格式：{"class": ..., "values": {...}}，含全部欄位。 */
 export function exportJson(schema: ConfigClass, overrides: ConfigOverride): string {
   return JSON.stringify(

@@ -175,3 +175,58 @@ describe('useStream', () => {
     unmount()
   })
 })
+
+describe('排序、數字輸入與下載', () => {
+  it('成功階依 RUNG_ORDER 排列，新階接在最後而不略過', async () => {
+    const { orderRungs } = await import('./ordering')
+    expect(orderRungs(['deskew', 'raw', 'new_rung', 'raw'])).toEqual(['raw', 'deskew', 'new_rung'])
+  })
+
+  it('標籤值自然排序：數字依數值、在文字之前', async () => {
+    const { naturalSort } = await import('./ordering')
+    expect(naturalSort(['clean', '10', 'blur', '2', ''])).toEqual(['2', '10', '', 'blur', 'clean'])
+  })
+
+  it('整數輸入夾在範圍內；空白或非數字不提交', async () => {
+    const { parseClampedInt } = await import('./number')
+    expect(parseClampedInt('25', 1, 20)).toBe(20)
+    expect(parseClampedInt('0', 1, 20)).toBe(1)
+    expect(parseClampedInt('3.6', 1, 20)).toBe(4)
+    expect(parseClampedInt('', 1, 20)).toBeUndefined()
+    expect(parseClampedInt('abc', 1, 20)).toBeUndefined()
+  })
+
+  it('進度百分比在 total 為 0 時不是 NaN', async () => {
+    const { progressPercent } = await import('./number')
+    expect(progressPercent(2, 4)).toBe(50)
+    expect(progressPercent(0, 0)).toBe(5)
+  })
+
+  it('覆寫比較不受鍵順序影響', async () => {
+    const { sameOverrides } = await import('./config')
+    expect(sameOverrides({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true)
+    expect(sameOverrides({ a: 1 }, { a: 1, b: 2 })).toBe(false)
+    expect(sameOverrides({ r: ['x', 'y'] }, { r: ['y', 'x'] })).toBe(false)
+  })
+
+  it('下載後延後釋放物件 URL', async () => {
+    const { vi } = await import('vitest')
+    const { downloadBlob, REVOKE_DELAY_MS } = await import('./download')
+    vi.useFakeTimers()
+    // jsdom 沒有實作 createObjectURL／revokeObjectURL
+    const create = vi.fn(() => 'blob:x')
+    const revoke = vi.fn()
+    Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    try {
+      downloadBlob(new Blob(['a']), 'a.txt')
+      expect(click).toHaveBeenCalledOnce()
+      expect(revoke).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(REVOKE_DELAY_MS)
+      expect(revoke).toHaveBeenCalledWith('blob:x')
+    } finally {
+      click.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+})
