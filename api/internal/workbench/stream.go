@@ -72,10 +72,9 @@ func openStream[T any, PT jsonMessage[T]](stream grpc.ServerStreamingClient[T], 
 	msg, err := stream.Recv()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			// 串流沒有任何訊息就正常結束：以空字串佔第一筆（write 會略過空字串），
-			// 下一次 Next 再由 Recv 取得 io.EOF
-			empty := ""
-			return &grpcEvents[T, PT]{stream: stream, first: &empty}, nil
+			// 串流沒有任何訊息就正常結束：直接回傳已結束的 Events，不再對串流呼叫 Recv
+			// （grpc-go 沒有保證 EOF 之後再次 Recv 仍回 io.EOF）
+			return noEvents{}, nil
 		}
 		// 第一筆就失敗（例如 SPLIT_LOCKED、INVALID_PARAMS）：尚未寫出任何回應，可以回一般 HTTP 錯誤
 		return nil, aiclient.FromError(err)
@@ -83,6 +82,11 @@ func openStream[T any, PT jsonMessage[T]](stream grpc.ServerStreamingClient[T], 
 	first := PT(msg).GetJson()
 	return &grpcEvents[T, PT]{stream: stream, first: &first}, nil
 }
+
+// noEvents 是沒有任何訊息的串流：Next 一律回傳 io.EOF。
+type noEvents struct{}
+
+func (noEvents) Next() (string, error) { return "", io.EOF }
 
 // sweepTimeout 是參數掃描的期限：條碼掃描最多 30 個等級 × 30 個樣本、每個都跑完整階梯，
 // 預設的 aiclient.DefaultTimeout（30 秒）不夠。
@@ -202,7 +206,7 @@ func (r sseResponse) write(w http.ResponseWriter) error {
 			_ = rc.Flush()
 			return nil
 		}
-		// 空字串沒有內容可送（例如 openStream 的空串流佔位），略過
+		// 空字串沒有內容可送，略過（SSE 的 data 行不應為空）
 		if data == "" {
 			continue
 		}

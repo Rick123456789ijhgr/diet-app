@@ -3,6 +3,7 @@ package workbench
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -204,6 +205,69 @@ func TestSweepAndE1Runs(t *testing.T) {
 			if tt.wantDir != "" && gotRun.GetRunDir() != tt.wantDir {
 				t.Errorf("run_dir = %q", gotRun.GetRunDir())
 			}
+		})
+	}
+}
+
+// onceEOFStream 第一次 Recv 回 io.EOF；之後再呼叫 Recv 一律回錯誤，
+// 模擬 grpc-go 不保證「EOF 之後再次 Recv 仍回 io.EOF」的情況。
+type onceEOFStream struct {
+	grpc.ClientStream
+	calls int
+}
+
+func (s *onceEOFStream) Recv() (*dietaiv1.RunBatchResponse, error) {
+	s.calls++
+	if s.calls == 1 {
+		return nil, io.EOF
+	}
+	return nil, errors.New("Recv called after EOF")
+}
+
+func TestOpenStreamEmptyDoesNotRecvAfterEOF(t *testing.T) {
+	stream := &onceEOFStream{}
+	events, err := openStream[dietaiv1.RunBatchResponse](stream, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if data, err := events.Next(); data != "" || !errors.Is(err, io.EOF) {
+			t.Fatalf("Next #%d = %q, %v; want io.EOF", i, data, err)
+		}
+	}
+	if stream.calls != 1 {
+		t.Errorf("Recv calls = %d, want 1", stream.calls)
+	}
+}
+
+func TestRunBatchEmptyStreamIsEmptySSE(t *testing.T) {
+	ai := &streamAI{batch: func(*dietaiv1.RunBatchRequest) (grpc.ServerStreamingClient[dietaiv1.RunBatchResponse], error) {
+		return &onceEOFStream{}, nil
+	}}
+	resp := postJSON(t, newServerWith(t, ai)+"/workbench/v1/dev/batches", `{"folder":"D:/empty"}`)
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("status = %d, Content-Type = %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	if events := sseEvents(t, resp); len(events) != 0 {
+		t.Errorf("events = %v, want none", events)
+	}
+}
+
+func TestSSEWriteFailureAfterHeadersOnlyLogs(t *testing.T) {
+	ai := &streamAI{batch: func(*dietaiv1.RunBatchRequest) (grpc.ServerStreamingClient[dietaiv1.RunBatchResponse], error) {
+		return &fakeStream[dietaiv1.RunBatchResponse]{msgs: batchMsgs(`{"type":"start"}`, `{"type":"row"}`)}, nil
+	}}
+	for _, tt := range []struct {
+		name      string
+		cancel    bool
+		wantLevel string
+	}{
+		{"未取消記為錯誤", false, "level=ERROR"},
+		{"使用者離開不記為錯誤", true, "level=DEBUG"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			w, logs := serveFailing(t, NewService(ai), tt.cancel, http.MethodPost, "/workbench/v1/dev/batches", `{"folder":"x"}`)
+			assertOnlyLogged(t, w, logs, tt.wantLevel)
 		})
 	}
 }

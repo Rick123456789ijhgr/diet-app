@@ -103,6 +103,43 @@ func writeError(w http.ResponseWriter, e *Error) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// trackingWriter 記錄回應標頭是否已送出（WriteHeader 或 Write 被呼叫過），
+// 讓 ResponseErrorHandlerFunc 知道還能不能改狀態碼、寫出錯誤本文（見 headerSent）。
+type trackingWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *trackingWriter) WriteHeader(status int) {
+	// 1xx 是資訊性回應，之後仍可送出最終狀態碼
+	if status >= http.StatusOK {
+		w.wroteHeader = true
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *trackingWriter) Write(b []byte) (int, error) {
+	w.wroteHeader = true
+	return w.ResponseWriter.Write(b)
+}
+
+// Unwrap 讓 http.ResponseController 能取得底層的 ResponseWriter（SSE 需要 Flush）。
+func (w *trackingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// headerSent 回報 w（或它包裝的 ResponseWriter）是否已送出標頭；找不到 trackingWriter 時視為尚未送出。
+func headerSent(w http.ResponseWriter) bool {
+	for {
+		switch t := w.(type) {
+		case *trackingWriter:
+			return t.wroteHeader
+		case interface{ Unwrap() http.ResponseWriter }:
+			w = t.Unwrap()
+		default:
+			return false
+		}
+	}
+}
+
 // domainError 把登入與冷啟動的領域錯誤對應成 HTTP 錯誤；不是這些錯誤時回傳 nil。
 func domainError(err error) *Error {
 	switch {

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 
@@ -22,6 +24,17 @@ import (
 
 // MaxUploadBytes 是上傳影像的上限，與 gRPC 訊息上限一致。
 const MaxUploadBytes = aiclient.MaxMessageBytes - 1<<20 // 留 1 MB 給其他欄位
+
+// DefaultMaxJSONBytes 是 JSON 請求本文的預設上限（Options.MaxJSONBytes 為 0 時採用）。
+// 工作台的 JSON 本文只有參數與設定，1 MB 綽綽有餘。
+const DefaultMaxJSONBytes = 1 << 20
+
+// maxMultipartBytes 是 multipart 請求本文的上限：一張影像（MaxUploadBytes）加上 1 MB 給其他欄位與分隔標頭，
+// 讓過大的影像仍先由 readUpload 回報 IMAGE_TOO_LARGE。
+const maxMultipartBytes = MaxUploadBytes + 1<<20
+
+// maxNameBytes 是上傳時 name 欄位（顯示用名稱）的上限。
+const maxNameBytes = 256
 
 // devPrefix 是開發工具路由的前綴；Options.DevTools 為 false 時，NewHTTPHandler 在進入路由前就擋下。
 const devPrefix = "/workbench/v1/dev/"
@@ -36,6 +49,9 @@ type Options struct {
 	Coldstart *coldstart.Service
 	// SecureCookie 在 HTTPS 部署時設為 true，工作階段 Cookie 加上 Secure。
 	SecureCookie bool
+	// MaxJSONBytes 是 JSON（非 multipart）請求本文的上限，超過時回 413 REQUEST_TOO_LARGE；
+	// 0 表示使用 DefaultMaxJSONBytes。multipart 上傳另以 MaxUploadBytes 限制。
+	MaxJSONBytes int64
 }
 
 // NewHTTPHandler 回傳 /workbench/v1/* 的 HTTP handler。
@@ -48,18 +64,34 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	maxJSON := opts.MaxJSONBytes
+	if maxJSON <= 0 {
+		maxJSON = DefaultMaxJSONBytes
+	}
 	h := &handler{svc: svc, auth: opts.Auth, cs: opts.Coldstart, secureCookie: opts.SecureCookie}
 	if h.cs == nil {
 		h.cs = coldstart.NewService(nil, nil, nil, logger) // 所有操作回 ErrUnavailable
 	}
 	strict := api.NewStrictHandlerWithOptions(h, nil, api.StrictHTTPServerOptions{
 		// 請求本文無法解析（JSON 格式錯誤、multipart 標頭錯誤等）一律 400
+		// 本文超過上限（見 limitBody）則回 413 REQUEST_TOO_LARGE
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			writeError(w, &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), ""})
+			writeError(w, requestError(err, ""))
 		},
 		// handler 回傳的 error 都會到這裡：轉成 HTTP 狀態與錯誤代碼（見 toError），只有 5xx 記錄日誌。
 		// 產生的程式碼在 Visit*Response（例如 SSE 寫出）失敗時也會呼叫這裡。
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			if headerSent(w) {
+				// 標頭已送出（SSE 或影像寫到一半失敗，通常是使用者離開）：狀態碼已無法更改，
+				// 再寫錯誤本文只會接在已送出的內容後面，因此只記日誌。使用者取消不算錯誤。
+				level := slog.LevelError
+				if canceled(r, err) {
+					level = slog.LevelDebug
+				}
+				logger.Log(r.Context(), level, "workbench: 回應寫出中途失敗",
+					"request_id", requestid.From(r.Context()), "path", r.URL.Path, "err", err)
+				return
+			}
 			e := toError(err)
 			// 使用者取消（換參數、離開頁面）與「沒有設定資料庫」（設定問題，回應已說明）不記成錯誤
 			if e.Status >= http.StatusInternalServerError && !canceled(r, err) && e.Code != "DB_UNAVAILABLE" {
@@ -87,8 +119,33 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 			writeError(w, errDevToolsOff)
 			return
 		}
-		routes.ServeHTTP(w, h.withSession(r))
+		limitBody(w, r, maxJSON)
+		// 包裝 ResponseWriter 以記錄標頭是否已送出（見 ResponseErrorHandlerFunc）
+		routes.ServeHTTP(&trackingWriter{ResponseWriter: w}, h.withSession(r))
 	})
+}
+
+// limitBody 以 http.MaxBytesReader 限制請求本文大小：multipart 上傳為 maxMultipartBytes，其餘（JSON）為 maxJSON。
+// 產生的程式碼解碼 JSON 時讀到上限會失敗，錯誤經 RequestErrorHandlerFunc 轉成 413（見 requestError）。
+func limitBody(w http.ResponseWriter, r *http.Request, maxJSON int64) {
+	if r.Body == nil || r.Body == http.NoBody {
+		return
+	}
+	limit := maxJSON
+	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err == nil && strings.HasPrefix(mt, "multipart/") {
+		limit = maxMultipartBytes
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+}
+
+// requestError 把讀取請求本文的錯誤轉成 *Error：超過本文上限為 413 REQUEST_TOO_LARGE，其餘為 400 INVALID_REQUEST。
+func requestError(err error, field string) *Error {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return &Error{http.StatusRequestEntityTooLarge, "REQUEST_TOO_LARGE",
+			fmt.Sprintf("請求本文超過 %d 位元組", tooLarge.Limit), field}
+	}
+	return &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), field}
 }
 
 // handler 實作產生的 StrictServerInterface；只做轉接，邏輯在 Service、auth.Service、coldstart.Service。
@@ -199,8 +256,6 @@ func (h *handler) PreprocessFood(ctx context.Context, req api.PreprocessFoodRequ
 	return api.PreprocessFood200JSONResponse(out), nil
 }
 
-// 登入於階段 5 實作（任務書第 4 節）。
-
 func (h *handler) RunSweep(ctx context.Context, req api.RunSweepRequestObject) (api.RunSweepResponseObject, error) {
 	out, err := h.svc.Sweep(ctx, *req.Body)
 	if err != nil {
@@ -274,14 +329,14 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 			break
 		}
 		if err != nil {
-			return "", nil, &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), ""}
+			return "", nil, requestError(err, "")
 		}
 		switch part.FormName() {
 		case "file":
 			// 多讀 1 位元組：讀到的長度超過上限即表示檔案過大，不必讀完整個本文
 			data, err = io.ReadAll(io.LimitReader(part, MaxUploadBytes+1))
 			if err != nil {
-				return "", nil, &Error{http.StatusBadRequest, "INVALID_REQUEST", err.Error(), "file"}
+				return "", nil, requestError(err, "file")
 			}
 			if len(data) > MaxUploadBytes {
 				return "", nil, &Error{http.StatusRequestEntityTooLarge, "IMAGE_TOO_LARGE",
@@ -292,9 +347,9 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 				name = part.FileName()
 			}
 		case "name":
-			// 顯示用名稱，只取前 256 位元組
-			b, _ := io.ReadAll(io.LimitReader(part, 256))
-			name = string(b)
+			// 顯示用名稱，只取前 maxNameBytes 位元組；截斷處若切在 UTF-8 字元中間則往前修剪
+			b, _ := io.ReadAll(io.LimitReader(part, maxNameBytes))
+			name = truncateUTF8(b)
 		}
 		_ = part.Close()
 	}
@@ -302,6 +357,21 @@ func readUpload(mr *multipart.Reader) (string, []byte, error) {
 		return "", nil, &Error{http.StatusBadRequest, "IMAGE_REQUIRED", "缺少影像檔", "file"}
 	}
 	return name, data, nil
+}
+
+// truncateUTF8 去掉 b 結尾不完整的 UTF-8 字元（LimitReader 截斷時可能切在多位元組字元中間）。
+// 從結尾往回找最後一個字元的起點，若從起點起的位元組不足一個完整字元就截掉；
+// 其他不合法的內容（不是截斷造成的）原樣保留。
+func truncateUTF8(b []byte) string {
+	for i := len(b) - 1; i >= 0 && i >= len(b)-utf8.UTFMax; i-- {
+		if utf8.RuneStart(b[i]) {
+			if !utf8.FullRune(b[i:]) {
+				b = b[:i]
+			}
+			break
+		}
+	}
+	return string(b)
 }
 
 // deref 把選填的查詢參數轉成字串；未提供時為空字串（交給 Python 用預設值）。
