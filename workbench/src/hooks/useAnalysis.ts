@@ -1,7 +1,7 @@
 // 各工具頁共用的分析查詢：參數防抖、取消舊請求、量往返時間、出錯時保留上一次成功的結果。
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 
-import { ApiError, type ConfigOverride } from '@/api/client'
+import { ApiError, type ConfigOverride, type ImageRef } from '@/api/client'
 import { useDebounced } from '@/hooks/useDebounced'
 import { useLastDefined } from '@/hooks/useLastDefined'
 
@@ -77,6 +77,20 @@ export function useAnalysis<T, C = ConfigOverride>({
     /** 畫面上的結果不代表目前的參數（防抖中、計算中或出錯），顯示時淡化 */
     stale: config !== debounced || query.isFetching || !!query.error,
   }
+}
+
+/**
+ * 影像與結果的配對：只在結果屬於這張影像（imageId 相同）時更新；換圖後新結果回來前沿用上一組。
+ * AnalysisFrame 用它決定畫面上的影像與結果；頁面頂層需要同一組配對時（例如條碼頁的嘗試選單）也用它，
+ * 兩邊才會是同一組，不會一邊是新影像的結果、一邊是舊的。
+ */
+export function usePairedResult<T, C>(
+  shown: Timed<T, C> | undefined,
+  image: ImageRef | undefined,
+): { result: Timed<T, C>; image: ImageRef } | undefined {
+  return useLastDefined(
+    shown && image && shown.imageId === image.image_id ? { result: shown, image } : undefined,
+  )
 }
 
 /** useAnalysis 的回傳型別，供元件以 props 接收。 */

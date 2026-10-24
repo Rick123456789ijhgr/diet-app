@@ -13,6 +13,7 @@ import { ErrorBox, Metric, MetricGrid } from '@/components/results'
 import {
   Badge,
   Button,
+  DraftNumberInput,
   Segmented,
   Tabs,
   TabsContent,
@@ -25,7 +26,9 @@ import { useLocalImage } from '@/hooks/useLocalImage'
 import { useRenderView } from '@/hooks/useRenderView'
 import { useStream } from '@/hooks/useStream'
 import { cn } from '@/lib/cn'
-import { valueOf } from '@/lib/config'
+import { sameOverrides, valueOf } from '@/lib/config'
+import { downloadBlob } from '@/lib/download'
+import { parseClampedInt } from '@/lib/number'
 import { warningText } from '@/lib/text'
 
 // 以下型別是本頁自行宣告的 SSE 事件形狀（規格中只定義請求 BatchRequest）。
@@ -79,13 +82,7 @@ const MAX_TABLE_ROWS = 500
 
 /** 按下時才產生 CSV（不在每次收到新的一張時重建） */
 function downloadCsv(rows: Row[]) {
-  const url = URL.createObjectURL(new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'quality_batch.csv'
-  a.click()
-  // 點擊後立即釋放物件 URL，避免累積記憶體
-  URL.revokeObjectURL(url)
+  downloadBlob(new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' }), 'quality_batch.csv')
 }
 
 /**
@@ -209,15 +206,14 @@ export function BatchPage() {
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-xs">
               <span className="text-muted">最多張數</span>
-              <input
+              {/* 限制在 1–5000；可暫時清空，失焦時才顯示夾過的值（見 parseClampedInt） */}
+              <DraftNumberInput
                 aria-label="最多張數"
-                type="number"
                 min={1}
                 max={5000}
                 value={limit}
-                // 限制在 1–5000；清空或非數字時視為 1
-                onChange={(e) => setLimit(Math.max(1, Math.min(5000, Number(e.target.value) || 1)))}
-                className="border-card-border bg-sunken readout h-6 w-20 rounded-lg border px-1.5 text-right"
+                parse={(t) => parseClampedInt(t, 1, 5000)}
+                onCommit={setLimit}
               />
             </label>
             <label className="flex items-center gap-2 text-xs">
@@ -253,8 +249,8 @@ export function BatchPage() {
 
   const total = start?.type === 'start' ? start.total : 0
   // 執行後參數又被修改：提示使用者目前畫面上的結果是舊參數算的。
-  // 以 JSON 字串比較內容（物件參照每次編輯都會變）
-  const changed = ranWith !== null && JSON.stringify(ranWith) !== JSON.stringify(config)
+  // 依內容比較（物件參照每次編輯都會變；不受鍵順序影響，例如匯入後鍵順序不同）
+  const changed = ranWith !== null && !sameOverrides(ranWith, config)
 
   // 每張結果表格；只畫前 MAX_TABLE_ROWS 列。讀取失敗的列以一格合併顯示錯誤，且不可選取
   const table = (
@@ -275,7 +271,9 @@ export function BatchPage() {
             onClick={() => r.error === null && setSelected(r)}
             aria-selected={selected?.index === r.index}
             className={cn(
-              'border-card-border tabular cursor-pointer border-b last:border-0',
+              'border-card-border tabular border-b last:border-0',
+              // 讀取失敗的列不可選取，不顯示可點的游標
+              r.error === null && 'cursor-pointer',
               selected?.index === r.index
                 ? 'bg-primary-soft shadow-[inset_3px_0_0_var(--primary)]'
                 : 'hover:bg-hover',

@@ -149,7 +149,7 @@ function StatCard({
 }) {
   return (
     <div className={cn('shadow-card rounded-[20px] p-5', hero ? 'hero-card' : 'bg-card')}>
-      <div className={cn('text-[13px]', hero ? 'text-white/85' : 'text-muted')}>{label}</div>
+      <div className={cn('text-[13px]', hero ? 'text-on-primary/85' : 'text-muted')}>{label}</div>
       <div className="tabular mt-3 text-[30px] leading-none font-semibold tracking-tight">
         {value}
       </div>
@@ -157,7 +157,7 @@ function StatCard({
         <span
           className={cn(
             'inline-flex h-6 items-center rounded-full px-2.5 text-xs',
-            hero ? 'bg-white/20 text-white' : 'bg-sunken text-ink-2',
+            hero ? 'bg-on-primary/20 text-on-primary' : 'bg-sunken text-ink-2',
           )}
         >
           {note}

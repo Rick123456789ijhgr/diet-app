@@ -57,6 +57,15 @@ function sameValue(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+/**
+ * 兩組覆寫內容是否相同；不受鍵順序影響（JSON.stringify 直接比會因鍵順序不同誤判為不同）。
+ * 序列欄位的陣列仍依順序比較（順序本身有意義）。
+ */
+export function sameOverrides(a: ConfigOverride, b: ConfigOverride): boolean {
+  const keys = Object.keys(a)
+  return keys.length === Object.keys(b).length && keys.every((k) => k in b && sameValue(a[k], b[k]))
+}
+
 /** 匯出成 Python config_to_json 的格式：{"class": ..., "values": {...}}，含全部欄位。 */
 export function exportJson(schema: ConfigClass, overrides: ConfigOverride): string {
   return JSON.stringify(
@@ -69,7 +78,8 @@ export function exportJson(schema: ConfigClass, overrides: ConfigOverride): stri
 // 單一值轉成 Python 字面值；float 欄位的整數補上 .0，貼回 Python 時型別與 dataclass 宣告一致
 function pyScalar(value: string | number | boolean, float: boolean): string {
   if (typeof value === 'boolean') return value ? 'True' : 'False'
-  if (typeof value === 'string') return `'${value}'`
+  // 先跳脫反斜線再跳脫單引號，產生的 Python 字串字面值才合法
+  if (typeof value === 'string') return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
   if (float && Number.isInteger(value)) return `${value}.0`
   return String(value)
 }
@@ -120,7 +130,12 @@ export function importJson(schema: ConfigClass, text: string): ConfigOverride {
         `設定類別不符：檔案為 ${String(values.class)}，需要 ${schema.name}`,
       )
     }
-    values = values.values as Record<string, unknown>
+    const inner = values.values
+    // values 為 null、陣列或純量時 Object.entries 會丟 TypeError；改丟中文錯誤
+    if (typeof inner !== 'object' || inner === null || Array.isArray(inner)) {
+      throw new ConfigImportError('values 必須是物件')
+    }
+    values = inner as Record<string, unknown>
   }
   const fields = new Map(schema.fields.map((f) => [f.name, f]))
   let overrides: ConfigOverride = {}
@@ -161,4 +176,9 @@ export function formatValue(field: ConfigField, value: Value): string {
 /** 修改的項目數（表單欄位與序列欄位都算）。 */
 export function changedCount(overrides: ConfigOverride): number {
   return Object.keys(overrides).length
+}
+
+/** 已覆寫的退化項目數；seed（亂數種子）本身不是一種退化，不計入。徽章的數字與顏色共用這個值。 */
+export function degradationCount(overrides: ConfigOverride): number {
+  return Object.keys(overrides).filter((k) => k !== 'seed').length
 }

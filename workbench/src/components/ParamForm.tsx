@@ -1,5 +1,7 @@
 // 依 Python 的 param() 宣告自動產生的參數表單。只回報與預設值不同的欄位（覆寫）。
 import { CircleHelp, RotateCcw } from 'lucide-react'
+import { useId } from 'react'
+
 import type { ConfigClass, ConfigField, ConfigOverride } from '@/api/client'
 import { Badge, Button, DraftNumberInput, Hint, Slider, Switch } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
@@ -32,6 +34,8 @@ export function ParamForm({
   for (const f of schema.fields) groups.set(f.group, [...(groups.get(f.group) ?? []), f])
   // 已修改的項數＝覆寫的鍵數（呼叫端若有本表單以外的欄位，應先濾掉再傳入，例如 BarcodePage 的 scalars()）
   const changed = Object.keys(overrides).length
+  // 每個表單實例一個前綴：同頁兩個 ParamForm 有同名欄位時，欄位 id 才不會重複
+  const idPrefix = useId()
 
   return (
     <div className="space-y-4">
@@ -51,6 +55,7 @@ export function ParamForm({
           {fields.map((f) => (
             <FieldRow
               key={f.name}
+              id={`${idPrefix}-param-${f.name}`}
               field={f}
               value={valueOf(f, overrides)}
               changed={f.name in overrides}
@@ -69,29 +74,37 @@ export function ParamForm({
  * bool 欄位用開關；數值欄位用數字框，若 schema 同時有 min 與 max 再加一條滑桿。
  */
 function FieldRow({
+  id,
   field,
   value,
   changed,
   error,
   onChange,
 }: {
+  /** 輸入元件的 id（由 ParamForm 依實例前綴＋欄位名產生，同頁不重複） */
+  id: string
   field: ConfigField
   value: Value
   changed: boolean
   error?: string
   onChange: (v: Value) => void
 }) {
-  // 由欄位名產生 id，讓 <label htmlFor> 對應到數字框或開關。
-  // 注意：同一頁若同時有兩個 ParamForm 含同名欄位，id 會重複
-  const id = `param-${field.name}`
+  // id 讓 <label htmlFor> 對應到數字框或開關
   const label = (
     <div className="flex min-w-0 items-center gap-1.5">
       {changed && <span className="bg-primary size-1.5 shrink-0 rounded-full" aria-hidden />}
       <label htmlFor={id} className="truncate text-sm">
         {field.label}
       </label>
+      {/* 觸發元素用按鈕包住圖示：SVG 本身無法以鍵盤聚焦，按鈕可以（聚焦時顯示提示） */}
       <Hint text={field.help}>
-        <CircleHelp className="text-muted size-3.5 shrink-0" aria-label={`${field.label}說明`} />
+        <button
+          type="button"
+          aria-label={`${field.label}說明`}
+          className="text-muted hover:text-ink focus-visible:ring-primary/40 shrink-0 rounded-full focus-visible:ring-2 focus-visible:outline-none"
+        >
+          <CircleHelp className="size-3.5" aria-hidden />
+        </button>
       </Hint>
       {/* calibrate：此參數的預設值是暫定的，之後要以實驗資料校準 */}
       {field.calibrate && <Badge tone="accent">待校準</Badge>}

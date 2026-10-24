@@ -83,7 +83,6 @@ export function QualityPage() {
     imageView || view === 'histogram',
   )
 
-  /** 參數目前的值（顯示門檻用） */
   /** 某組參數的目前值（顯示門檻與說明用）；結果區用算出該結果的那組參數 */
   // 未覆寫時回到結構中的預設值；結構未載入或欄位不存在時回傳 NaN（顯示會變成 NaN）
   const valuesOf = (cfg: ConfigOverride) => (name: string) => {
@@ -140,6 +139,8 @@ export function QualityPage() {
         {({ data: result, roundTripMs, config: used }, img) => {
           // 門檻用「算出這個結果的參數」（used），而非畫面上最新的 config，否則防抖期間門檻與結果不一致
           const current = valuesOf(used as ConfigOverride)
+          // 後端是否發出某個警告；警告與各項檢查一一對應（見 ai 的 quality.check_quality）
+          const flagged = (code: string) => result.warnings.includes(code)
           const short = Math.min(img.width, img.height)
           const pct = (v: number) => `${(v * 100).toFixed(1)}%`
           // 帶正負號的差值；負號用數學減號「−」（U+2212），與其他頁面的 delta 一致
@@ -250,14 +251,15 @@ export function QualityPage() {
                       `往返 ${roundTripMs.toFixed(0)} ms`,
                     ]}
                   />
-                  {/* 各指標：數值來自後端；delta 只是「數值 − 門檻」的顯示，good 決定綠／紅 */}
+                  {/* 各指標：數值來自後端；delta 只是「數值 − 門檻」的顯示，good 決定綠／紅。
+                      good 一律取後端的判定（短邊用 resolution_ok，其餘看對應警告是否出現），前端不拿數值比門檻 */}
                   <ReadoutBlock title="指標">
                     <MetricGrid>
                       <Metric
                         label="模糊分數"
                         value={result.blur_score.toFixed(0)}
                         delta={`${signed(result.blur_score - current('blur_min'), (v) => v.toFixed(0))} 相對下限 ${current('blur_min')}`}
-                        good={result.blur_score >= current('blur_min')}
+                        good={!flagged('TOO_BLURRY')}
                         help={`拉普拉斯變異數（縮放到短邊 ${current('blur_short_side')} px）；越低越模糊。`}
                       />
                       {/* 短邊直接取影像尺寸；是否通過用後端的 resolution_ok */}
@@ -271,14 +273,14 @@ export function QualityPage() {
                         label="過暗比例"
                         value={pct(result.dark_ratio)}
                         delta={`${signed(result.dark_ratio - current('dark_ratio_max'), pct)} 相對上限`}
-                        good={result.dark_ratio <= current('dark_ratio_max')}
+                        good={!flagged('TOO_DARK')}
                         help={`灰階 < ${current('dark_level')} 的像素比例；上限 ${pct(current('dark_ratio_max'))}。`}
                       />
                       <Metric
                         label="過亮比例"
                         value={pct(result.bright_ratio)}
                         delta={`${signed(result.bright_ratio - current('bright_ratio_max'), pct)} 相對上限`}
-                        good={result.bright_ratio <= current('bright_ratio_max')}
+                        good={!flagged('TOO_BRIGHT')}
                         help={`灰階 > ${current('bright_level')} 的像素比例；上限 ${pct(current('bright_ratio_max'))}。`}
                       />
                     </MetricGrid>

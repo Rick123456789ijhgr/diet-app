@@ -2,7 +2,7 @@
 // 用於批次結果與 E1 失敗影像；路徑同樣經測試集鎖定。
 import { useQuery } from '@tanstack/react-query'
 
-import type { ImageRef } from '@/api/client'
+import { ApiError, type ImageRef } from '@/api/client'
 import { BASE_KEY } from '@/hooks/useImagePipeline'
 import { postSse } from '@/lib/sse'
 import { RECREATE_INTERVAL_MS } from '@/queryClient'
@@ -36,8 +36,11 @@ export function useLocalImage(path: string | undefined) {
         },
         signal,
       )
-      // 沒有 row 事件，或 row 帶著讀檔錯誤時，查詢視為失敗
-      if (!row?.image_id) throw new Error(row?.error ?? '無法讀取影像')
+      // 沒有 row 事件，或 row 帶著讀檔錯誤時，查詢視為失敗。
+      // 丟 4xx 的 ApiError：讀檔失敗重試結果也一樣，queryClient 的重試規則對 4xx 不重試
+      if (!row?.image_id) {
+        throw new ApiError(422, 'IMAGE_DECODE_FAILED', row?.error ?? '無法讀取影像')
+      }
       return {
         image_id: row.image_id,
         width: row.width ?? 0,

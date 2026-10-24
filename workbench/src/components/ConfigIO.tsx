@@ -1,24 +1,28 @@
 // 控制面板的「匯出入」分頁：匯出 JSON（可給 Python 的 config_from_json 讀）、Python 建構式、匯入。
 import { Check, Copy, Download, FileUp } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { ConfigClass, ConfigOverride } from '@/api/client'
 import { Button } from '@/components/ui/primitives'
 import { ConfigImportError, exportJson, importJson, pythonCtor } from '@/lib/config'
+import { downloadBlob } from '@/lib/download'
 
 /**
  * 設定的匯出入。
  * - schema／overrides：目前的設定結構與覆寫；匯出內容每次渲染由兩者推導，不另存狀態。
  * - onImport：匯入成功後回傳新的覆寫（取代目前的覆寫）。
+ * - title：同一頁有多組設定（例如條碼的階梯與解碼器）時，各組的標題；也加在匯入框的名稱上以便區分。
  */
 export function ConfigIO({
   schema,
   overrides,
   onImport,
+  title,
 }: {
   schema: ConfigClass
   overrides: ConfigOverride
   onImport: (o: ConfigOverride) => void
+  title?: string
 }) {
   const json = exportJson(schema, overrides)
   const py = pythonCtor(schema, overrides)
@@ -42,6 +46,7 @@ export function ConfigIO({
 
   return (
     <div className="space-y-5 text-sm">
+      {title && <h2 className="text-base font-semibold">{title}</h2>}
       <div className="space-y-2">
         <h3 className="font-semibold">Python 建構式</h3>
         <p className="text-muted text-xs">只列出與預設值不同的欄位，可直接貼回程式或實驗設定。</p>
@@ -52,15 +57,10 @@ export function ConfigIO({
         <CodeBlock text={json} />
         <Button
           size="sm"
-          // 以 Blob URL＋暫時的 <a download> 觸發下載（不需後端）；點擊後立即釋放 URL，避免記憶體洩漏
-          onClick={() => {
-            const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `${schema.name}.json`
-            a.click()
-            URL.revokeObjectURL(url)
-          }}
+          // 不需後端；URL 延後釋放（見 downloadBlob）
+          onClick={() =>
+            downloadBlob(new Blob([json], { type: 'application/json' }), `${schema.name}.json`)
+          }
         >
           <Download className="size-3.5" aria-hidden />
           下載
@@ -69,7 +69,7 @@ export function ConfigIO({
       <div className="space-y-2">
         <h3 className="font-semibold">匯入 JSON</h3>
         <textarea
-          aria-label="匯入的設定 JSON"
+          aria-label={title ? `匯入的設定 JSON（${title}）` : '匯入的設定 JSON'}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder='{"class": "QualityConfig", "values": {...}} 或 {"blur_min": 150}'
@@ -93,6 +93,9 @@ export function ConfigIO({
 /** 唯讀程式碼區塊＋右上角複製按鈕；複製成功後圖示短暫（1.2 秒）變成打勾。 */
 function CodeBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
+  // 「已複製」計時器；卸載時清除，避免對已卸載的元件更新狀態
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
   return (
     <div className="relative">
       <pre className="bg-sunken border-card-border readout max-h-60 overflow-auto rounded-lg border p-2 pr-9 text-xs whitespace-pre-wrap">
@@ -106,7 +109,8 @@ function CodeBlock({ text }: { text: string }) {
           try {
             await navigator.clipboard.writeText(text)
             setCopied(true)
-            setTimeout(() => setCopied(false), 1200)
+            clearTimeout(timer.current)
+            timer.current = setTimeout(() => setCopied(false), 1200)
           } catch {
             // 無剪貼簿權限時不處理，使用者可手動選取
           }

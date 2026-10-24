@@ -46,6 +46,9 @@ describe('設定覆寫', () => {
     ['{"nope": 1}', '沒有欄位 nope'],
     ['{"min_short_side": 1.5}', 'min_short_side 必須是 int'],
     ['{"blur_min": "x"}', 'blur_min 必須是 float'],
+    ['{"values": null}', 'values 必須是物件'],
+    ['{"values": [1]}', 'values 必須是物件'],
+    ['{"class": "QualityConfig", "values": 3}', 'values 必須是物件'],
   ])('匯入 %s 時報錯', (text, message) => {
     expect(() => importJson(qualitySchema, text)).toThrow(ConfigImportError)
     expect(() => importJson(qualitySchema, text)).toThrow(message)
@@ -91,6 +94,10 @@ describe('序列欄位與位元組、幾何', () => {
     )
     expect(importJson(ladderSchema, '{"rungs": ["raw"]}')).toEqual({ rungs: ['raw'] })
     expect(() => importJson(ladderSchema, '{"rungs": "raw"}')).toThrow('rungs 必須是陣列')
+    // 字串中的單引號與反斜線要跳脫，產生的 Python 字面值才合法
+    expect(pythonCtor(ladderSchema, setSequence(ladderSchema, {}, 'rungs', ["a'b\\c"]))).toBe(
+      "LadderConfig(rungs=('a\\'b\\\\c',))",
+    )
   })
 
   it('位元組顯示', async () => {
@@ -136,6 +143,71 @@ describe('SSE 解析', () => {
   })
 })
 
+describe('SSE 中途錯誤', () => {
+  const stream = async (body: string) => {
+    const { http, HttpResponse } = await import('msw')
+    const { server } = await import('@/test/server')
+    server.use(
+      http.post(
+        '*/test-sse',
+        () => new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } }),
+      ),
+    )
+    const { postSse } = await import('./sse')
+    return postSse('/test-sse', {}, () => {})
+  }
+
+  it('依錯誤代碼還原 HTTP 狀態，4xx 才不會被重試', async () => {
+    const { ApiError } = await import('@/api/client')
+    const err = await stream(
+      'event: error\ndata: {"code":"PATH_NOT_FOUND","message":"找不到"}\n\n',
+    ).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ status: 404, code: 'PATH_NOT_FOUND' })
+    const other = await stream('event: error\ndata: {"code":"WHATEVER","message":"x"}\n\n').catch(
+      (e: unknown) => e,
+    )
+    expect(other).toMatchObject({ status: 500, code: 'WHATEVER' })
+  })
+
+  it('data 不是 JSON 時丟 ApiError 而非 SyntaxError', async () => {
+    const { ApiError } = await import('@/api/client')
+    const err = await stream('data: {oops\n\n').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ code: 'INTERNAL' })
+  })
+})
+
+describe('useLocalImage', () => {
+  it('讀檔失敗時丟 4xx 的 ApiError，不重試', async () => {
+    const { renderHook, waitFor } = await import('@testing-library/react')
+    const { QueryClientProvider } = await import('@tanstack/react-query')
+    const { createElement } = await import('react')
+    const { http, HttpResponse } = await import('msw')
+    const { server } = await import('@/test/server')
+    const { createQueryClient } = await import('@/queryClient')
+    const { useLocalImage } = await import('@/hooks/useLocalImage')
+    let calls = 0
+    server.use(
+      http.post('*/workbench/v1/dev/batches', () => {
+        calls += 1
+        return new HttpResponse(
+          'data: {"type":"row","index":0,"file":"a.png","path":"a.png","error":"無法解碼影像"}\n\n',
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        )
+      }),
+    )
+    const client = createQueryClient()
+    const { result } = renderHook(() => useLocalImage('a.png'), {
+      wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+    })
+    await waitFor(() => expect(result.current.error).toBeTruthy())
+    expect(result.current.error).toMatchObject({ code: 'IMAGE_DECODE_FAILED', status: 422 })
+    expect(result.current.error?.message).toBe('無法解碼影像')
+    expect(calls).toBe(1)
+  })
+})
+
 describe('useStream', () => {
   it('新的執行取代舊的時，舊執行結束不會覆蓋新狀態', async () => {
     const { renderHook, act, waitFor } = await import('@testing-library/react')
@@ -166,5 +238,62 @@ describe('useStream', () => {
     expect(result.current.status).toBe('done')
     // 卸載以清除計時器，避免測試環境拆掉後才觸發
     unmount()
+  })
+})
+
+describe('排序、數字輸入與下載', () => {
+  it('成功階依 RUNG_ORDER 排列，新階接在最後而不略過', async () => {
+    const { orderRungs } = await import('./ordering')
+    expect(orderRungs(['deskew', 'raw', 'new_rung', 'raw'])).toEqual(['raw', 'deskew', 'new_rung'])
+  })
+
+  it('標籤值自然排序：數字依數值、在文字之前', async () => {
+    const { naturalSort } = await import('./ordering')
+    expect(naturalSort(['clean', '10', 'blur', '2', ''])).toEqual(['2', '10', '', 'blur', 'clean'])
+  })
+
+  it('整數輸入夾在範圍內；空白或非數字不提交', async () => {
+    const { parseClampedInt } = await import('./number')
+    expect(parseClampedInt('25', 1, 20)).toBe(20)
+    expect(parseClampedInt('0', 1, 20)).toBe(1)
+    expect(parseClampedInt('3.6', 1, 20)).toBe(4)
+    expect(parseClampedInt('', 1, 20)).toBeUndefined()
+    expect(parseClampedInt('abc', 1, 20)).toBeUndefined()
+  })
+
+  it('進度百分比在 total 為 0 時不是 NaN', async () => {
+    const { progressPercent } = await import('./number')
+    expect(progressPercent(2, 4)).toBe(50)
+    expect(progressPercent(0, 0)).toBe(5)
+  })
+
+  it('覆寫比較不受鍵順序影響', async () => {
+    const { sameOverrides } = await import('./config')
+    expect(sameOverrides({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true)
+    expect(sameOverrides({ a: 1 }, { a: 1, b: 2 })).toBe(false)
+    expect(sameOverrides({ r: ['x', 'y'] }, { r: ['y', 'x'] })).toBe(false)
+  })
+
+  it('下載後延後釋放物件 URL', async () => {
+    const { vi } = await import('vitest')
+    const { downloadBlob, REVOKE_DELAY_MS } = await import('./download')
+    vi.useFakeTimers()
+    // jsdom 沒有實作 createObjectURL／revokeObjectURL
+    const create = vi.fn(() => 'blob:x')
+    const revoke = vi.fn()
+    const original = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL }
+    Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    try {
+      downloadBlob(new Blob(['a']), 'a.txt')
+      expect(click).toHaveBeenCalledOnce()
+      expect(revoke).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(REVOKE_DELAY_MS)
+      expect(revoke).toHaveBeenCalledWith('blob:x')
+    } finally {
+      click.mockRestore()
+      Object.assign(URL, original)
+      vi.useRealTimers()
+    }
   })
 })

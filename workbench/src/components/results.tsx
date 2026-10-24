@@ -6,8 +6,7 @@ import { ApiError, type ImageRef } from '@/api/client'
 import { EmptyState } from '@/components/layout/Workspace'
 import { Badge } from '@/components/ui/primitives'
 import type { ImagePipeline } from '@/hooks/useImagePipeline'
-import type { Analysis, Timed } from '@/hooks/useAnalysis'
-import { useLastDefined } from '@/hooks/useLastDefined'
+import { usePairedResult, type Analysis, type Timed } from '@/hooks/useAnalysis'
 import { cn } from '@/lib/cn'
 import { errorText, warningText } from '@/lib/text'
 
@@ -31,9 +30,7 @@ export function AnalysisFrame<T>({
   const image = pipeline.image
   // 影像與結果必須來自同一張圖：換圖後新結果回來前，繼續顯示上一組（淡化），
   // 不把舊結果（例如四角、偵測框）疊到新影像上
-  const pair = useLastDefined(
-    shown && image && shown.imageId === image.image_id ? { result: shown, image } : undefined,
-  )
+  const pair = usePairedResult(shown, image)
   // 「致命」錯誤：原圖或劣化圖本身取得失敗。INVALID_CONFIG（參數不合法）不算，
   // 那類錯誤只需提示使用者修正欄位，結果區仍保留上一次的結果。
   const fatal = [pipeline.base.error, pipeline.degraded.error].find(

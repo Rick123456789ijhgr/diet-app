@@ -21,6 +21,7 @@ import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
 import {
   Badge,
   Button,
+  DraftNumberInput,
   Segmented,
   Tabs,
   TabsContent,
@@ -32,6 +33,8 @@ import { useDebounced } from '@/hooks/useDebounced'
 import { useLocalImage } from '@/hooks/useLocalImage'
 import { useStream } from '@/hooks/useStream'
 import { cn } from '@/lib/cn'
+import { parseClampedInt, progressPercent } from '@/lib/number'
+import { naturalSort, orderRungs } from '@/lib/ordering'
 import { outcomeText, rungText } from '@/lib/text'
 
 // 以下型別是本頁自行宣告的後端回應形狀（E1 路由的回應在規格中是自由 JSON：FreeJson），
@@ -117,8 +120,6 @@ type E1Event =
 
 /** 失敗種類（誤讀、漏讀、誤報、執行錯誤），也是「失敗影像」篩選按鈕的順序。 */
 const FAILURE_KINDS = ['misread', 'missed', 'false_positive', 'error']
-/** 解碼階梯由簡到繁的固定順序，讓「成功階」堆疊長條的顏色與圖例順序固定。 */
-const RUNG_ORDER = ['raw', 'gray', 'binarize', 'sharpen', 'denoise', 'deskew', 'multiscale']
 
 /**
  * E1 條碼消融頁。左側面板分兩頁：「執行結果」選資料夾／執行／基準組／分組條件；
@@ -154,7 +155,10 @@ export function E1Page() {
       ) as Promise<unknown> as Promise<RunList>,
   })
   const runs = list.data?.runs ?? []
-  // 換了資料夾（或原本沒有結果）時，選取值不在清單中：改選最新的一次
+  // 換了資料夾（或原本沒有結果）時，選取值不在清單中：改選最新的一次。
+  // runs[0] 就是最新的：Python 的 dietai.evaluation.barcode.list_runs 以資料夾名稱反向排序
+  // （名稱以 %Y%m%d-%H%M%S 時間戳記開頭，由 run_experiment 建立），Go 原樣轉送 JSON 不改順序。
+  // 例外：自選資料夾中不是由 run_experiment 建立、名稱不以時間戳記開頭的資料夾，順序只依名稱。
   const current = runs.some((r) => r.name === runName) ? runName : (runs[0]?.name ?? null)
 
   // 載入選定執行的完整結果。已寫入磁碟的執行結果不會再變，所以 staleTime: Infinity 不重新抓取；
@@ -180,9 +184,10 @@ export function E1Page() {
   const arms = picked ?? list.data?.default_arms ?? []
 
   // 快速執行：收到 done 時切換到新產生的執行，並讓所有 e1-runs 清單查詢失效以重新列出
-  // （前綴比對，不論資料夾）。注意這裡帶的是防抖後的資料夾。
+  // （前綴比對，不論資料夾）。帶的是輸入框目前的資料夾（不是防抖後的），剛打完字就按執行也不會用到舊路徑；
+  // 完成時防抖早已跟上，清單查詢的也是同一個資料夾。
   const quickRun = () =>
-    void stream.run({ arms, n_codes: nCodes, root: debouncedRoot || undefined }, (e) => {
+    void stream.run({ arms, n_codes: nCodes, root: root || undefined }, (e) => {
       if (e.type === 'done') {
         setRunName(e.name)
         void qc.invalidateQueries({ queryKey: ['e1-runs'] })
@@ -190,6 +195,9 @@ export function E1Page() {
     })
   // 最新一筆進度事件（複製後反轉再找，不改動 stream.events 本身）；還沒有進度時為 undefined
   const progress = [...stream.events].reverse().find((e) => e.type === 'progress')
+  // 進度百分比；還沒有進度時先顯示 5%（total 為 0 時也不會得到 NaN，見 progressPercent）
+  const progressPct =
+    progress?.type === 'progress' ? progressPercent(progress.done, progress.total) : 5
 
   // 左側控制面板
   const panel = (
@@ -275,15 +283,14 @@ export function E1Page() {
         </fieldset>
         <label className="flex items-center gap-2 text-xs">
           <span className="text-muted">條碼數</span>
-          <input
+          {/* 限制在 1–20；可暫時清空，失焦時才顯示夾過的值（見 parseClampedInt） */}
+          <DraftNumberInput
             aria-label="條碼數"
-            type="number"
             min={1}
             max={20}
             value={nCodes}
-            // 限制在 1–20；清空或非數字時視為 1
-            onChange={(e) => setNCodes(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-            className="border-card-border bg-sunken readout h-6 w-16 rounded-lg border px-1.5 text-right"
+            parse={(t) => parseClampedInt(t, 1, 20)}
+            onCommit={setNCodes}
           />
         </label>
         {/* 執行中顯示停止鈕與進度條；還沒收到 progress（後端仍在產生合成資料）時，進度條先顯示 5% */}
@@ -296,6 +303,7 @@ export function E1Page() {
             <div
               role="progressbar"
               aria-valuenow={progress?.type === 'progress' ? progress.done : 0}
+              aria-valuemax={progress?.type === 'progress' ? progress.total : undefined}
             >
               <div className="text-muted mb-1 text-xs">
                 {progress?.type === 'progress'
@@ -305,9 +313,7 @@ export function E1Page() {
               <div className="bg-hover h-1.5 overflow-hidden rounded-full">
                 <div
                   className="bg-primary h-full transition-all"
-                  style={{
-                    width: `${progress?.type === 'progress' ? (progress.done / progress.total) * 100 : 5}%`,
-                  }}
+                  style={{ width: `${progressPct}%` }}
                 />
               </div>
             </div>
@@ -359,8 +365,11 @@ export function E1Page() {
         <div className="p-4">
           <ErrorBox error={run.error} />
         </div>
-      ) : !data || !base ? (
+      ) : !data ? (
         <EmptyState>載入中…</EmptyState>
+      ) : !base ? (
+        // 沒有任何實驗組（結果檔是空的）：不再停在「載入中」
+        <EmptyState>這次執行沒有任何實驗組的結果。</EmptyState>
       ) : (
         // 換一次執行時重新建立，避免沿用前一次的選取（例如新執行沒有的實驗組）
         <RunView key={data.name} data={data} base={base} group={group} />
@@ -545,11 +554,11 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
                 <p className="text-muted mb-2 text-xs">
                   各階由原圖獨立產生，因此成功階就是救回該影像的步驟。
                 </p>
-                {/* 堆疊的階依 RUNG_ORDER 排序，只留這次執行實際出現的階；
+                {/* 堆疊的階依 RUNG_ORDER 排序（不在其中的新階接在最後），只留這次執行實際出現的階；
                     每個實驗組一列，值為 {rung: 影像數} */}
                 <StackedBars
                   label="各實驗組成功於各階的影像數"
-                  keys={RUNG_ORDER.filter((r) => data.rescues.some((x) => x.rung === r))}
+                  keys={orderRungs(data.rescues.map((x) => x.rung))}
                   keyLabel={rungText}
                   rows={data.arms.map((arm) => ({
                     label: arm,
@@ -576,8 +585,9 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
 function GroupView({ data, group }: { data: Run; group: string }) {
   // 排除沒有樣本的組合（成功率為 null，畫出來沒有意義）
   const rows = (data.by_tag[group] ?? []).filter((r) => r.n > 0)
-  // 欄＝該條件出現過的值，去重後依出現順序排列（未另外排序）；統一轉字串以便比對
-  const cols = [...new Set(rows.map((r) => String(r[group])))]
+  // 欄＝該條件出現過的值，去重後以自然排序（數字依數值、在文字之前，與後端分組排序相同）；
+  // 只依出現順序時，第一個實驗組沒有的值會排到最後。統一轉字串以便比對
+  const cols = naturalSort([...new Set(rows.map((r) => String(r[group])))])
   return (
     <Heatmap
       label={`實驗組與 ${group} 的成功率熱度圖`}
@@ -602,8 +612,8 @@ function GroupView({ data, group }: { data: Run; group: string }) {
  * 右側顯示該影像每一階的嘗試紀錄。納入測試集的執行不顯示影像（測試集鎖定）。
  */
 function Failures({ data }: { data: Run }) {
-  // 預設看最後一個實驗組；data.arms 若為空，這裡會是 undefined
-  const [arm, setArm] = useState(data.arms[data.arms.length - 1]!)
+  // 預設看最後一個實驗組；沒有任何實驗組時為空字串（清單為空，顯示「沒有符合條件的失敗影像」）
+  const [arm, setArm] = useState(data.arms.at(-1) ?? '')
   const [kinds, setKinds] = useState(FAILURE_KINDS)
   const [selected, setSelected] = useState<Failure | null>(null)
   // 換實驗組或篩選條件時清除選取：舊的選取列可能已不在清單中，也避免把別組的嘗試紀錄配到這一組

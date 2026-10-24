@@ -40,6 +40,54 @@ describe('參數掃描頁', () => {
     expect(last.params).toMatchObject({ axis: 'rotate_deg', lo: 0, hi: 45, samples: 5 })
     expect(screen.getByRole('tab', { name: /掃描/ })).toBeInTheDocument()
   })
+
+  it('下限不小於上限時顯示中文錯誤且不送出請求', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/sweep')
+    await screen.findByText('≥ 8', {}, WAIT)
+    const before = bodies('/workbench/v1/dev/sweeps').length
+    const lo = screen.getByLabelText('範圍下限')
+    await user.clear(lo)
+    await user.type(lo, '10')
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('下限必須小於上限')
+    expect(lo).toHaveAttribute('aria-invalid', 'true')
+    await new Promise((r) => setTimeout(r, 300))
+    expect(bodies('/workbench/v1/dev/sweeps')).toHaveLength(before)
+    // 改回合法範圍後錯誤消失並重新送出
+    await user.clear(lo)
+    await user.type(lo, '1')
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/sweeps').at(-1)).toMatchObject({
+        params: { lo: 1, hi: 8 },
+      }),
+    )
+  })
+
+  it('條碼：匯出入同時涵蓋階梯與解碼器設定，成功階依階梯順序堆疊', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/sweep')
+    await screen.findByText('≥ 8', {}, WAIT)
+    await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
+    await screen.findByText('首次失敗於 45', {}, WAIT)
+    await user.click(screen.getByRole('radio', { name: /成功階/ }))
+    const legend = screen.getByRole('img', { name: /逐步升級成功於哪一階/ }).nextElementSibling
+    expect(legend?.textContent).toMatch(/原圖.*校正/)
+    await user.click(screen.getByRole('tab', { name: /匯出入/ }))
+    expect(screen.getByText('階梯設定')).toBeInTheDocument()
+    expect(screen.getByText('解碼器設定')).toBeInTheDocument()
+    await user.type(
+      screen.getByLabelText('匯入的設定 JSON（解碼器設定）'),
+      '{{"try_rotate": false}',
+    )
+    const buttons = screen.getAllByRole('button', { name: '匯入' })
+    await user.click(buttons[1]!)
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/sweeps').at(-1)).toMatchObject({
+        params: { zxing: { try_rotate: false } },
+      }),
+    )
+  })
 })
 
 describe('資料夾批次頁', () => {
@@ -52,12 +100,35 @@ describe('資料夾批次頁', () => {
     const table = screen.getByRole('table', { name: '每張影像的品質檢查結果' })
     expect(within(table).getByText('無法解碼影像')).toBeInTheDocument()
     expect(screen.getByText('讀取失敗')).toBeInTheDocument()
+    // 讀取失敗的列不可選取，不顯示可點的游標
+    expect(within(table).getByText('無法解碼影像').closest('tr')).not.toHaveClass('cursor-pointer')
+    expect(within(table).getByText('a.png').closest('tr')).toHaveClass('cursor-pointer')
     await user.click(within(table).getByText('a.png'))
     expect(await screen.findByAltText('a.png（original）', {}, WAIT)).toBeInTheDocument()
     expect(bodies('/workbench/v1/dev/batches')).toContainEqual({
       folder: 'D:/photos/a.png',
       limit: 1,
     })
+  })
+
+  it('最多張數可暫時清空，失焦時才夾到範圍內', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/batch')
+    const limit = await screen.findByLabelText('最多張數')
+    await user.clear(limit)
+    // 清空時不會立刻變成 1
+    expect(limit).toHaveValue(null)
+    await user.type(limit, '9000')
+    expect(limit).toHaveValue(9000)
+    await user.tab()
+    expect(limit).toHaveValue(5000)
+    await user.type(screen.getByRole('textbox', { name: '資料夾' }), 'D:/photos')
+    await user.click(screen.getByRole('button', { name: '執行' }))
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/batches')).toContainEqual(
+        expect.objectContaining({ folder: 'D:/photos', limit: 5000 }),
+      ),
+    )
   })
 
   it('測試集被拒絕時顯示說明', async () => {
@@ -106,6 +177,13 @@ describe('E1 頁', () => {
 
     await user.click(screen.getByRole('button', { name: 'm1_agree2' }))
     await user.click(screen.getByRole('button', { name: '執行' }))
+    // 條碼數可暫時清空（不會立刻變成 1），失焦後恢復成目前值
+    const nCodes = screen.getByLabelText('條碼數')
+    await user.clear(nCodes)
+    expect(nCodes).toHaveValue(null)
+    await user.tab()
+    expect(nCodes).toHaveValue(2)
+
     // 誤讀提醒也是 alert，在所有 alert 中找錯誤訊息
     await waitFor(
       () =>
@@ -113,6 +191,23 @@ describe('E1 頁', () => {
           screen.getAllByRole('alert').some((a) => a.textContent?.includes('伺服器內部錯誤')),
         ).toBe(true),
       WAIT,
+    )
+  })
+})
+
+describe('E1 頁的邊界情況', () => {
+  it('剛輸入資料夾就按快速執行時，帶的是輸入框目前的資料夾', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/e1')
+    await screen.findByRole('img', { name: /整體成功率長條圖/ }, WAIT)
+    await user.type(screen.getByLabelText('結果資料夾'), 'D:/new-runs')
+    // 不等 400 ms 防抖，立刻切到快速執行並按下
+    await user.click(screen.getByRole('tab', { name: '快速執行' }))
+    await user.click(screen.getByRole('button', { name: '執行' }))
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/e1/runs')).toContainEqual(
+        expect.objectContaining({ root: 'D:/new-runs' }),
+      ),
     )
   })
 })
@@ -137,14 +232,14 @@ describe('門檻與結果配對', () => {
       }),
     )
     renderAt('/m1/sweep')
-    await screen.findByText('blur_min（下限）= 100', {}, WAIT)
+    await screen.findByText('模糊下限（下限）= 100', {}, WAIT)
     await user.click(screen.getByRole('tab', { name: /參數/ }))
     const input = screen.getByLabelText('模糊下限', { selector: 'input' })
     await user.clear(input)
     await user.type(input, '1500')
     expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('參數不合法')
     // 曲線仍是 blur_min=100 算的，門檻線不能跟著變成 1500
-    expect(screen.getByText('blur_min（下限）= 100')).toBeInTheDocument()
-    expect(screen.queryByText('blur_min（下限）= 1500')).not.toBeInTheDocument()
+    expect(screen.getByText('模糊下限（下限）= 100')).toBeInTheDocument()
+    expect(screen.queryByText('模糊下限（下限）= 1500')).not.toBeInTheDocument()
   })
 })

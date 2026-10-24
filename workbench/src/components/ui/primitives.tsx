@@ -71,8 +71,10 @@ export function Badge({
  */
 export function Slider({
   className,
+  'aria-label': ariaLabel,
   ...props
 }: ComponentProps<typeof RSlider.Root> & { 'aria-label'?: string }) {
+  // aria-label 只標在 Thumb；Root 不重複標，螢幕閱讀器才不會念兩次
   return (
     <RSlider.Root
       className={cn('relative flex h-4 w-full touch-none items-center select-none', className)}
@@ -82,7 +84,7 @@ export function Slider({
         <RSlider.Range className="bg-primary absolute h-full rounded-full" />
       </RSlider.Track>
       <RSlider.Thumb
-        aria-label={props['aria-label']}
+        aria-label={ariaLabel}
         className="border-primary bg-card focus-visible:ring-primary/30 block size-4 rounded-full border-[3px] focus-visible:ring-4 focus-visible:outline-none"
       />
     </RSlider.Root>
@@ -100,7 +102,7 @@ export function Switch({ className, ...props }: ComponentProps<typeof RSwitch.Ro
       )}
       {...props}
     >
-      <RSwitch.Thumb className="block size-4 translate-x-0.5 rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-[18px]" />
+      <RSwitch.Thumb className="block size-4 translate-x-0.5 bg-switch-thumb rounded-full shadow transition-transform data-[state=checked]:translate-x-[18px]" />
     </RSwitch.Root>
   )
 }
@@ -255,11 +257,11 @@ export function DraftNumberInput({
   const [editing, setEditing] = useState(false)
   // 不在編輯時，外部值改變（例如還原、匯入、拖滑桿）就同步顯示字串；編輯中不覆蓋使用者正在打的字。
   // editing 列入依賴：blur（editing 變 false）時也會觸發，把不合法或未格式化的草稿恢復成目前值。
-  // 注意：呼叫端常傳內聯的 format 函式，每次渲染都是新參照，此 effect 會在每次渲染後執行；
-  // 因 setText 相同字串時 React 會略過重繪，結果正確，只是多做一點工。
+  // 依賴格式化後的字串而非 format 函式：呼叫端常傳內聯函式，每次渲染都是新參照，否則每次渲染都會執行
+  const formatted = format(value)
   useEffect(() => {
-    if (!editing) setText(format(value))
-  }, [value, format, editing])
+    if (!editing) setText(formatted)
+  }, [formatted, editing])
   return (
     <NumberInput
       {...props}

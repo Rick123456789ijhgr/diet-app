@@ -21,7 +21,9 @@
   --muted: #74736f;
   --hover: #f1f1f0;
   --on-ink: #ffffff;
+  --switch-thumb: #ffffff;
   --primary: #f05a28;
+  --on-primary: #ffffff;
   --primary-ink: #c2410c;
   --primary-soft: #fff0ea;
   --primary-grad: linear-gradient(135deg, #f26b3a 0%, #ea4c1d 100%);
@@ -60,7 +62,9 @@
   --muted: #8e8d89;
   --hover: #242427;
   --on-ink: #141414;
+  --switch-thumb: #f2f2f0;
   --primary: #f26b3a;
+  --on-primary: #ffffff;
   --primary-ink: #ff8a5c;
   --primary-soft: #3a1d12;
   --primary-grad: linear-gradient(135deg, #f26b3a 0%, #d9481a 100%);
@@ -99,7 +103,9 @@
   --color-muted: var(--muted);
   --color-hover: var(--hover);
   --color-on-ink: var(--on-ink);
+  --color-switch-thumb: var(--switch-thumb);
   --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
   --color-primary-ink: var(--primary-ink);
   --color-primary-soft: var(--primary-soft);
   --color-ok: var(--ok);
@@ -142,7 +148,7 @@ body {
 /* 重點數字卡（橘色漸層） */
 .hero-card {
   background: var(--primary-grad);
-  color: #fff;
+  color: var(--on-primary);
 }
 
 /* 影像檢視區：淺色點陣底（深色模式為深底） */
