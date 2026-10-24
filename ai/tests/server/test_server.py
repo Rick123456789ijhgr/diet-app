@@ -474,13 +474,14 @@ def test_to_rpc_error_only_maps_user_paths_to_not_found():
     assert to_rpc_error(NotADirectoryError("configs")).reason == "INTERNAL"
 
 
-def test_to_rpc_error_maps_value_error_to_invalid_argument():
-    """前處理函式自己丟的 ValueError 屬輸入問題；ValueError 的子類別仍保有各自的代碼。"""
+def test_to_rpc_error_maps_invalid_image_to_invalid_argument():
+    """影像格式不符屬輸入問題；一般 ValueError 視為程式錯誤，仍是 INTERNAL。"""
     from dietai.devtools.configs import ConfigError
     from dietai.evaluation.manifest import SplitLockedError
+    from dietai.preprocess.ops import InvalidImageError
     from dietai.server.rpc import to_rpc_error
 
-    err = to_rpc_error(ValueError("影像必須是 uint8"))
+    err = to_rpc_error(InvalidImageError("影像必須是 uint8"))
     assert (err.code, err.reason, str(err)) == (
         grpc.StatusCode.INVALID_ARGUMENT,
         "INVALID_PARAMS",
@@ -489,6 +490,7 @@ def test_to_rpc_error_maps_value_error_to_invalid_argument():
     assert to_rpc_error(ConfigError("x", "blur_min")).reason == "INVALID_CONFIG"
     assert to_rpc_error(SplitLockedError("x")).reason == "SPLIT_LOCKED"
     assert to_rpc_error(RuntimeError("x")).code == grpc.StatusCode.INTERNAL
+    assert to_rpc_error(ValueError("x")).code == grpc.StatusCode.INTERNAL
 
 
 def test_stream_normal_completion_is_not_logged_as_cancelled(caplog):
