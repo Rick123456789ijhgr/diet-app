@@ -8,11 +8,13 @@
 // 服務都就緒（經網頁的網址 → Go → Python 取得設定結構成功）後才開啟瀏覽器。
 //
 // 環境變數（皆可省略）：AI_GRPC_PORT（預設 50051）、API_PORT（8080）、WEB_PORT（5173，只用於 --dev）、
-// WORKBENCH_NO_OPEN=1（不自動開瀏覽器）、WORKBENCH_SKIP_SETUP=1（不檢查套件）。
+// PGHOST／PGPORT（由 POSTGRES_* 推導 DATABASE_URL 時的主機與埠，預設 localhost:5432）、WORKBENCH_NO_OPEN=1（不自動開瀏覽器）、WORKBENCH_SKIP_SETUP=1（不檢查套件）。
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+import { lockfileState, storageEnvFrom } from './devEnv.mjs'
 
 // 專案根目錄（本檔在 workbench/scripts/ 下，往上兩層）；不依賴從哪個目錄執行
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -39,24 +41,7 @@ function storageEnv() {
     }
   }
   // 環境變數優先於 .env
-  const get = (k) => process.env[k] ?? dotenv[k]
-  const env = {}
-  const db = get('DATABASE_URL')
-  if (db) env.DATABASE_URL = db
-  else if (get('POSTGRES_USER') && get('POSTGRES_DB')) {
-    // 帳號密碼可能含 @、: 等字元，要編碼後才能放進連線網址；主機與埠固定為本機預設的 5432
-    const user = encodeURIComponent(get('POSTGRES_USER'))
-    const password = encodeURIComponent(get('POSTGRES_PASSWORD') ?? '')
-    env.DATABASE_URL = `postgres://${user}:${password}@localhost:5432/${get('POSTGRES_DB')}?sslmode=disable`
-  }
-  // 沒有專用的存取金鑰時，退回 MinIO 的 root 帳號（本機開發用）
-  const minio = get('MINIO_ENDPOINT')
-  if (minio || get('MINIO_ROOT_USER')) {
-    env.MINIO_ENDPOINT = minio ?? 'localhost:9000'
-    env.MINIO_ACCESS_KEY = get('MINIO_ACCESS_KEY') ?? get('MINIO_ROOT_USER') ?? ''
-    env.MINIO_SECRET_KEY = get('MINIO_SECRET_KEY') ?? get('MINIO_ROOT_PASSWORD') ?? ''
-  }
-  return env
+  return storageEnvFrom((k) => process.env[k] ?? dotenv[k])
 }
 // 使用者要開的網址：--dev 時是 Vite（由它代理到 Go），否則直接是 Go
 const webUrl = `http://localhost:${devMode ? webPort : apiPort}`
@@ -104,8 +89,12 @@ function ensurePython() {
 function ensureNode() {
   const lock = path.join(root, 'workbench', 'package-lock.json')
   const installed = path.join(root, 'workbench', 'node_modules', '.package-lock.json')
-  // npm 安裝完會寫入 node_modules/.package-lock.json；比 package-lock.json 舊代表套件有更新
-  if (existsSync(installed) && statSync(installed).mtimeMs >= statSync(lock).mtimeMs) return
+  const state = lockfileState(lock, installed, { existsSync, statSync })
+  // npm ci 需要 package-lock.json；缺檔時給中文訊息，不讓 statSync 丟例外崩潰
+  if (state === 'missing-lock') {
+    fail('找不到 workbench/package-lock.json，請確認檔案完整（git checkout 或重新 clone）')
+  }
+  if (state === 'up-to-date') return
   log('安裝前端套件')
   runOrFail('npm', ['ci', '--no-audit', '--no-fund'], path.join(root, 'workbench'), '安裝前端套件')
 }
