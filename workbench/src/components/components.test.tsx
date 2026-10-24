@@ -85,3 +85,17 @@ describe('基本元件', () => {
     expect(input).toHaveValue(2)
   })
 })
+
+describe('影像檢視器', () => {
+  it('觸控被中斷（pointercancel）後，下次移動不會被當成拖曳', async () => {
+    const { ImageViewer } = await import('./ImageViewer')
+    render(<ImageViewer src="x.png" width={100} height={80} alt="影像" />)
+    const box = screen.getByAltText('影像').parentElement!.parentElement!
+    const layer = screen.getByAltText('影像').parentElement!
+    const before = layer.style.transform
+    fireEvent.pointerDown(box, { pointerId: 1, clientX: 10, clientY: 10 })
+    fireEvent.pointerCancel(box, { pointerId: 1 })
+    fireEvent.pointerMove(box, { pointerId: 1, clientX: 60, clientY: 50 })
+    expect(layer.style.transform).toBe(before)
+  })
+})

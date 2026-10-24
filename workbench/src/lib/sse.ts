@@ -3,6 +3,40 @@
 // 不做自動重連（EventSource 會，這裡不會）：長時間工作中斷後要由使用者重新執行。
 import { ApiError } from '@/api/client'
 
+/**
+ * 串流中途 event: error 的代碼 → 對應的 HTTP 狀態。標頭已送出（200），後端無法再改狀態碼，
+ * 這裡依 Go 端 toError 的對應（errors.go 的 grpcStatus 與 Python 的錯誤代碼）還原，
+ * React Query 的重試判斷（4xx 不重試）才會與一般請求一致。未列出的代碼視為 500。
+ */
+const STREAM_ERROR_STATUS: Record<string, number> = {
+  INVALID_CONFIG: 400,
+  INVALID_PARAMS: 400,
+  INVALID_REQUEST: 400,
+  IMAGE_DECODE_FAILED: 400,
+  SPLIT_LOCKED: 403,
+  IMAGE_NOT_FOUND: 404,
+  PATH_NOT_FOUND: 404,
+  NOT_FOUND: 404,
+  DEV_TOOLS_DISABLED: 409,
+  NOT_IMPLEMENTED: 501,
+  AI_UNAVAILABLE: 503,
+  AI_TIMEOUT: 504,
+}
+
+/** 串流中途錯誤代碼對應的 HTTP 狀態；未知代碼為 500。 */
+export function streamErrorStatus(code: string): number {
+  return STREAM_ERROR_STATUS[code] ?? 500
+}
+
+/** 解析一筆 data；不是合法 JSON 時丟 ApiError（而非 SyntaxError），介面才顯示得出中文錯誤。 */
+function parseData(data: string): unknown {
+  try {
+    return JSON.parse(data)
+  } catch {
+    throw new ApiError(500, 'INTERNAL', `串流資料不是合法的 JSON：${data.slice(0, 200)}`)
+  }
+}
+
 /** 一筆 SSE 事件：event 名稱（未指定時為 'message'）與 data 原始文字。 */
 export interface SseEvent {
   event: string
@@ -85,11 +119,13 @@ export async function postSse<T>(
       ;[events, buffer] = parseSse(buffer + value)
       for (const ev of events) {
         if (ev.event === 'error') {
-          // 串流已開始，HTTP 狀態固定是 200；錯誤內容與 HTTP 錯誤回應相同（含 field）
-          const e = JSON.parse(ev.data) as { code: string; message: string; field?: string }
-          throw new ApiError(500, e.code, e.message, e.field)
+          // 串流已開始，HTTP 狀態固定是 200；錯誤內容與 HTTP 錯誤回應相同（含 field），
+          // 狀態依代碼還原（例如 PATH_NOT_FOUND → 404，React Query 不會重送）
+          const e = parseData(ev.data) as { code?: string; message?: string; field?: string }
+          const code = e.code ?? 'INTERNAL'
+          throw new ApiError(streamErrorStatus(code), code, e.message ?? '', e.field)
         }
-        onEvent(JSON.parse(ev.data) as T)
+        onEvent(parseData(ev.data) as T)
       }
     }
   } finally {

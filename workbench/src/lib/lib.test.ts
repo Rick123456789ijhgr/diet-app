@@ -143,6 +143,71 @@ describe('SSE 解析', () => {
   })
 })
 
+describe('SSE 中途錯誤', () => {
+  const stream = async (body: string) => {
+    const { http, HttpResponse } = await import('msw')
+    const { server } = await import('@/test/server')
+    server.use(
+      http.post(
+        '*/test-sse',
+        () => new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } }),
+      ),
+    )
+    const { postSse } = await import('./sse')
+    return postSse('/test-sse', {}, () => {})
+  }
+
+  it('依錯誤代碼還原 HTTP 狀態，4xx 才不會被重試', async () => {
+    const { ApiError } = await import('@/api/client')
+    const err = await stream(
+      'event: error\ndata: {"code":"PATH_NOT_FOUND","message":"找不到"}\n\n',
+    ).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ status: 404, code: 'PATH_NOT_FOUND' })
+    const other = await stream('event: error\ndata: {"code":"WHATEVER","message":"x"}\n\n').catch(
+      (e: unknown) => e,
+    )
+    expect(other).toMatchObject({ status: 500, code: 'WHATEVER' })
+  })
+
+  it('data 不是 JSON 時丟 ApiError 而非 SyntaxError', async () => {
+    const { ApiError } = await import('@/api/client')
+    const err = await stream('data: {oops\n\n').catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ code: 'INTERNAL' })
+  })
+})
+
+describe('useLocalImage', () => {
+  it('讀檔失敗時丟 4xx 的 ApiError，不重試', async () => {
+    const { renderHook, waitFor } = await import('@testing-library/react')
+    const { QueryClientProvider } = await import('@tanstack/react-query')
+    const { createElement } = await import('react')
+    const { http, HttpResponse } = await import('msw')
+    const { server } = await import('@/test/server')
+    const { createQueryClient } = await import('@/queryClient')
+    const { useLocalImage } = await import('@/hooks/useLocalImage')
+    let calls = 0
+    server.use(
+      http.post('*/workbench/v1/dev/batches', () => {
+        calls += 1
+        return new HttpResponse(
+          'data: {"type":"row","index":0,"file":"a.png","path":"a.png","error":"無法解碼影像"}\n\n',
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        )
+      }),
+    )
+    const client = createQueryClient()
+    const { result } = renderHook(() => useLocalImage('a.png'), {
+      wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+    })
+    await waitFor(() => expect(result.current.error).toBeTruthy())
+    expect(result.current.error).toMatchObject({ code: 'IMAGE_DECODE_FAILED', status: 422 })
+    expect(result.current.error?.message).toBe('無法解碼影像')
+    expect(calls).toBe(1)
+  })
+})
+
 describe('useStream', () => {
   it('新的執行取代舊的時，舊執行結束不會覆蓋新狀態', async () => {
     const { renderHook, act, waitFor } = await import('@testing-library/react')
@@ -216,6 +281,7 @@ describe('排序、數字輸入與下載', () => {
     // jsdom 沒有實作 createObjectURL／revokeObjectURL
     const create = vi.fn(() => 'blob:x')
     const revoke = vi.fn()
+    const original = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL }
     Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     try {
@@ -226,6 +292,7 @@ describe('排序、數字輸入與下載', () => {
       expect(revoke).toHaveBeenCalledWith('blob:x')
     } finally {
       click.mockRestore()
+      Object.assign(URL, original)
       vi.useRealTimers()
     }
   })

@@ -139,6 +139,8 @@ export function ImageViewer({
           }
         }}
         onPointerUp={() => (drag.current = null)}
+        // 觸控被系統中斷（例如來電、手勢被瀏覽器接手）時不會有 pointerup；不清掉的話下次移動會被當成拖曳
+        onPointerCancel={() => (drag.current = null)}
         onPointerLeave={() => setCursor(null)}
         onDoubleClick={fit}
       >
