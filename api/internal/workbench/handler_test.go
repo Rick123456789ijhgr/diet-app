@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -463,5 +466,166 @@ func TestPreprocessFood(t *testing.T) {
 	if got.Whole.Image.ArtifactId != "w" || got.Whole.NumBytes != 1234 || got.Dishes[0].W != 3 ||
 		got.Crops[0].Image.ArtifactId != "c0" || got.PlatesEnabled || got.Plates == nil {
 		t.Errorf("food = %+v", got)
+	}
+}
+
+// failingWriter 模擬寫到一半連線中斷的 ResponseWriter：Write 一律失敗，並記錄 WriteHeader 的呼叫。
+type failingWriter struct {
+	header  http.Header
+	headers []int
+}
+
+func (w *failingWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = http.Header{}
+	}
+	return w.header
+}
+
+func (w *failingWriter) WriteHeader(status int) { w.headers = append(w.headers, status) }
+
+func (w *failingWriter) Write([]byte) (int, error) {
+	if len(w.headers) == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return 0, errors.New("connection reset by peer")
+}
+
+// serveFailing 以 failingWriter 執行一次請求並回傳收到的日誌；cancel 為 true 時請求的 context 先取消（使用者已離開）。
+func serveFailing(t *testing.T, svc *Service, cancel bool, method, path, body string) (*failingWriter, string) {
+	t.Helper()
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	h := NewHTTPHandler(svc, Options{DevTools: true, Logger: logger})
+	ctx, stop := context.WithCancel(context.Background())
+	if cancel {
+		stop()
+	} else {
+		defer stop()
+	}
+	req := httptest.NewRequest(method, path, strings.NewReader(body)).WithContext(ctx)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	w := &failingWriter{}
+	h.ServeHTTP(w, req)
+	return w, logs.String()
+}
+
+// assertOnlyLogged 確認標頭只送出一次（沒有再呼叫 writeError），且日誌等級符合預期。
+func assertOnlyLogged(t *testing.T, w *failingWriter, logs, wantLevel string) {
+	t.Helper()
+	if len(w.headers) != 1 || w.headers[0] != http.StatusOK {
+		t.Errorf("WriteHeader calls = %v, want [200]", w.headers)
+	}
+	if ct := w.Header().Get("Content-Type"); strings.HasPrefix(ct, "application/json") {
+		t.Errorf("Content-Type = %q, 不應改寫成錯誤回應", ct)
+	}
+	if !strings.Contains(logs, wantLevel) || !strings.Contains(logs, "connection reset by peer") {
+		t.Errorf("logs = %q, want %s", logs, wantLevel)
+	}
+	if wantLevel != "level=ERROR" && strings.Contains(logs, "level=ERROR") {
+		t.Errorf("logs = %q, 使用者離開不應記成錯誤", logs)
+	}
+}
+
+func TestArtifactWriteFailureAfterHeadersOnlyLogs(t *testing.T) {
+	ai := &fakeAI{artifact: func(*dietaiv1.GetArtifactRequest) (*dietaiv1.GetArtifactResponse, error) {
+		return &dietaiv1.GetArtifactResponse{Encoded: []byte{0xff, 0xd8}, ContentType: "image/jpeg"}, nil
+	}}
+	for _, tt := range []struct {
+		name      string
+		cancel    bool
+		wantLevel string
+	}{
+		{"未取消記為錯誤", false, "level=ERROR"},
+		{"使用者離開不記為錯誤", true, "level=DEBUG"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			w, logs := serveFailing(t, NewService(ai), tt.cancel, http.MethodGet, "/workbench/v1/dev/artifacts/a1", "")
+			assertOnlyLogged(t, w, logs, tt.wantLevel)
+			if ct := w.Header().Get("Content-Type"); ct != "image/jpeg" {
+				t.Errorf("Content-Type = %q", ct)
+			}
+		})
+	}
+}
+
+func TestJSONBodyTooLargeIs413(t *testing.T) {
+	ai := &fakeAI{quality: func(*dietaiv1.CheckQualityRequest) (*dietaiv1.CheckQualityResponse, error) {
+		return &dietaiv1.CheckQualityResponse{}, nil
+	}}
+	post := func(t *testing.T, opts Options, body string) *http.Response {
+		t.Helper()
+		opts.DevTools = true
+		srv := httptest.NewServer(NewHTTPHandler(NewService(ai), opts))
+		t.Cleanup(srv.Close)
+		return postJSON(t, srv.URL+"/workbench/v1/dev/quality", body)
+	}
+	tooLarge := func(t *testing.T, resp *http.Response) {
+		t.Helper()
+		if resp.StatusCode != http.StatusRequestEntityTooLarge {
+			t.Fatalf("status = %d, want 413", resp.StatusCode)
+		}
+		if e := decode[api.Error](t, resp); e.Code != "REQUEST_TOO_LARGE" || e.Message == "" || e.Field != nil {
+			t.Errorf("error = %+v", e)
+		}
+	}
+	t.Run("自訂上限內正常", func(t *testing.T) {
+		if resp := post(t, Options{MaxJSONBytes: 64}, `{"image_id":"x"}`); resp.StatusCode != http.StatusOK {
+			t.Errorf("status = %d", resp.StatusCode)
+		}
+	})
+	t.Run("超過自訂上限", func(t *testing.T) {
+		tooLarge(t, post(t, Options{MaxJSONBytes: 64}, `{"image_id":"`+strings.Repeat("x", 100)+`"}`))
+	})
+	t.Run("超過預設上限", func(t *testing.T) {
+		tooLarge(t, post(t, Options{}, `{"image_id":"`+strings.Repeat("x", DefaultMaxJSONBytes)+`"}`))
+	})
+}
+
+func TestTruncateUTF8(t *testing.T) {
+	zh := "中文" // 每字 3 位元組
+	tests := []struct {
+		name string
+		in   []byte
+		want string
+	}{
+		{"空字串", nil, ""},
+		{"ASCII", []byte("photo"), "photo"},
+		{"完整中文", []byte(zh), zh},
+		{"切在第二字中間（少 1 位元組）", []byte(zh)[:5], "中"},
+		{"切在第二字中間（少 2 位元組）", []byte(zh)[:4], "中"},
+		{"只剩半個字", []byte(zh)[:2], ""},
+		{"切在 4 位元組字元中間", []byte("a😀")[:4], "a"},
+		{"非截斷造成的不合法位元組保留", []byte{'a', 0xff}, "a\xff"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := truncateUTF8(tt.in); got != tt.want {
+				t.Errorf("truncateUTF8(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPutImageLongChineseNameIsValidUTF8(t *testing.T) {
+	var got *dietaiv1.PutImageRequest
+	ai := &fakeAI{putImage: func(r *dietaiv1.PutImageRequest) (*dietaiv1.PutImageResponse, error) {
+		got = r
+		return &dietaiv1.PutImageResponse{Image: &dietaiv1.ImageRef{ImageId: "id1"}}, nil
+	}}
+	// 100 個中文字 = 300 位元組；256 位元組會切在第 86 個字中間
+	body, ct := multipartBody(t, map[string]string{"name": strings.Repeat("飯", 100)}, []byte("jpeg"))
+	resp, err := http.Post(newServer(t, ai, true).URL+"/workbench/v1/dev/images", ct, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if name := got.GetName(); !utf8.ValidString(name) || name != strings.Repeat("飯", 85) {
+		t.Errorf("name = %q (%d bytes)", name, len(name))
 	}
 }
