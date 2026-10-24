@@ -32,9 +32,13 @@ def main(argv: list[str] | None = None) -> int:
 
     # 相同參數（含 seed）產生相同影像；產生參數另寫入 manifest.json，實驗紀錄會一併保存。
     # split 一律為 dev，合成資料不涉及測試集鎖定
-    manifest = write_barcode_dataset(
-        args.out, args.codes, args.seed, args.module_px, negatives=not args.no_negatives
-    )
+    # 參數錯誤（例如 --codes 0）或無法寫檔時用 p.error 印出中文訊息，不丟 traceback
+    try:
+        manifest = write_barcode_dataset(
+            args.out, args.codes, args.seed, args.module_px, negatives=not args.no_negatives
+        )
+    except (OSError, ValueError) as e:
+        p.error(str(e))
     n = len(manifest.read_text(encoding="utf-8").splitlines()) - 1  # 扣掉標題列
     print(f"已寫出 {n} 張影像與 manifest：{manifest}")
     return 0

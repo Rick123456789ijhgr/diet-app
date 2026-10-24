@@ -81,3 +81,39 @@ def test_run_rejects_manifest_with_only_test_split(tmp_path):
     assert proc.returncode != 0
     assert "沒有可執行的影像" in proc.stderr
     assert not runs.exists()
+
+
+def _fail(script: str, *args: str) -> str:
+    """執行預期失敗的腳本：應以 p.error 結束（代碼 2、中文訊息），而不是印出 traceback。"""
+    proc = subprocess.run(
+        [sys.executable, str(E1 / script), *args],
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert proc.returncode == 2, proc.stderr
+    assert "Traceback" not in proc.stderr
+    return proc.stderr
+
+
+def test_make_synthetic_rejects_zero_codes(tmp_path):
+    assert "n_codes 至少為 1" in _fail("make_synthetic.py", "--out", str(tmp_path), "--codes", "0")
+
+
+def test_analyze_reports_broken_run_json(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "results.csv").write_text("id,arm,outcome\n1,a,correct\n", encoding="utf-8")
+    (run_dir / "run.json").write_text("{bad", encoding="utf-8")
+    assert "讀不到執行結果" in _fail("analyze.py", str(run_dir))
+    (run_dir / "run.json").write_text('{"arms": []}', encoding="utf-8")  # 缺 manifest 鍵
+    assert "格式不符" in _fail("analyze.py", str(run_dir))
+
+
+def test_run_reports_tag_column_shadowing_result_column(tmp_path):
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("image,truth,outcome\na.png,4710088410108,x\n", encoding="utf-8")
+    stderr = _fail(
+        "run.py", "--manifest", str(manifest), "--only", "a0_raw", "--out", str(tmp_path / "r")
+    )
+    assert "同名" in stderr

@@ -67,14 +67,19 @@ def main(argv: list[str] | None = None) -> int:
 
     # include_test 再傳一次：run_experiment 會二次檢查 manifest 不含測試集列，
     # 並把這個旗標寫進 run.json，事後可辨認哪些執行讀過測試集
-    summary = run_experiment(
-        manifest,
-        arms,
-        out,
-        include_test=args.include_test,
-        progress=progress,
-        label=args.label,
-    )
+    # 執行前的檢查（標籤欄與結果欄同名、輸出資料夾非空等）丟 ValueError，以 p.error 回報；
+    # 單張影像的讀取或處理錯誤由 run_experiment 記成 error 列，不會丟到這裡
+    try:
+        summary = run_experiment(
+            manifest,
+            arms,
+            out,
+            include_test=args.include_test,
+            progress=progress,
+            label=args.label,
+        )
+    except (OSError, ValueError) as e:
+        p.error(str(e))
     # 從剛寫出的檔案重新讀回再產生摘要，與 analyze.py 走同一條路徑；
     # 依所有標籤欄分組，以第一個實驗組為 McNemar 基準
     meta, rows = read_run(out)
