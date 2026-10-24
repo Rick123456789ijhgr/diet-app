@@ -170,7 +170,8 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         - barcode：samples、module_px、seed、ladder、zxing（覆寫）
 
         ``thumb_source`` 是縮圖衍生影像的來源鍵：quality 用來源影像 ID；barcode 沒有來源影像，
-        改用由樣本參數組成的字串。
+        改用由樣本參數組成的字串，並以 ``detached=True`` 登記（否則暫存區淘汰時會因來源鍵
+        不是暫存影像 ID 而清掉對應，縮圖永遠不會重用）。
         """
         params = _json_object(request.params_json, "params")
         ax = sweep.parse_axis(params)
@@ -194,11 +195,16 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
             raise SceneError(f"未知的掃描對象 {request.target!r}（quality／barcode）", "target")
         # 縮圖只取決於來源、退化種類與等級；以衍生影像存放，調整其他參數時沿用，
         # 不會每次掃描都新增三張、把其他頁面的影像擠出暫存區
+        detached = request.target == "barcode"
         thumbs = []
         for t in result.thumbs:
             key = f"sweep:{ax.key}:{t.level!r}"
             item = self._store.derived(thumb_source, key) or self._store.put_derived(
-                thumb_source, key, t.image, f"{ax.axis.label} = {t.level:.3g}"
+                thumb_source,
+                key,
+                t.image,
+                f"{ax.axis.label} = {t.level:.3g}",
+                detached=detached,
             )
             thumbs.append({"level": t.level, **_ref(item)})
         return workbench_pb2.SweepResponse(json=convert.dumps({**result.data, "thumbs": thumbs}))

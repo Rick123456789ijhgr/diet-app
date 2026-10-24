@@ -86,6 +86,14 @@ def test_write_then_read_roundtrip(tmp_path):
     ]
 
 
+def test_write_manifest_rejects_unlisted_columns(tmp_path):
+    rows = [{"image": "a.png", "truth": "1", "cond": "blur"}]
+    path = tmp_path / "m.csv"
+    with pytest.raises(ValueError, match="tag_columns"):
+        write_manifest(path, rows)  # cond 未列在 tag_columns
+    assert not path.exists()  # 開檔前就檢查，不留下寫到一半的檔案
+
+
 def test_image_io_supports_non_ascii_paths(tmp_path):
     img = np.zeros((20, 30, 3), dtype=np.uint8)
     img[5:10, 5:20] = (10, 200, 30)

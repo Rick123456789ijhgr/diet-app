@@ -62,6 +62,21 @@ def test_box_crop_is_copy():
     assert img[3, 2] == 32
 
 
+@pytest.mark.parametrize(
+    ("box", "shape"),
+    [
+        (Box(-10, 0, 5, 3), (3, 0)),  # 整個在左方：x1=-5，不夾會切成 img[:, 0:-5]
+        (Box(0, -10, 3, 5), (0, 3)),  # 整個在上方
+        (Box(12, 2, 4, 4), (4, 0)),  # 整個在右方
+        (Box(-3, -2, 6, 5), (3, 3)),  # 部分超出左上
+        (Box(8, 7, 5, 6), (3, 2)),  # 部分超出右下
+    ],
+)
+def test_box_crop_clamps_both_ends(box, shape):
+    img = np.arange(100, dtype=np.uint8).reshape(10, 10)
+    assert box.crop(img).shape == shape
+
+
 @pytest.mark.parametrize("angle", [0.0, 30.0, 90.0, 135.0])
 def test_ellipse_bbox_contains_boundary(angle):
     e = Ellipse(100.0, 80.0, 120.0, 50.0, angle)
@@ -303,11 +318,35 @@ def test_preprocess_food_rejects_bad_input(bad):
         {"plate_min_contour_points": 4},
         {"vlm_jpeg_quality": 0},
         {"morph_px": -1},
+        {"bg_blur_ksize": 4},
+        {"plate_blur_ksize": 0},
+        {"plate_dilate_ksize": 0},
+        {"plate_coverage_bins": 3},
     ],
 )
 def test_config_validation(kwargs):
     with pytest.raises(ValueError):
         FoodConfig(**kwargs)
+
+
+def test_kernel_params_defaults_and_effect():
+    # 原本寫死在 food.py 的值（review C1）：預設不變
+    cfg = FoodConfig()
+    assert (cfg.bg_blur_ksize, cfg.plate_blur_ksize, cfg.plate_dilate_ksize) == (5, 5, 3)
+    assert cfg.plate_coverage_bins == 36
+    # 參數確實生效：1 表示不平滑／不膨脹，仍可正常執行
+    img, _ = food_scene(2, seed=0)
+    raw = FoodConfig(bg_blur_ksize=1, plate_blur_ksize=1, plate_dilate_ksize=1)
+    assert dish_foreground(img, raw).shape == dish_foreground(img).shape
+    detect_plate_ellipse(img, raw)
+    # 覆蓋格數：角度 0–100° 的點在 36 格中占 11 格（0–110°），在 4 格中占 2 格
+    from dietai.preprocess.food import _fit_quality
+
+    e = Ellipse(0.0, 0.0, 20.0, 20.0, 0.0)
+    t = np.radians(np.linspace(0, 100, 200))
+    pts = np.stack([10 * np.cos(t), 10 * np.sin(t)], axis=1)
+    assert _fit_quality(e, pts, 36)[1] == pytest.approx(11 / 36)
+    assert _fit_quality(e, pts, 4)[1] == pytest.approx(2 / 4)
 
 
 @pytest.mark.slow

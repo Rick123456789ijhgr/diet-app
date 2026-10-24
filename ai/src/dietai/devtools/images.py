@@ -5,7 +5,8 @@
 判定規則與實驗腳本共用 ``dietai.evaluation.manifest.is_test_split``。
 
 格式限制：列資料夾時只收 ``IMAGE_SUFFIXES`` 中的副檔名；解碼一律經 ``decode_image``，
-無法解碼的檔案丟 ``ValueError``。本模組不檢查檔案大小或像素數（見 ``decode_image``）。
+無法解碼或像素數超過 ``MAX_DECODE_PIXELS`` 的檔案丟 ``ValueError``。本模組不檢查檔案大小
+（見 ``decode_image``）。
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from dietai.preprocess.types import Image
 
 __all__ = [
     "IMAGE_SUFFIXES",
+    "MAX_DECODE_PIXELS",
     "PathNotFoundError",
     "SplitLockedError",
     "decode_image",
@@ -33,6 +35,10 @@ __all__ = [
 
 # 列資料夾時依副檔名（不分大小寫）篩選；實際能否讀取仍以 cv2.imdecode 為準
 IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"})
+
+# 解碼後的像素數上限：1 億像素（BGR 約 300 MB），遠大於手機相機（約 1200–5000 萬像素）。
+# 屬防護用的工程上限而非可調門檻，因此不放 preprocess/config.py
+MAX_DECODE_PIXELS = 100_000_000
 
 
 class PathNotFoundError(FileNotFoundError):
@@ -53,15 +59,23 @@ def guard_path(path: str | Path) -> Path:
 
 
 def decode_image(data: bytes) -> Image:
-    """把影像檔位元組解碼為 BGR ``uint8``；無法解碼時丟 ``ValueError``。
+    """把影像檔位元組解碼為 BGR ``uint8``；無法解碼或像素數超過 ``MAX_DECODE_PIXELS`` 時丟
+    ``ValueError``（gRPC 外殼回應 ``IMAGE_DECODE_FAILED``）。
 
     ``IMREAD_COLOR`` 一律輸出 3 通道（灰階擴成三通道、透明通道捨棄），後續前處理只需
-    處理一種格式。這裡不限制位元組數或像素數；上傳的檔案大小由 gRPC 訊息上限
-    （``server/app.py`` 的 ``MAX_MESSAGE_BYTES``）與 Go 端的上傳上限把關。
+    處理一種格式。上傳的檔案大小由 gRPC 訊息上限（``server/app.py`` 的 ``MAX_MESSAGE_BYTES``）
+    與 Go 端的上傳上限把關；像素數上限防止極端壓縮的影像（decompression bomb）解碼後占用
+    大量記憶體並拖垮後續前處理。檢查在解碼後進行（OpenCV 沒有只讀標頭的 API），解碼當下的
+    峰值由 OpenCV 內建的 ``OPENCV_IO_MAX_IMAGE_PIXELS``（預設 2^30 像素）限制。
     """
     img = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError("無法解碼影像，請確認檔案格式")
+    h, w = img.shape[:2]
+    if h * w > MAX_DECODE_PIXELS:
+        raise ValueError(
+            f"影像像素過多（{w}×{h}，上限 {MAX_DECODE_PIXELS // 1_000_000} 百萬像素），請先縮小"
+        )
     return np.asarray(img, dtype=np.uint8)
 
 

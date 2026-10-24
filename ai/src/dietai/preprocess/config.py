@@ -709,13 +709,24 @@ class FoodConfig:
         step=16,
         group="segment",
     )
+    bg_blur_ksize: int = param(
+        5,
+        "前景平滑大小",
+        "Foreground blur ksize",
+        "估計背景色與計算色差前的高斯平滑核邊長（奇數，sigma 由核大小推算）；1 為不平滑。",
+        min=1,
+        max=31,
+        step=2,
+        group="segment",
+    )
+    # 表單上限與 __post_init__ 一致：須小於 0.5（取 step 對齊的最大值 0.495）
     bg_border_ratio: float = param(
         0.04,
         "背景取樣邊寬",
         "Background border",
         "以影像四周這個比例寬度的邊框估計桌面背景色（LAB 中位數）。菜佔滿邊框時估計會失準。",
         min=0.005,
-        max=0.3,
+        max=0.495,
         step=0.005,
         group="segment",
     )
@@ -801,6 +812,17 @@ class FoodConfig:
     # 須 plate_canny_low <= plate_canny_high；plate_min_contour_points 不得低於 5
     # （cv2.fitEllipse 的下限）。殘差與覆蓋是互補的兩個條件：殘差看輪廓是否貼合橢圓，
     # 覆蓋看輪廓是否繞了大半圈，兩者都通過才採用
+    plate_blur_ksize: int = param(
+        5,
+        "盤緣平滑大小",
+        "Plate blur ksize",
+        "Canny 前的高斯平滑核邊長（奇數，sigma 由核大小推算），壓掉食物紋理等細小邊緣；"
+        "1 為不平滑。",
+        min=1,
+        max=31,
+        step=2,
+        group="plate",
+    )
     plate_canny_low: int = param(
         40,
         "盤緣 Canny 低門檻",
@@ -821,6 +843,16 @@ class FoodConfig:
         max=1000,
         step=5,
         calibrate=True,
+        group="plate",
+    )
+    plate_dilate_ksize: int = param(
+        3,
+        "盤緣膨脹大小",
+        "Plate dilate ksize",
+        "Canny 邊緣的方形膨脹核邊長（像素），把盤緣上斷開的邊緣接起來；1 為不膨脹。",
+        min=1,
+        max=15,
+        step=1,
         group="plate",
     )
     plate_min_size_ratio: float = param(
@@ -865,6 +897,16 @@ class FoodConfig:
         max=1.0,
         step=0.05,
         calibrate=True,
+        group="plate",
+    )
+    plate_coverage_bins: int = param(
+        36,
+        "圓周覆蓋格數",
+        "Coverage bins",
+        "計算圓周覆蓋時把橢圓周分成的角度格數（36 格即每格 10°）；有點落入的格數比例為覆蓋率。",
+        min=4,
+        max=360,
+        step=1,
         group="plate",
     )
     plate_min_contour_points: int = param(
@@ -930,5 +972,14 @@ class FoodConfig:
             raise ValueError("plate_max_residual 必須大於 0")
         if self.plate_min_contour_points < 5:
             raise ValueError("plate_min_contour_points 至少為 5（cv2.fitEllipse 的下限）")
+        # cv2.GaussianBlur 要求正奇數的核邊長（1 等同不平滑）
+        for name in ("bg_blur_ksize", "plate_blur_ksize"):
+            value = getattr(self, name)
+            if value < 1 or value % 2 == 0:
+                raise ValueError(f"{name} 必須為正奇數，收到 {value}")
+        if self.plate_dilate_ksize < 1:
+            raise ValueError("plate_dilate_ksize 至少為 1")
+        if self.plate_coverage_bins < 4:
+            raise ValueError("plate_coverage_bins 至少為 4")
         if not 1 <= self.vlm_jpeg_quality <= 100:
             raise ValueError("vlm_jpeg_quality 必須介於 1 與 100")

@@ -86,6 +86,8 @@ class ImageStore:
         self._bytes = 0
         # (來源 ID, 參數鍵) → 衍生影像 ID；例如同一張圖以相同參數退化時直接重用
         self._derived: dict[tuple[str, str], str] = {}
+        # 來源鍵不是暫存影像 ID 的對應（put_derived(detached=True)）；淘汰時不檢查來源是否存在
+        self._detached: set[tuple[str, str]] = set()
         self._lock = threading.Lock()
 
     def put(
@@ -136,15 +138,26 @@ class ImageStore:
         truth: dict[str, Any] | None = None,
         encode: Callable[[], tuple[bytes, str]] | None = None,
         meta: dict[str, Any] | None = None,
+        *,
+        detached: bool = False,
     ) -> StoredImage:
         """存入衍生影像，並登記「(來源 ID, 參數鍵) → 衍生影像 ID」供 ``derived`` 重用。
+
+        ``detached=True`` 表示 ``source_id`` 不是暫存影像 ID，而是由參數組成的字串
+        （例如條碼掃描縮圖的 ``barcode-sweep:...``）：對應不隨來源淘汰，只在衍生影像本身
+        被淘汰時清掉。
 
         存入與登記分兩次取鎖；兩個執行緒同時算同一張衍生影像時會各存一份、後登記者覆蓋，
         只是多占一份空間，結果不會錯。
         """
         item = self.put(image, description, truth, encode, meta)
         with self._lock:
-            self._derived[(source_id, key)] = item.image_id
+            k = (source_id, key)
+            self._derived[k] = item.image_id
+            if detached:
+                self._detached.add(k)
+            else:
+                self._detached.discard(k)
         return item
 
     def encoded(self, image_id: str) -> tuple[bytes, str]:
@@ -181,9 +194,8 @@ class ImageStore:
     def _evict(self) -> None:
         """從最久未使用端淘汰，直到張數與位元組都符合上限；呼叫端須已持有 ``_lock``。
 
-        淘汰後一併清掉失效的衍生對應：衍生影像已被淘汰，或來源 ID 已不在暫存區。
-        注意來源鍵若不是暫存影像 ID（例如 ``server/workbench.py`` 條碼掃描縮圖的
-        ``barcode-sweep:...``），對應會在下一次呼叫本函式時被清掉。
+        淘汰後一併清掉失效的衍生對應：衍生影像已被淘汰，或來源 ID 已不在暫存區
+        （以 ``detached=True`` 登記的對應不檢查來源，只看衍生影像是否還在）。
         """
         # 至少保留最新的一張，即使它本身就超過位元組上限
         while len(self._items) > 1 and (
@@ -192,4 +204,9 @@ class ImageStore:
             _, old = self._items.popitem(last=False)
             self._bytes -= old.nbytes
         live = set(self._items)
-        self._derived = {k: v for k, v in self._derived.items() if v in live and k[0] in live}
+        self._derived = {
+            k: v
+            for k, v in self._derived.items()
+            if v in live and (k[0] in live or k in self._detached)
+        }
+        self._detached &= self._derived.keys()

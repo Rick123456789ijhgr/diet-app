@@ -60,7 +60,9 @@ def parse_axis(params: Mapping[str, Any]) -> Axis:
     lo = _number(params, "lo", axis.default_lo)
     hi = _number(params, "hi", axis.default_hi)
     if not axis.lo <= lo < hi <= axis.hi:
-        raise SceneError(f"範圍須滿足 {axis.lo} ≤ lo < hi ≤ {axis.hi}，收到 {lo}、{hi}", "lo")
+        # 錯誤標在出問題的欄位：只有 hi 超出上限時標 hi，其餘（lo 超出下限、lo ≥ hi）標 lo
+        field = "hi" if axis.lo <= lo and hi > axis.hi else "lo"
+        raise SceneError(f"範圍須滿足 {axis.lo} ≤ lo < hi ≤ {axis.hi}，收到 {lo}、{hi}", field)
     # 至少 3 點，_thumbs 的最弱／中間／最強三張縮圖才會各不相同
     n = _int(params, "n", 9, 3, MAX_POINTS)
     return Axis(key, axis, sweep_levels(lo, hi, n))

@@ -49,19 +49,24 @@ def main(argv: list[str] | None = None) -> int:
             p.error("runs/ 中沒有任何執行結果，請先執行 run.py")
         run_dir = runs[0]
     # 參數錯誤一律用 p.error：印出用法並以代碼 2 結束，不丟 traceback
+    # run.json 損壞時 json 丟 JSONDecodeError（ValueError 的子類別）
     try:
         meta, rows = read_run(run_dir)
-    except OSError as e:
+    except (OSError, ValueError) as e:
         p.error(f"讀不到執行結果：{e}")
     if not rows:
         p.error(f"{run_dir} 沒有任何結果列")
-    # 可分組的標籤欄（如 lighting、material）記錄在 run.json，由 manifest 的額外欄位而來
-    tags = meta["manifest"]["tag_columns"]
+    # 可分組的標籤欄（如 lighting、material）記錄在 run.json，由 manifest 的額外欄位而來；
+    # run.json 缺鍵或結構不對（手動編輯、舊版格式）時同樣以 p.error 回報
+    try:
+        tags = list(meta["manifest"]["tag_columns"])
+        arm_names = [a["name"] for a in meta["arms"]]
+    except (KeyError, TypeError) as e:
+        p.error(f"{run_dir / 'run.json'} 格式不符（缺少或錯誤的欄位 {e}）")
     by = tags if args.by is None else [s.strip() for s in args.by.split(",") if s.strip()]
     unknown = [b for b in by if b not in tags]
     if unknown:
         p.error(f"沒有這些標籤欄：{unknown}；可用：{tags}")
-    arm_names = [a["name"] for a in meta["arms"]]
     # 預設基準為第一個實驗組（run.py 依 configs/ 檔名或 --only 的順序）
     baseline = args.baseline or arm_names[0]
     if baseline not in arm_names:

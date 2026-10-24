@@ -110,7 +110,9 @@ class PyzbarDecoder:
     """以 pyzbar（ZBar）解碼，供實驗對照。
 
     注意：ZBar 會猜測 QR 的字元編碼並轉成 UTF-8，``raw`` 不一定是原始位元組，
-    電子發票的正式流程請用 ``ZxingDecoder``。四角取自 ZBar 多邊形的最小外接矩形。
+    電子發票的正式流程請用 ``ZxingDecoder``。四角取自 ZBar 多邊形的最小外接矩形
+    （多邊形為空時改用 ``rect``），再依 ZBar 回報的閱讀方向輪轉成以條碼本身方向為準；
+    沒有方向資訊時為影像方向。
     """
 
     # pyzbar 回傳的 ``type`` 字串 → 專案的 ``CodeFormat``；未列出者歸為 OTHER
@@ -129,6 +131,11 @@ class PyzbarDecoder:
 
         self._decode = pyzbar.decode
 
+    # ZBar 的 orientation（條碼的閱讀方向）→ 影像方向四角（左上、右上、右下、左下）的起點位移：
+    # RIGHT 表示由上往下讀（條碼順時針轉 90°），條碼本身的左上角落在影像的右上，依此類推。
+    # 舊版 pyzbar 沒有此欄位、或 ZBar 回傳 UNKNOWN 時維持影像方向
+    _ORIENT_SHIFT = {"UP": 0, "RIGHT": 1, "DOWN": 2, "LEFT": 3}
+
     def __call__(self, img: Image) -> list[DecodeHit]:
         gray = to_gray(img)  # ZBar 只接受 8 位元灰階
         hits: list[DecodeHit] = []
@@ -136,9 +143,19 @@ class PyzbarDecoder:
             # ZBar 的 polygon 點數不固定（不一定是四點），
             # 先以 minAreaRect 求最小外接旋轉矩形，再由 boxPoints 取出其四個頂點
             poly = np.array([(p.x, p.y) for p in r.polygon], dtype=np.float32)
+            if len(poly) == 0:
+                # ZBar 偶爾回傳空 polygon（minAreaRect 會丟例外），改用軸對齊的 rect
+                left, top, width, height = r.rect
+                right, bottom = left + width, top + height
+                poly = np.array(
+                    [(left, top), (right, top), (right, bottom), (left, bottom)], dtype=np.float32
+                )
             # order_quad 依角度排序：只看 x + y／x − y 時，旋轉 45° 的外接矩形會重複選到同一點
             box = order_quad(cv2.boxPoints(cv2.minAreaRect(poly)))
-            tl, tr, br, bl = ((float(x), float(y)) for x, y in box.tolist())
+            corners = [(float(x), float(y)) for x, y in box.tolist()]
+            # 依閱讀方向輪轉，使四角以條碼本身的方向為準（DecodeHit 的約定）
+            shift = self._ORIENT_SHIFT.get(str(getattr(r, "orientation", None)), 0)
+            tl, tr, br, bl = corners[shift:] + corners[:shift]
             raw = bytes(r.data)
             hits.append(
                 DecodeHit(

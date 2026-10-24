@@ -373,6 +373,12 @@ def test_sweep_quality_and_barcode(wb):
     b = run("barcode", {"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3, "samples": 1})
     assert set(b["overall"]) == {"raw", "ladder"}
     assert len(b["thumbs"]) == 3
+    # 條碼掃描縮圖的來源鍵不是暫存影像 ID，仍要能重用（只改階梯設定時不新增影像）
+    b2 = run(
+        "barcode",
+        {"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3, "samples": 1, "ladder": {"min_agree": 1}},
+    )
+    assert [t["image_id"] for t in b2["thumbs"]] == [t["image_id"] for t in b["thumbs"]]
 
     _expect_error(
         lambda: run("moon", {}), grpc.StatusCode.INVALID_ARGUMENT, "INVALID_PARAMS", "target"
@@ -466,3 +472,62 @@ def test_to_rpc_error_only_maps_user_paths_to_not_found():
     assert to_rpc_error(PathNotFoundError("x")).reason == "PATH_NOT_FOUND"
     assert to_rpc_error(FileNotFoundError("configs")).reason == "INTERNAL"
     assert to_rpc_error(NotADirectoryError("configs")).reason == "INTERNAL"
+
+
+def test_to_rpc_error_maps_invalid_image_to_invalid_argument():
+    """影像格式不符屬輸入問題；一般 ValueError 視為程式錯誤，仍是 INTERNAL。"""
+    from dietai.devtools.configs import ConfigError
+    from dietai.evaluation.manifest import SplitLockedError
+    from dietai.preprocess.ops import InvalidImageError
+    from dietai.server.rpc import to_rpc_error
+
+    err = to_rpc_error(InvalidImageError("影像必須是 uint8"))
+    assert (err.code, err.reason, str(err)) == (
+        grpc.StatusCode.INVALID_ARGUMENT,
+        "INVALID_PARAMS",
+        "影像必須是 uint8",
+    )
+    assert to_rpc_error(ConfigError("x", "blur_min")).reason == "INVALID_CONFIG"
+    assert to_rpc_error(SplitLockedError("x")).reason == "SPLIT_LOCKED"
+    assert to_rpc_error(RuntimeError("x")).code == grpc.StatusCode.INTERNAL
+    assert to_rpc_error(ValueError("x")).code == grpc.StatusCode.INTERNAL
+
+
+def test_stream_normal_completion_is_not_logged_as_cancelled(caplog):
+    """工作執行緒送出 done 後才關閉產生器；即使此時執行緒仍存活，也不應記成已取消。"""
+    import asyncio
+    import logging
+    from types import SimpleNamespace
+
+    from dietai.server.rpc import stream
+
+    class SlowClose:
+        """迭代完後 close() 仍要一段時間：工作執行緒在事件迴圈收到 done 時仍存活。"""
+
+        def __init__(self) -> None:
+            self._it = iter(range(3))
+
+        def __iter__(self):
+            return self
+
+        def __next__(self) -> int:
+            return next(self._it)
+
+        def close(self) -> None:
+            time.sleep(0.3)
+
+    class Svc:
+        @stream
+        def Run(self, request):
+            return SlowClose()
+
+    context = SimpleNamespace(invocation_metadata=lambda: ())
+
+    async def collect() -> list[int]:
+        return [x async for x in Svc().Run(None, context)]
+
+    with caplog.at_level(logging.INFO, logger="dietai.server"):
+        assert asyncio.run(collect()) == [0, 1, 2]
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("已取消" in m for m in messages)
+    assert any("OK 3 筆" in m for m in messages)

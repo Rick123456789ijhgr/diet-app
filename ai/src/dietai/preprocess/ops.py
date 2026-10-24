@@ -13,22 +13,29 @@ import numpy.typing as npt
 from dietai.preprocess.types import Image, Quad
 
 
+class InvalidImageError(ValueError):
+    """影像格式不符（``validate_image``）。
+
+    屬呼叫端的輸入問題，gRPC 外殼對應為 ``INVALID_ARGUMENT``。
+    """
+
+
 def validate_image(img: object) -> None:
-    """檢查影像格式，不符時丟 ``ValueError``。
+    """檢查影像格式，不符時丟 ``InvalidImageError``（``ValueError`` 的子類別）。
 
     接受 ``uint8`` 的 2 維灰階或 ``(H, W, 3)`` BGR 影像，且寬高皆大於 0。
     """
     if not isinstance(img, np.ndarray):
-        raise ValueError(f"影像必須是 numpy.ndarray，收到 {type(img).__name__}")
+        raise InvalidImageError(f"影像必須是 numpy.ndarray，收到 {type(img).__name__}")
     if img.dtype != np.uint8:
-        raise ValueError(f"影像 dtype 必須是 uint8，收到 {img.dtype}")
+        raise InvalidImageError(f"影像 dtype 必須是 uint8，收到 {img.dtype}")
     if img.ndim == 3:
         if img.shape[2] != 3:
-            raise ValueError(f"彩色影像必須是 3 通道 BGR，收到形狀 {img.shape}")
+            raise InvalidImageError(f"彩色影像必須是 3 通道 BGR，收到形狀 {img.shape}")
     elif img.ndim != 2:
-        raise ValueError(f"影像必須是 2 維灰階或 3 維 BGR，收到形狀 {img.shape}")
+        raise InvalidImageError(f"影像必須是 2 維灰階或 3 維 BGR，收到形狀 {img.shape}")
     if img.shape[0] == 0 or img.shape[1] == 0:
-        raise ValueError(f"影像寬高必須大於 0，收到形狀 {img.shape}")
+        raise InvalidImageError(f"影像寬高必須大於 0，收到形狀 {img.shape}")
 
 
 def to_gray(img: Image) -> Image:

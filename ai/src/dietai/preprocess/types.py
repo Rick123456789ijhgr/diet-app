@@ -100,9 +100,13 @@ class Box:
 
     def crop(self, img: Image) -> Image:
         """裁出框內影像（副本）；超出影像的部分自動截掉。"""
-        # 起點截到 0，避免負索引被 Python 解讀成「從尾端算起」；
-        # 終點超出影像時切片本身會自動截斷
-        return img[max(0, self.y) : self.y1, max(0, self.x) : self.x1].copy()
+        # 起點與終點都夾到 [0, 寬／高]：負索引會被 Python 解讀成「從尾端算起」，
+        # 框整個在影像左方或上方時（如 x=-10, w=5 → x1=-5）終點也是負數，不夾會切出錯誤的區域；
+        # 夾完後終點 ≤ 起點時切片為空
+        h, w = img.shape[:2]
+        y0, y1 = min(max(0, self.y), h), min(max(0, self.y1), h)
+        x0, x1 = min(max(0, self.x), w), min(max(0, self.x1), w)
+        return img[y0:y1, x0:x1].copy()
 
 
 @dataclass(frozen=True)
