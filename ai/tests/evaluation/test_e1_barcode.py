@@ -8,7 +8,9 @@ import pytest
 from dietai.evaluation import (
     Arm,
     Outcome,
+    compare_by_source,
     first_rung,
+    holm,
     judge,
     list_runs,
     load_arm,
@@ -404,3 +406,61 @@ def test_report_markdown():
     assert "McNemar p" in text and "有未提交的變更" in text
     assert "1 筆 error" in text
     assert "| new | binarize | 1 |" in text
+
+
+# ---- 以原始樣本為單位 ----
+
+
+def _sourced_rows():
+    """兩個原始樣本 s1、s2，各有兩個變體；a 救回 s1 的兩個變體，b 讓 s2 的一個變體退步。"""
+    rows = []
+    for vid, src, base_ok, a_ok, b_ok in [
+        ("v1", "s1", False, True, False),
+        ("v2", "s1", False, True, False),
+        ("v3", "s2", True, True, False),
+        ("v4", "s2", True, True, True),
+    ]:
+        for arm, ok in (("base", base_ok), ("a", a_ok), ("b", b_ok)):
+            rows.append(_row(vid, arm, "correct" if ok else "missed", source_id=src))
+    rows.append(_row("n", "a", "false_positive", truth="", source_id="s3"))
+    rows.append(_row("e", "a", "error", source_id="s4"))
+    return rows
+
+
+def test_compare_by_source_clusters_and_holm():
+    a, b = compare_by_source(_sourced_rows(), "base", n_boot=500)
+    # 負樣本與 error 不計入；4 個變體屬於 2 個原始樣本
+    assert (a["arm"], a["sources"], a["n"]) == ("a", 2, 4)
+    assert (a["rate_baseline"], a["rate"], a["diff"]) == pytest.approx((0.5, 1.0, 0.5))
+    assert (a["lost"], a["gained"]) == (0, 2)
+    assert (b["lost"], b["gained"]) == (1, 0)
+    # 只有 2 個原始樣本，無論差異多大都不可能顯著
+    assert a["p_value"] > 0.2
+    assert (a["p_holm"], b["p_holm"]) == pytest.approx(tuple(holm([a["p_value"], b["p_value"]])))
+    assert not a["primary"]
+
+
+def test_compare_by_source_primary_is_not_corrected():
+    a, b = compare_by_source(_sourced_rows(), "base", primary="a", n_boot=500)
+    assert a["primary"] and a["p_holm"] == a["p_value"]
+    assert b["p_holm"] == b["p_value"]  # 探索性比較只剩一組，Holm 不改變 p 值
+    with pytest.raises(ValueError, match="主要比較"):
+        compare_by_source(_sourced_rows(), "base", primary="x")
+    with pytest.raises(ValueError, match="基準"):
+        compare_by_source(_sourced_rows(), "x")
+
+
+def test_compare_by_source_falls_back_to_id():
+    rows = [{k: v for k, v in r.items() if k != "source_id"} for r in _sourced_rows()]
+    a, _ = compare_by_source(rows, "base", n_boot=200)
+    assert a["sources"] == 4  # 沒有 source_id 欄時每張影像各為一個原始樣本
+
+
+def test_report_markdown_by_source_section():
+    meta = {"label": "t", "manifest": {"items": 4}}
+    text = report_markdown(meta, _sourced_rows(), (), "base", primary="a")
+    assert "## 以原始樣本為單位 · By source" in text
+    assert "| a（主要比較） | 2 | 4 | 50.0% | 100.0% | +50.0% |" in text
+    assert "主要比較為 `a`" in text and "沒有 `source_id` 欄" not in text
+    # 沒有 source_id 時註明信賴區間偏窄
+    assert "沒有 `source_id` 欄" in report_markdown(meta, ROWS, (), "base")

@@ -549,7 +549,7 @@
 | 「每個方法都執行」模式與「變體 × 方法」結果表 | 已有：`dietai.evaluation.methods`、`e1_barcode/run_methods.py`（條碼；前處理與辨識耗時分開記錄） |
 | 疊加型固定流程 | **未實作** |
 | 逐步升級的離線計算與貪婪選擇 | 已有：`simulate_ladder`、`greedy_ladder`、`e1_barcode/analyze_methods.py`（條碼） |
-| 以原始樣本為單位的 bootstrap、Holm 校正 | **未實作** |
+| 以原始樣本為單位的 bootstrap、Holm 校正 | 已有：`stats.cluster_bootstrap_diff`（p 值為集群符號翻轉置換檢定）、`stats.holm`、`compare_by_source`；混合效果模型未實作 |
 | OCR 引擎、欄位正確率、CER；真實照片的定位誤差評估 | **未實作** |
 | 規則式自適應策略 | **未實作**（量測函式已有） |
 

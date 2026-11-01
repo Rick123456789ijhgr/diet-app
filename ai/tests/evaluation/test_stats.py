@@ -1,6 +1,12 @@
 import pytest
 
-from dietai.evaluation import mcnemar_exact, paired_counts, wilson_interval
+from dietai.evaluation import (
+    cluster_bootstrap_diff,
+    holm,
+    mcnemar_exact,
+    paired_counts,
+    wilson_interval,
+)
 
 
 @pytest.mark.parametrize(
@@ -50,3 +56,56 @@ def test_paired_counts():
     assert paired_counts(base, other) == (1, 2)
     with pytest.raises(ValueError):
         paired_counts([True], [])
+
+
+# ---- 以原始樣本為單位：集群 bootstrap、置換檢定、Holm ----
+
+
+def test_holm_known_values():
+    adjusted = holm([0.01, 0.04, 0.03, 0.005])
+    assert adjusted == pytest.approx([0.03, 0.06, 0.06, 0.02])
+    assert holm([0.5, 0.9]) == pytest.approx([1.0, 1.0])
+    assert holm([]) == []
+    with pytest.raises(ValueError):
+        holm([1.5])
+
+
+def test_cluster_bootstrap_point_estimate_and_reproducible():
+    clusters = [[(False, True), (True, True)], [(False, False)], [(True, False), (False, True)]]
+    res = cluster_bootstrap_diff(clusters, n_boot=500, seed=1)
+    assert (res.n_clusters, res.n_pairs) == (3, 5)
+    assert (res.rate_baseline, res.rate_other) == pytest.approx((0.4, 0.6))
+    assert res.diff == pytest.approx(0.2)
+    assert res.ci_low <= res.diff <= res.ci_high
+    assert cluster_bootstrap_diff(clusters, n_boot=500, seed=1) == res
+
+
+def test_cluster_bootstrap_identical_arms():
+    res = cluster_bootstrap_diff([[(True, True)], [(False, False)]], n_boot=200)
+    assert (res.diff, res.ci_low, res.ci_high, res.p_value) == (0.0, 0.0, 0.0, 1.0)
+
+
+def test_cluster_bootstrap_detects_consistent_gain():
+    res = cluster_bootstrap_diff([[(False, True)]] * 30, n_boot=999)
+    assert res.p_value == pytest.approx(1 / 1000)
+    assert res.ci_low == res.ci_high == 1.0
+
+
+def test_duplicated_variants_do_not_narrow_cluster_inference():
+    # 12 個原始樣本：7 個前處理救回、3 個退步、2 個不變
+    sources = [[(False, True)]] * 7 + [[(True, False)]] * 3 + [[(True, True)]] * 2
+    # 每個原始樣本複製成 16 個完全相關的變體
+    copies = [c * 16 for c in sources]
+    one = cluster_bootstrap_diff(sources, n_boot=2000, seed=3)
+    many = cluster_bootstrap_diff(copies, n_boot=2000, seed=3)
+    assert (many.ci_low, many.ci_high, many.p_value) == (one.ci_low, one.ci_high, one.p_value)
+    assert one.p_value > 0.05
+    # 以變體為單位的 McNemar 把 16 份複製當成獨立樣本，p 值失真地變小
+    assert mcnemar_exact(3, 7) > 0.05 and mcnemar_exact(48, 112) < 1e-5
+
+
+def test_cluster_bootstrap_validation():
+    with pytest.raises(ValueError, match="沒有任何配對"):
+        cluster_bootstrap_diff([[], []])
+    with pytest.raises(ValueError):
+        cluster_bootstrap_diff([[(True, True)]], n_boot=0)
