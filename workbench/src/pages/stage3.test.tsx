@@ -30,8 +30,14 @@ describe('參數掃描頁', () => {
     renderAt('/m1/sweep')
     await screen.findByText('≥ 8', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
-    expect(await screen.findByText('首次失敗於 45', {}, WAIT)).toBeInTheDocument()
-    expect(screen.getByText('+50%')).toBeInTheDocument()
+    expect(await screen.findAllByText('首次失敗於 45', {}, WAIT)).toHaveLength(2)
+    expect(screen.getByText('+38%')).toBeInTheDocument()
+    // 誤讀另計，不算成功；品質門檻對照以樣本數顯示
+    expect(
+      screen.getByText('誤讀・逐步升級', { selector: 'div' }).nextElementSibling,
+    ).toHaveTextContent('13%')
+    expect(screen.getByText('誤報').nextElementSibling).toHaveTextContent('7 / 1')
+    expect(screen.getByText(/APP 即時掃描不經此流程/)).toBeInTheDocument()
     const last = bodies('/workbench/v1/dev/sweeps').at(-1) as {
       target: string
       params: Record<string, unknown>
@@ -69,9 +75,9 @@ describe('參數掃描頁', () => {
     renderAt('/m1/sweep')
     await screen.findByText('≥ 8', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
-    await screen.findByText('首次失敗於 45', {}, WAIT)
+    await screen.findAllByText('首次失敗於 45', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /成功階/ }))
-    const legend = screen.getByRole('img', { name: /逐步升級成功於哪一階/ }).nextElementSibling
+    const legend = screen.getByRole('img', { name: /逐步升級讀對於哪一階/ }).nextElementSibling
     expect(legend?.textContent).toMatch(/原圖.*校正/)
     await user.click(screen.getByRole('tab', { name: /匯出入/ }))
     expect(screen.getByText('階梯設定')).toBeInTheDocument()
@@ -87,6 +93,37 @@ describe('參數掃描頁', () => {
         params: { zxing: { try_rotate: false } },
       }),
     )
+  })
+})
+
+describe('參數掃描頁：條碼的品質門檻對照', () => {
+  it('品質門檻檢視疊出成功率與不通過率，門檻覆寫隨條碼掃描送出；明細顯示真值與誤讀', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/sweep')
+    await screen.findByText('≥ 8', {}, WAIT)
+    await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
+    await screen.findAllByText('首次失敗於 45', {}, WAIT)
+    await user.click(screen.getByRole('radio', { name: /品質門檻/ }))
+    expect(screen.getByRole('img', { name: /逐步升級成功率與品質不通過率/ })).toBeInTheDocument()
+    expect(screen.getByText('過亮').nextElementSibling).toHaveTextContent('≥ 0')
+    // 條碼模式的參數分頁也有品質門檻，改了會隨條碼掃描送出
+    await user.click(screen.getByRole('tab', { name: /階梯參數/ }))
+    expect(screen.getByText('品質門檻（對照用）')).toBeInTheDocument()
+    const input = screen.getByLabelText('過亮比例上限', { selector: 'input' })
+    await user.clear(input)
+    await user.type(input, '0.9')
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/sweeps').at(-1)).toMatchObject({
+        target: 'barcode',
+        params: { config: { bright_ratio_max: 0.9 } },
+      }),
+    )
+    await user.click(screen.getByRole('radio', { name: /明細/ }))
+    const row = within(screen.getByRole('table', { name: '每個等級與樣本的解碼結果' }))
+      .getByText('4710088410108')
+      .closest('tr')!
+    expect(row).toHaveTextContent('誤讀')
+    expect(row).toHaveTextContent('4710088410115')
   })
 })
 

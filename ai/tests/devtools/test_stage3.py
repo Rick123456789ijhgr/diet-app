@@ -5,10 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from dietai.devtools import batch, e1, sweep
+from dietai.devtools import batch, e1, ladder_eval, sweep
 from dietai.devtools.images import PathNotFoundError, SplitLockedError, encode_png
 from dietai.devtools.scenes import SceneError
 from dietai.preprocess import LadderConfig, QualityConfig, ZxingConfig
+from dietai.preprocess.decoders import DecodeHit
+from dietai.preprocess.types import CodeFormat
 from dietai.synthetic import label_scene
 
 
@@ -45,13 +47,88 @@ def test_quality_sweep_triggers_blur_warning():
 def test_barcode_sweep_compares_raw_and_ladder():
     ax = sweep.parse_axis({"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3})
     result = sweep.barcode_sweep(
-        ax, samples=2, module_px=4, seed=0, ladder=LadderConfig(), zxing=ZxingConfig()
+        ax,
+        samples=2,
+        module_px=4,
+        seed=0,
+        ladder=LadderConfig(),
+        zxing=ZxingConfig(),
+        quality=QualityConfig(),
     )
     data = result.data
     assert len(data["rows"]) == 6  # 3 個等級 × 2 個樣本
     assert {r["method"] for r in data["rates"]} == {"raw", "ladder"}
     assert data["overall"]["ladder"] >= data["overall"]["raw"]
     assert data["first_failure"]["raw"] == 45  # 只用原圖在 45° 失敗
+    # 對真值判定：每列都有真值，結果為 E1 的判定代碼；讀對時解出內容等於真值
+    for row in data["rows"]:
+        assert row["ladder"] in {"correct", "misread", "missed"}
+        if row["ladder"] == "correct":
+            assert row["decoded"] == row["truth"]
+    # 品質對照的四格加總等於列數，每個品質警告代碼都列出
+    assert sum(data["alarms"].values()) == 6
+    assert set(data["quality_triggers"]) == {
+        "LOW_RESOLUTION",
+        "TOO_BLURRY",
+        "TOO_DARK",
+        "TOO_BRIGHT",
+    }
+    assert [q["level"] for q in data["quality_rates"]] == [0, 22.5, 45]
+
+
+def _hit(text: str) -> DecodeHit:
+    return DecodeHit(CodeFormat.EAN13, text, text.encode(), ((0, 0), (10, 0), (10, 5), (0, 5)))
+
+
+def test_ladder_sweep_counts_misread_as_failure():
+    """解出檢查碼正確但不是真值的號碼時算誤讀，不算成功（舊版只看有沒有解出）。"""
+    wrong = "4710088410115"  # 檢查碼正確的另一個號碼
+    img = label_scene(120, 160)
+    rows = ladder_eval.ladder_sweep(
+        [img],
+        ["4710088410108"],
+        lambda im, _level: im,
+        [0.0],
+        lambda _im: [_hit(wrong)],
+        LadderConfig(),
+        QualityConfig(),
+    )
+    assert rows[0][ladder_eval.LADDER] == "misread"
+    assert rows[0]["解出內容"] == wrong
+    rate = next(r for r in ladder_eval.success_rates(rows) if r["方法"] == ladder_eval.LADDER)
+    assert rate["成功率"] == 0 and rate["誤讀率"] == 1
+    assert ladder_eval.rung_counts(rows) == []  # 誤讀不算救回
+    assert ladder_eval.first_failure(rows, ladder_eval.LADDER) == 0
+
+
+def _row(level: float, correct: bool, passed: bool, warnings: tuple[str, ...] = ()) -> dict:
+    outcome = "correct" if correct else "missed"
+    return {
+        "等級": level,
+        ladder_eval.RAW: outcome,
+        ladder_eval.LADDER: outcome,
+        "品質通過": passed,
+        "品質警告": list(warnings),
+    }
+
+
+def test_alarm_counts_and_quality_triggers():
+    rows = [
+        _row(0, correct=True, passed=True),
+        _row(0, correct=True, passed=False, warnings=("TOO_BRIGHT",)),  # 誤報
+        _row(1, correct=False, passed=False, warnings=("TOO_BLURRY",)),  # 該重拍
+        _row(1, correct=False, passed=True),  # 漏報
+    ]
+    assert ladder_eval.alarm_counts(rows) == {"該重拍": 1, "誤報": 1, "漏報": 1, "正常": 1}
+    # 半數樣本出現才算觸發：兩個等級各有一半
+    triggers = ladder_eval.quality_triggers(rows)
+    assert triggers["TOO_BRIGHT"] == 0
+    assert triggers["TOO_BLURRY"] == 1
+    assert triggers["TOO_DARK"] is None
+    assert ladder_eval.quality_rates(rows) == [
+        {"等級": 0, "不通過率": 0.5},
+        {"等級": 1, "不通過率": 0.5},
+    ]
 
 
 @pytest.fixture

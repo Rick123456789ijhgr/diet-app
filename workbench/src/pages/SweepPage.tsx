@@ -1,6 +1,6 @@
 // 模組一：參數掃描。一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；
-// 條碼比較只用原圖與逐步升級的成功率。
-import { Barcode, ChartLine, Layers, ScanSearch, Table, TrendingUp } from 'lucide-react'
+// 條碼以合成樣本對真值評分，比較只用原圖與逐步升級的成功率與誤讀率，並對照品質門檻。
+import { Barcode, ChartLine, Gauge, Layers, ScanSearch, Table, TrendingUp } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { api, artifactUrl, overrideBody, unwrap, type ConfigOverride } from '@/api/client'
@@ -60,27 +60,41 @@ interface QualitySweep {
   thumbs: Thumb[]
 }
 
+/** E1 的判定代碼：讀對、讀成別的號碼、沒讀出來。 */
+type Outcome = 'correct' | 'misread' | 'missed'
+
 /**
- * 條碼掃描結果：比較「只用原圖（raw）」與「逐步升級（ladder）」。
- * - rates：每個等級、每種方法的成功率（成功樣本數 ÷ 樣本數）。
- * - rung_counts：每個等級中逐步升級成功於哪一階的樣本數。
- * - overall：所有等級與樣本合計的成功率；first_failure：成功率首次低於 100% 的等級（全部成功為 null）。
+ * 條碼掃描結果：比較「只用原圖（raw）」與「逐步升級（ladder）」，一律對真值判定（同 E1）。
+ * - rates：每個等級、每種方法的成功率（讀對的樣本數 ÷ 樣本數）與誤讀率。
+ * - rung_counts：每個等級中逐步升級讀對於哪一階的樣本數（誤讀不計）。
+ * - overall／misread：所有等級與樣本合計的成功率與誤讀率；
+ *   first_failure：成功率首次低於 100% 的等級（全部成功為 null）。
+ * - quality_rates：每個等級品質檢查不通過的比例；quality_triggers：各警告首次在至少半數樣本出現的等級。
+ * - alarms：品質檢查與逐步升級結果的四格對照（該重拍、誤報、漏報、正常），單位為樣本數。
  * - rows：每個等級 × 每個樣本的明細（sample 從 0 起算）。
  */
 interface BarcodeSweep {
   axis: string
   levels: number[]
-  rates: { level: number; method: 'raw' | 'ladder'; rate: number }[]
+  rates: { level: number; method: 'raw' | 'ladder'; rate: number; misread: number }[]
   rung_counts: { level: number; rung: string; count: number }[]
   overall: { raw: number; ladder: number }
+  misread: { raw: number; ladder: number }
   first_failure: { raw: number | null; ladder: number | null }
+  quality_rates: { level: number; rate: number }[]
+  quality_triggers: Record<string, number | null>
+  alarms: { retake: number; false_alarm: number; missed_alarm: number; ok: number }
   rows: {
     level: number
     sample: number
-    raw: boolean
-    ladder: boolean
+    truth: string
+    raw: Outcome
+    ladder: Outcome
+    decoded: string
     success_rung: string
     attempts: number
+    quality_passed: boolean
+    warnings: string[]
   }[]
   thumbs: Thumb[]
 }
@@ -96,13 +110,18 @@ type MetricKey = keyof typeof METRICS
 
 /** 條碼兩種方法的中文名稱（圖例用）。 */
 const METHOD_TEXT = { raw: '只用原圖', ladder: '逐步升級' }
+/** 判定代碼的中文（明細表用）。 */
+const OUTCOME_TEXT: Record<Outcome, string> = { correct: '正確', misread: '誤讀', missed: '漏讀' }
+/** 適用範圍（ADR 0004）：伺服器端的逐步升級只服務無法重拍的靜態照片。 */
+const SCOPE_NOTE = '適用：相簿匯入、冷啟動上傳等無法重拍的靜態照片；APP 即時掃描不經此流程。'
 /** 比例轉整數百分比（圖表軸與讀數用）。 */
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
 /**
  * 參數掃描頁：選一種退化（SWEEP_AXES）與範圍，後端在範圍內等距取 n 點逐級退化並評估。
  * - 品質檢查：對基準影像退化後跑品質檢查，看各指標的曲線與在哪個等級首次觸發警告；左側可調 QualityConfig。
- * - 條碼解碼：對合成 EAN-13 樣本退化後解碼，比較只用原圖與逐步升級的成功率；左側可調 LadderConfig／ZxingConfig。
+ * - 條碼解碼：對合成 EAN-13 樣本退化後解碼並對真值判定，比較只用原圖與逐步升級的成功率與誤讀率；
+ *   同一批樣本也跑品質檢查，對照門檻的誤報與漏報。左側可調 LadderConfig／ZxingConfig／QualityConfig。
  * 請求經 useAnalysis（防抖、取消舊請求、保留上一次結果並淡化）。
  */
 export function SweepPage() {
@@ -133,7 +152,8 @@ export function SweepPage() {
 
   // 送給後端的掃描參數。用 useMemo 讓物件在輸入不變時保持同一參照：
   // useAnalysis 以「防抖後的值 === 目前的值」判斷防抖已跟上，每次 render 都產生新物件就永遠不會送出。
-  // 品質掃描帶 image_id 與 QualityConfig；條碼掃描帶樣本設定與 ladder／zxing（沒有覆寫時為 undefined）。
+  // 品質掃描帶 image_id 與 QualityConfig；條碼掃描帶樣本設定與 ladder／zxing／config（沒有覆寫時為
+  // undefined）。兩種對象共用同一組 QualityConfig 覆寫，切換時門檻不變。
   const params = useMemo(
     () =>
       target === 'quality'
@@ -146,6 +166,7 @@ export function SweepPage() {
             ...samples,
             ladder: overrideBody(ladder),
             zxing: overrideBody(zxing),
+            config: overrideBody(config),
           },
     [target, axisKey, range, n, image?.image_id, config, samples, ladder, zxing],
   )
@@ -243,8 +264,10 @@ export function SweepPage() {
       {target === 'barcode' && (
         <div className="border-card-border space-y-2 border-t pt-3">
           <p className="text-muted text-xs">
-            樣本為合成 EAN-13，內容各不相同；成功率為成功樣本數除以樣本數。
+            樣本為合成
+            EAN-13，內容各不相同；成功率為讀對的樣本數除以樣本數，讀成別的號碼另計為誤讀。
           </p>
+          <p className="text-muted text-xs">{SCOPE_NOTE}</p>
           <div className="flex items-end gap-2">
             {/* [欄位, 標籤, 最小值, 最大值]；輸入四捨五入成整數並限制在範圍內 */}
             {(
@@ -274,7 +297,7 @@ export function SweepPage() {
   )
 
   // 左側面板依評估對象切換：品質＝掃描設定＋基準影像／QualityConfig；
-  // 條碼＝掃描設定／階梯參數（LadderConfig＋ZxingConfig）
+  // 條碼＝掃描設定／階梯參數（LadderConfig＋ZxingConfig）＋品質門檻（QualityConfig，對照用）
   const panel =
     target === 'quality' ? (
       <ToolPanel
@@ -305,11 +328,14 @@ export function SweepPage() {
       <ToolPanel
         imageLabel="掃描"
         paramsLabel="階梯參數"
-        changed={Object.keys(ladder).length + Object.keys(zxing).length}
+        changed={
+          Object.keys(ladder).length + Object.keys(zxing).length + Object.keys(config).length
+        }
         image={sweepControls}
         params={
           ladderSchema &&
-          zxingSchema && (
+          zxingSchema &&
+          quality && (
             <div className="space-y-6">
               <LadderControls
                 schema={ladderSchema}
@@ -338,7 +364,7 @@ export function SweepPage() {
                 invalidField={analysis.configError?.field}
                 invalidMessage={analysis.configError?.message}
               />
-              {/* 後端回 INVALID_CONFIG 時兩個表單都傳入；只有含該欄位的表單會標紅 */}
+              {/* 後端回 INVALID_CONFIG 時各表單都傳入；只有含該欄位的表單會標紅 */}
               <ParamForm
                 schema={zxingSchema}
                 overrides={zxing}
@@ -346,13 +372,25 @@ export function SweepPage() {
                 invalidField={analysis.configError?.field}
                 invalidMessage={analysis.configError?.message}
               />
+              {/* 品質門檻不影響解碼，只用來對照「該不該請使用者重拍」（結果的品質門檻檢視） */}
+              <div className="border-card-border space-y-2 border-t pt-4">
+                <h3 className="text-sm font-semibold">品質門檻（對照用）</h3>
+                <ParamForm
+                  schema={quality}
+                  overrides={config}
+                  onChange={setConfig}
+                  invalidField={analysis.configError?.field}
+                  invalidMessage={analysis.configError?.message}
+                />
+              </div>
             </div>
           )
         }
-        // 匯出入涵蓋 LadderConfig 與 ZxingConfig 兩組設定，各自匯出、匯入
+        // 匯出入涵蓋 LadderConfig、ZxingConfig 與 QualityConfig 三組設定，各自匯出、匯入
         io={
           ladderSchema &&
-          zxingSchema && (
+          zxingSchema &&
+          quality && (
             <div className="space-y-8">
               <ConfigIO
                 title="階梯設定"
@@ -366,6 +404,7 @@ export function SweepPage() {
                 overrides={zxing}
                 onImport={setZxing}
               />
+              <ConfigIO title="品質門檻" schema={quality} overrides={config} onImport={setConfig} />
             </div>
           )
         }
@@ -387,7 +426,7 @@ export function SweepPage() {
     <Workspace
       panel={panel}
       title="參數掃描"
-      description="一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；條碼比較只用原圖與逐步升級的成功率。"
+      description="一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；條碼對真值評分，比較只用原圖與逐步升級的成功率與誤讀率，並對照品質門檻。"
       aside={
         <div className="flex items-center gap-2">
           {(pipeline.pending || analysis.busy) && (
@@ -597,8 +636,9 @@ function QualityResultView({
 }
 
 /**
- * 條碼掃描的結果檢視：讀數欄為兩種方法的整體成功率、首次失敗等級與提升幅度；
- * 主檢視為成功率折線、各等級的成功階堆疊長條，或逐樣本明細表。
+ * 條碼掃描的結果檢視：讀數欄為兩種方法的整體成功率、誤讀率、首次失敗等級與提升幅度，
+ * 以及品質門檻與逐步升級結果的四格對照；主檢視為成功率與誤讀率折線、各等級的成功階堆疊長條、
+ * 品質門檻對照（成功率與品質不通過率疊在同一張圖），或逐樣本明細表。
  */
 function BarcodeResultView({
   r,
@@ -617,6 +657,10 @@ function BarcodeResultView({
   const gain = r.overall.ladder - r.overall.raw
   // 結果中出現過的成功階，依 RUNG_ORDER 排序（與 E1 頁相同；不在其中的新階接在最後）
   const rungs = orderRungs(r.rung_counts.map((c) => c.rung))
+  // 某方法某指標（成功率或誤讀率）隨等級變化的點
+  const points = (method: 'raw' | 'ladder', key: 'rate' | 'misread') =>
+    r.rates.filter((x) => x.method === method).map((x) => ({ x: x.level, y: x[key] }))
+  const total = r.rows.length
   return (
     <Split
       readout={
@@ -627,19 +671,54 @@ function BarcodeResultView({
                 label="只用原圖"
                 value={pct(r.overall.raw)}
                 delta={fail(r.first_failure.raw)}
-                help="所有等級與樣本的整體成功率；首次失敗為成功率首次低於 100% 的等級。"
+                help="所有等級與樣本中讀對的比例；首次失敗為成功率首次低於 100% 的等級。"
               />
               <Metric
                 label="逐步升級"
                 value={pct(r.overall.ladder)}
                 delta={fail(r.first_failure.ladder)}
               />
+              {(['raw', 'ladder'] as const).map((m) => (
+                <Metric
+                  key={m}
+                  label={`誤讀・${METHOD_TEXT[m]}`}
+                  value={pct(r.misread[m])}
+                  good={r.misread[m] > 0 ? false : undefined}
+                  help="解出檢查碼正確、但不是真值的號碼；比讀不出來更糟，因為使用者不會發現。"
+                />
+              ))}
               <Metric
                 label="提升"
                 value={`${gain >= 0 ? '+' : '−'}${pct(Math.abs(gain))}`}
                 good={gain > 0 ? true : gain < 0 ? false : undefined}
                 delta="逐步升級減只用原圖"
                 wide
+              />
+            </MetricGrid>
+          </ReadoutBlock>
+          <ReadoutBlock title="品質門檻對照">
+            <MetricGrid>
+              <Metric
+                label="該重拍"
+                value={`${r.alarms.retake} / ${total}`}
+                help="品質檢查不通過，且逐步升級讀不對：請使用者重拍是對的。"
+              />
+              <Metric
+                label="正常"
+                value={`${r.alarms.ok} / ${total}`}
+                help="品質檢查通過，且逐步升級讀對。"
+              />
+              <Metric
+                label="誤報"
+                value={`${r.alarms.false_alarm} / ${total}`}
+                good={r.alarms.false_alarm > 0 ? false : undefined}
+                help="品質檢查不通過，但逐步升級其實讀對了：門檻太嚴，不必要地請使用者重拍。"
+              />
+              <Metric
+                label="漏報"
+                value={`${r.alarms.missed_alarm} / ${total}`}
+                good={r.alarms.missed_alarm > 0 ? false : undefined}
+                help="品質檢查通過，但逐步升級讀不對：門檻太鬆，該提醒卻沒提醒。"
               />
             </MetricGrid>
           </ReadoutBlock>
@@ -657,6 +736,7 @@ function BarcodeResultView({
               options={[
                 { value: 'chart', label: withIcon(TrendingUp, '成功率') },
                 { value: 'rung', label: withIcon(Layers, '成功階') },
+                { value: 'quality', label: withIcon(Gauge, '品質門檻') },
                 { value: 'table', label: withIcon(Table, '明細') },
               ]}
             />
@@ -665,22 +745,34 @@ function BarcodeResultView({
           {view === 'table' ? (
             <DataTable
               label="每個等級與樣本的解碼結果"
-              columns={['等級', '樣本', '只用原圖', '逐步升級', '成功階', '嘗試次數']}
+              columns={[
+                '等級',
+                '樣本',
+                '真值',
+                '只用原圖',
+                '逐步升級',
+                '解出內容',
+                '成功階',
+                '品質',
+              ]}
               rows={r.rows.map((row) => [
                 Number(row.level.toPrecision(4)),
                 row.sample + 1, // 樣本編號從 1 起顯示
-                row.raw ? '成功' : '失敗',
-                row.ladder ? '成功' : '失敗',
+                row.truth,
+                OUTCOME_TEXT[row.raw],
+                OUTCOME_TEXT[row.ladder],
+                // 與真值相同時不重複列出 13 位數字，表格才放得下；不同（誤讀）時才顯示解出的號碼
+                row.decoded === row.truth ? '同真值' : row.decoded || '—',
                 row.success_rung ? rungText(row.success_rung) : '—',
-                row.attempts,
+                row.quality_passed ? '通過' : row.warnings.map(warningText).join('、'),
               ])}
             />
           ) : view === 'rung' ? (
             rungs.length === 0 ? (
-              <EmptyState>逐步升級沒有任何成功的樣本。</EmptyState>
+              <EmptyState>逐步升級沒有任何讀對的樣本。</EmptyState>
             ) : (
               <StackedBars
-                label="各等級中逐步升級成功於哪一階的樣本數"
+                label="各等級中逐步升級讀對於哪一階的樣本數"
                 keys={rungs}
                 keyLabel={rungText}
                 rows={r.levels.map((level) => ({
@@ -691,24 +783,57 @@ function BarcodeResultView({
                 }))}
               />
             )
-          ) : (
-            <>
+          ) : view === 'quality' ? (
+            <div className="space-y-4">
+              <p className="text-muted text-xs">
+                門檻設得好時，品質不通過率應在逐步升級的成功率下滑處才開始上升：太早上升是誤報（白白請使用者重拍），
+                太晚是漏報。請先調好前處理，再依此調整左側的品質門檻。
+              </p>
               <LineChart
-                label={`兩種方法的成功率隨${axisLabel}變化`}
+                label={`逐步升級成功率與品質不通過率隨${axisLabel}變化`}
                 xLabel={axisLabel}
                 yDomain={[0, 1]}
                 yFormat={pct}
-                // 兩條線：只用原圖（PALETTE[0]、虛線）與逐步升級（PALETTE[1]、實線）
-                series={(['raw', 'ladder'] as const).map((method, i) => ({
-                  name: METHOD_TEXT[method],
-                  color: PALETTE[i]!,
-                  dashed: method === 'raw',
-                  points: r.rates
-                    .filter((x) => x.method === method)
-                    .map((x) => ({ x: x.level, y: x.rate })),
-                }))}
+                series={[
+                  { name: '逐步升級成功率', color: PALETTE[1]!, points: points('ladder', 'rate') },
+                  {
+                    name: '品質不通過率',
+                    color: PALETTE[3]!,
+                    dashed: true,
+                    points: r.quality_rates.map((q) => ({ x: q.level, y: q.rate })),
+                  },
+                ]}
               />
-            </>
+              <ReadoutBlock title="各警告首次在半數樣本出現的等級">
+                <MetricGrid>
+                  {Object.entries(r.quality_triggers).map(([code, level]) => (
+                    <Metric
+                      key={code}
+                      label={warningText(code)}
+                      value={level === null ? '未觸發' : `≥ ${Number(level.toPrecision(3))}`}
+                      help={`${axisLabel}達到此等級時，至少半數樣本出現「${warningText(code)}」。`}
+                    />
+                  ))}
+                </MetricGrid>
+              </ReadoutBlock>
+            </div>
+          ) : (
+            <LineChart
+              label={`兩種方法的成功率與誤讀率隨${axisLabel}變化`}
+              xLabel={axisLabel}
+              yDomain={[0, 1]}
+              yFormat={pct}
+              // 成功率：只用原圖（PALETTE[0]）與逐步升級（PALETTE[1]）；誤讀率接著取 PALETTE[2]、[3]。
+              // 只用原圖一律為虛線
+              series={(['rate', 'misread'] as const).flatMap((key, k) =>
+                (['raw', 'ladder'] as const).map((method, i) => ({
+                  name: key === 'rate' ? METHOD_TEXT[method] : `誤讀・${METHOD_TEXT[method]}`,
+                  color: PALETTE[k * 2 + i]!,
+                  dashed: method === 'raw',
+                  points: points(method, key),
+                })),
+              )}
+            />
           )}
         </MainView>
       }

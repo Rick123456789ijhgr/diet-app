@@ -368,19 +368,39 @@ export const handlers = [
       return HttpResponse.json({
         levels: [0, 45],
         rates: [
-          { level: 0, method: 'raw', rate: 1 },
-          { level: 45, method: 'raw', rate: 0 },
-          { level: 0, method: 'ladder', rate: 1 },
-          { level: 45, method: 'ladder', rate: 1 },
+          { level: 0, method: 'raw', rate: 1, misread: 0 },
+          { level: 45, method: 'raw', rate: 0, misread: 0 },
+          { level: 0, method: 'ladder', rate: 1, misread: 0 },
+          { level: 45, method: 'ladder', rate: 0.75, misread: 0.25 },
         ],
         // 刻意不依階梯順序：前端要依 RUNG_ORDER 排列堆疊
         rung_counts: [
           { level: 45, rung: 'deskew', count: 2 },
           { level: 0, rung: 'raw', count: 2 },
         ],
-        overall: { raw: 0.5, ladder: 1 },
-        first_failure: { raw: 45, ladder: null },
-        rows: [],
+        overall: { raw: 0.5, ladder: 0.875 },
+        misread: { raw: 0, ladder: 0.125 },
+        first_failure: { raw: 45, ladder: 45 },
+        quality_rates: [
+          { level: 0, rate: 1 },
+          { level: 45, rate: 1 },
+        ],
+        quality_triggers: { LOW_RESOLUTION: null, TOO_BLURRY: null, TOO_DARK: null, TOO_BRIGHT: 0 },
+        alarms: { retake: 1, false_alarm: 7, missed_alarm: 0, ok: 0 },
+        rows: [
+          {
+            level: 45,
+            sample: 0,
+            truth: '4710088410108',
+            raw: 'missed',
+            ladder: 'misread',
+            decoded: '4710088410115',
+            success_rung: 'sharpen',
+            attempts: 7,
+            quality_passed: false,
+            warnings: ['TOO_BRIGHT'],
+          },
+        ],
         thumbs,
       })
     }
