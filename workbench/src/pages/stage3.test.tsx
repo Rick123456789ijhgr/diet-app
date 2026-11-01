@@ -127,6 +127,53 @@ describe('參數掃描頁：條碼的品質門檻對照', () => {
   })
 })
 
+describe('參數掃描頁：營養標示', () => {
+  it('預設改用透視強度，送出容許誤差與標示參數；顯示偏移、四角誤差與明細', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/sweep')
+    await screen.findByText('≥ 8', {}, WAIT)
+    await user.click(screen.getByRole('radio', { name: /營養標示/ }))
+    expect(await screen.findByText('首次失敗於 0.3', {}, WAIT)).toBeInTheDocument()
+    expect(screen.getByText('偏移', { selector: 'div' }).nextElementSibling).toHaveTextContent(
+      '13%',
+    )
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/sweeps').at(-1)).toMatchObject({
+        target: 'label',
+        params: { axis: 'perspective', lo: 0, hi: 0.3, samples: 5, seed: 0, tol: 0.03 },
+      }),
+    )
+    expect(
+      (bodies('/workbench/v1/dev/sweeps').at(-1) as { params: object }).params,
+    ).not.toHaveProperty('module_px')
+    // 容許誤差與標示參數隨請求送出
+    const tol = screen.getByLabelText('容許誤差')
+    await user.clear(tol)
+    await user.type(tol, '0.05')
+    await user.tab()
+    await user.click(screen.getByRole('tab', { name: /標示參數/ }))
+    const glare = screen.getByLabelText('光斑比例上限', { selector: 'input' })
+    await user.clear(glare)
+    await user.type(glare, '0.2')
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/sweeps').at(-1)).toMatchObject({
+        params: { tol: 0.05, label: { glare_max_ratio: 0.2 } },
+      }),
+    )
+    await user.click(screen.getByRole('radio', { name: /四角誤差/ }))
+    expect(screen.getByRole('img', { name: /四角誤差中位數隨透視強度變化/ })).toBeInTheDocument()
+    expect(screen.getByText('容許誤差 = 3%')).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: /品質門檻/ }))
+    expect(screen.getByRole('img', { name: /定位成功率與品質不通過率/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: /明細/ }))
+    const row = within(screen.getByRole('table', { name: '每個等級與樣本的定位結果' }))
+      .getByText('偏移')
+      .closest('tr')!
+    expect(row).toHaveTextContent('12.5%')
+    expect(row).toHaveTextContent('直線法')
+  })
+})
+
 describe('資料夾批次頁', () => {
   it('逐張顯示結果與彙整，點選列檢視單張', async () => {
     const user = userEvent.setup()

@@ -688,8 +688,11 @@ export interface components {
             steps: components["schemas"]["Step"][];
         };
         SweepRequest: {
-            /** @enum {string} */
-            target: "quality" | "barcode";
+            /**
+             * @description quality：品質檢查；barcode：條碼解碼；label：營養標示定位（合成場景對真實四角評分）
+             * @enum {string}
+             */
+            target: "quality" | "barcode" | "label";
             params?: {
                 [key: string]: unknown;
             };

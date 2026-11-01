@@ -168,10 +168,11 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
 
         - quality：image_id、config（QualityConfig 覆寫）
         - barcode：samples、module_px、seed、ladder、zxing、config（QualityConfig；皆為覆寫）
+        - label：samples、seed、tol、label（LabelConfig）、config（QualityConfig；皆為覆寫）
 
-        ``thumb_source`` 是縮圖衍生影像的來源鍵：quality 用來源影像 ID；barcode 沒有來源影像，
-        改用由樣本參數組成的字串，並以 ``detached=True`` 登記（否則暫存區淘汰時會因來源鍵
-        不是暫存影像 ID 而清掉對應，縮圖永遠不會重用）。
+        ``thumb_source`` 是縮圖衍生影像的來源鍵：quality 用來源影像 ID；barcode、label
+        沒有來源影像，改用由樣本參數組成的字串，並以 ``detached=True`` 登記
+        （否則暫存區淘汰時會因來源鍵不是暫存影像 ID 而清掉對應，縮圖永遠不會重用）。
         """
         params = _json_object(request.params_json, "params")
         ax = sweep.parse_axis(params)
@@ -192,11 +193,24 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
                 zxing=config_from_override(ZxingConfig, params.get("zxing")),
                 quality=config_from_override(QualityConfig, params.get("config")),
             )
+        elif request.target == "label":
+            samples, _, seed = sweep.sample_params(params)
+            thumb_source = f"label-sweep:{samples}:{seed}"
+            result = sweep.label_sweep(
+                ax,
+                samples=samples,
+                seed=seed,
+                tol=sweep.tolerance_param(params),
+                label=config_from_override(LabelConfig, params.get("label")),
+                quality=config_from_override(QualityConfig, params.get("config")),
+            )
         else:
-            raise SceneError(f"未知的掃描對象 {request.target!r}（quality／barcode）", "target")
+            raise SceneError(
+                f"未知的掃描對象 {request.target!r}（quality／barcode／label）", "target"
+            )
         # 縮圖只取決於來源、退化種類與等級；以衍生影像存放，調整其他參數時沿用，
         # 不會每次掃描都新增三張、把其他頁面的影像擠出暫存區
-        detached = request.target == "barcode"
+        detached = request.target != "quality"
         thumbs = []
         for t in result.thumbs:
             key = f"sweep:{ax.key}:{t.level!r}"

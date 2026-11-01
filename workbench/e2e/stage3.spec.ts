@@ -26,6 +26,14 @@ test('參數掃描：品質檢查的觸發等級與條碼成功率', async ({ pa
   // 同一批樣本的品質門檻對照
   await page.getByRole('radio', { name: /品質門檻/ }).click()
   await expect(page.getByRole('img', { name: /品質不通過率/ })).toBeVisible()
+
+  // 營養標示：合成標示對真實四角評分；未退化時一定找得到
+  await page.getByRole('radio', { name: /營養標示/ }).click()
+  await expect(page.getByRole('img', { name: /定位結果隨/ })).toBeVisible({
+    timeout: 30_000,
+  })
+  await page.getByRole('radio', { name: /四角誤差/ }).click()
+  await expect(page.getByRole('img', { name: /四角誤差中位數/ })).toBeVisible()
 })
 
 test('資料夾批次：逐張結果、單張檢視，測試集被拒絕', async ({ page }) => {

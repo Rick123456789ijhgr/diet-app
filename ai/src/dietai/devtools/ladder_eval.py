@@ -4,9 +4,7 @@
 ``dietai.evaluation.barcode.judge``（正確／誤讀／漏讀）；這裡只負責組合退化等級、
 樣本與彙整。成功率只計「正確」：誤讀雖然解出了號碼，但號碼是錯的，不算成功。
 
-同一批退化影像也跑一次品質檢查，用來比對門檻：品質檢查不通過（會請使用者重拍）而階梯
-其實讀對了是「誤報」；品質檢查通過而階梯讀不對是「漏報」。前處理定案後，門檻應落在
-兩者都低的位置。
+同一批退化影像也跑一次品質檢查，與逐步升級的結果對照門檻（見 ``quality_alarm``）。
 """
 
 from __future__ import annotations
@@ -25,7 +23,6 @@ from dietai.preprocess import (
     check_quality,
     decode_with_ladder,
 )
-from dietai.preprocess.quality import QUALITY_WARNINGS
 from dietai.preprocess.types import Image
 
 # 明細列以中文為鍵；給前端的 JSON 由 sweep.barcode_sweep 轉成英文鍵（raw／ladder）
@@ -130,49 +127,3 @@ def first_failure(rows: Sequence[dict[str, Any]], method: str) -> float | None:
         if rate["方法"] == method and rate["成功率"] < 1:
             return float(rate["等級"])
     return None
-
-
-def quality_rates(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """依等級彙整品質檢查不通過的比例，回傳長表格（等級、不通過率）。"""
-    return [
-        {"等級": level, "不通過率": sum(not r["品質通過"] for r in group) / len(group)}
-        for level, group in _by_level(rows).items()
-    ]
-
-
-def quality_triggers(rows: Sequence[dict[str, Any]]) -> dict[str, float | None]:
-    """各品質警告首次在「至少半數樣本」出現的等級；整個範圍都沒有則為 ``None``。
-
-    以半數為準而不是「任一樣本」：單一樣本的偶發警告不代表門檻落在這裡。
-    每個品質警告代碼都列出，前端的欄位因此固定。
-    """
-    by_level = sorted(_by_level(rows).items())
-    out: dict[str, float | None] = {}
-    for code in QUALITY_WARNINGS:
-        out[code.value] = next(
-            (
-                float(level)
-                for level, group in by_level
-                if 2 * sum(code.value in r["品質警告"] for r in group) >= len(group)
-            ),
-            None,
-        )
-    return out
-
-
-def alarm_counts(rows: Sequence[dict[str, Any]]) -> dict[str, int]:
-    """品質檢查與逐步升級結果的對照（四格）。
-
-    - 該重拍：品質不通過，且逐步升級讀不對（漏讀或誤讀）
-    - 誤報：品質不通過，但逐步升級其實讀對了（不必要地請使用者重拍）
-    - 漏報：品質通過，但逐步升級讀不對
-    - 正常：品質通過，逐步升級讀對
-    """
-    counts = {"該重拍": 0, "誤報": 0, "漏報": 0, "正常": 0}
-    for r in rows:
-        correct = r[LADDER] == Outcome.CORRECT
-        if r["品質通過"]:
-            counts["正常" if correct else "漏報"] += 1
-        else:
-            counts["誤報" if correct else "該重拍"] += 1
-    return counts
