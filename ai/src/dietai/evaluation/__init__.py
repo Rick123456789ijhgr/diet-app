@@ -37,6 +37,15 @@ from dietai.evaluation.label import (
     score_fields,
 )
 
+# 營養標示 OCR 的批次評估與彙整
+from dietai.evaluation.label_run import (
+    label_report_markdown,
+    load_label_methods,
+    read_label_run,
+    run_label_ocr,
+    summarize_label,
+)
+
 # manifest 讀寫與測試集鎖定、影像讀寫（支援中文路徑）
 from dietai.evaluation.manifest import (
     Manifest,
@@ -107,10 +116,12 @@ __all__ = [
     "is_test_split",
     "judge",
     "judge_attempt",
+    "label_report_markdown",
     "list_method_runs",
     "list_runs",
     "load_arm",
     "load_arms",
+    "load_label_methods",
     "load_label_truth",
     "located",
     "mcnemar_exact",
@@ -123,16 +134,19 @@ __all__ = [
     "pipeline_vs_parts",
     "quad_error",
     "read_image",
+    "read_label_run",
     "read_manifest",
     "read_methods",
     "read_run",
     "report_markdown",
     "rescue_counts",
     "run_experiment",
+    "run_label_ocr",
     "run_methods",
     "score_fields",
     "simulate_ladder",
     "summarize",
+    "summarize_label",
     "wilson_interval",
     "write_image",
     "write_manifest",

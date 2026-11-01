@@ -318,13 +318,15 @@ def run_experiment(
 
 def prepare_run_dir(
     manifest: Manifest,
-    arms: Sequence[Arm],
+    arms: Sequence[object],
     out_dir: str | Path,
     columns: Sequence[str],
     *,
     include_test: bool,
 ) -> Path:
     """執行前的共同檢查，通過後建立並回傳輸出資料夾（``run_experiment`` 等批次執行共用）。
+
+    ``arms`` 為要執行的實驗組（條碼的 ``Arm``、營養標示的引擎 × 方法等），只檢查不得為空。
 
     ``columns`` 為結果檔的欄位，用來檢查是否與 manifest 的標籤欄同名。
     """

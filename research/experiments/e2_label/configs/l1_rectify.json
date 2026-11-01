@@ -1,0 +1,5 @@
+{
+  "name": "l1_rectify",
+  "description": "只做定位與透視校正（光斑、對比關閉）",
+  "label": {"enable_rectify": true, "enable_glare": false, "enable_contrast": false}
+}

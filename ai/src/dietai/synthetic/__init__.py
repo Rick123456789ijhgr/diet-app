@@ -6,7 +6,7 @@
 """
 
 # 合成實驗資料集：影像檔＋manifest（E1 端到端用）
-from dietai.synthetic.datasets import write_barcode_dataset
+from dietai.synthetic.datasets import write_barcode_dataset, write_label_dataset
 
 # 已知程度的退化：模擬模糊、手震、旋轉、縮小、曲面、光線不均、對比、雜訊、反光、JPEG 等拍攝條件
 from dietai.synthetic.degrade import (
@@ -60,5 +60,6 @@ __all__ = [
     "salt_pepper",
     "scale_brightness",
     "write_barcode_dataset",
+    "write_label_dataset",
     "write_variant_dataset",
 ]
