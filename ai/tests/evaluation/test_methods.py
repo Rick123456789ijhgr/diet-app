@@ -359,6 +359,7 @@ def test_simulated_ladder_matches_decode_with_ladder(tmp_path, config):
     assert f"## {arm.name}：單一方法" in report
     assert f"## {arm.name}：貪婪選擇（min_agree={arm.ladder.min_agree}）" in report
     assert "依 `condition` 分組" in report and "configured" in report
+    assert "逐步升級比較 · 以原始樣本為單位" in report
     if any(r["skipped"] == "1" for r in rows):
         assert "略過（不送解碼、判為未讀到）：deskew" in report
 

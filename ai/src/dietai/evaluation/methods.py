@@ -42,6 +42,7 @@ from dietai.evaluation.barcode import (
     meta_lines,
     prepare_run_dir,
     run_meta,
+    source_section,
     summarize,
     summary_table,
 )
@@ -604,6 +605,8 @@ def methods_report_markdown(
     by: Sequence[str] = (),
     criteria: GreedyCriteria = GreedyCriteria(),
     orders: Mapping[str, Sequence[str]] | None = None,
+    *,
+    seed: int = 0,
 ) -> str:
     """「每個方法都執行」的 Markdown 摘要。
 
@@ -613,6 +616,7 @@ def methods_report_markdown(
     結果表含測試集時不做貪婪選擇（規則 7），以 ``orders`` 評估在 dev 上選定的順序。
     有多個實驗組時另列各引擎不做前處理的結果（階段零）。
     逐步升級的 ``min_agree`` 取自 ``run.json`` 中各實驗組的設定。
+    逐步升級比較另以原始樣本為單位列出（``compare_by_source``，``seed`` 為隨機種子）。
     """
     lines = meta_lines(meta, "E1 每個方法都執行")
     lines += [
@@ -669,7 +673,10 @@ def methods_report_markdown(
         ]
         lines += ["", f"### {arm}：逐步升級比較（離線計算）", ""]
         lines += [f"- {name}：{' > '.join(order)}" for name, order in ladders.items()]
-        lines += ["", summary_table(summarize(simulated, (), next(iter(ladders))), ())]
+        first = next(iter(ladders))
+        lines += ["", summary_table(summarize(simulated, (), first), ())]
+        lines += ["", f"#### {arm}：逐步升級比較 · 以原始樣本為單位", ""]
+        lines += source_section(simulated, first, None, seed)
     errors = sum(1 for r in rows if r["outcome"] == Outcome.ERROR)
     if errors:
         lines += ["", f"> 有 {errors} 筆 error（讀檔或處理失敗），未計入成功率；見 methods.csv。"]

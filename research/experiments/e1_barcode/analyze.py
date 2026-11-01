@@ -3,7 +3,8 @@
     python analyze.py                          # 最新一次執行，依所有標籤欄分組
     python analyze.py runs/20261012-153000 --by lighting,material --baseline a0_raw
 
-寫出 summary.md 與 summary.csv（整體）、summary_<標籤>.csv（各分組），並印出 Markdown。
+寫出 summary.md 與 summary.csv（整體）、summary_<標籤>.csv（各分組）、summary_source.csv
+（以原始樣本為單位的比較：集群 bootstrap 與 Holm 校正），並印出 Markdown。
 統計全部在 dietai.evaluation，這裡只解析參數與寫檔。
 """
 
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from dietai.evaluation import (
+    compare_by_source,
     grouping_columns,
     list_runs,
     read_run,
@@ -46,6 +48,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("run_dir", type=Path, nargs="?", help="執行資料夾（省略時取 runs/ 中最新的）")
     p.add_argument("--by", default=None, help="分組的標籤欄（逗號分隔）；省略時用所有標籤欄")
     p.add_argument("--baseline", default=None, help="McNemar 檢定的基準實驗組（預設為第一組）")
+    p.add_argument(
+        "--primary", default=None, help="事先寫定的主要比較實驗組（不納入 Holm 校正，ADR 0005）"
+    )
+    p.add_argument("--seed", type=int, default=0, help="集群 bootstrap 與置換檢定的隨機種子")
     args = p.parse_args(argv)
 
     run_dir = args.run_dir
@@ -81,12 +87,18 @@ def main(argv: list[str] | None = None) -> int:
     baseline = args.baseline or arm_names[0]
     if baseline not in arm_names:
         p.error(f"找不到基準實驗組 {baseline!r}；可用：{arm_names}")
+    if args.primary is not None and args.primary not in arm_names:
+        p.error(f"找不到主要比較的實驗組 {args.primary!r}；可用：{arm_names}")
 
     # 寫回同一個執行資料夾：整體一份，每個分組標籤各一份（只依單一標籤分組，不做交叉）
     _write_csv(run_dir / "summary.csv", summarize(rows, (), baseline))
     for tag in by:
         _write_csv(run_dir / f"summary_{tag}.csv", summarize(rows, (tag,), baseline))
-    report = report_markdown(meta, rows, by, baseline)
+    _write_csv(
+        run_dir / "summary_source.csv",
+        compare_by_source(rows, baseline, primary=args.primary, seed=args.seed),
+    )
+    report = report_markdown(meta, rows, by, baseline, primary=args.primary, seed=args.seed)
     (run_dir / "summary.md").write_text(report, encoding="utf-8")
     print(report)
     return 0

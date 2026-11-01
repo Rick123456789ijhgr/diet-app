@@ -89,6 +89,17 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 
 統計：成功率 = correct ÷ 正樣本數，附 Wilson 95% 信賴區間；與基準組以同一批影像配對做 McNemar 精確檢定
 （`失去／救回` 為基準對而本組錯／基準錯而本組對的張數）。
+以上兩者以「張」為單位，同一原始樣本的變體不獨立，區間會窄得不真實（ADR 0005 第 4 點），只供探索。
+`summary.md` 的「以原始樣本為單位」一節與 `summary_source.csv` 才是正式分析用的比較：
+
+- 依 manifest 的 `source_id` 欄（同一產品的所有變體同一值）分集群；沒有此欄時每張影像各為一個原始樣本，報告會註明。
+- 95% CI：集群 bootstrap（重抽原始樣本，連同其所有變體）；p 值：集群符號翻轉置換檢定。
+- `--primary` 指定事先寫定的主要比較（設計 9.2 節：選定策略 vs A0），不做多重比較校正；其餘各組為探索性，以 Holm 校正。
+- `--seed` 固定隨機種子（預設 0），結果可重現。
+
+```bash
+python analyze.py runs/<資料夾> --baseline a0_raw --primary z2_default_v2
+```
 
 紀錄方式採本地執行資料夾，不使用 MLflow／W&B，理由見 `docs/adr/0002-experiment-records.md`。
 正式結論請把 `summary.md` 的關鍵表格與 `run.json` 的 commit、manifest sha256 抄到下方「結論」。

@@ -44,8 +44,10 @@ def test_e1_end_to_end(tmp_path):
     meta = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     assert [a["name"] for a in meta["arms"]] == ["a0_raw", "a6_full"]
 
-    report = _run("analyze.py", str(run_dir), "--by", "condition")
+    report = _run("analyze.py", str(run_dir), "--by", "condition", "--primary", "a6_full")
     assert "依 `condition` 分組" in report
+    assert "| a6_full（主要比較） |" in report
+    assert (run_dir / "summary_source.csv").is_file()
     assert (run_dir / "summary.csv").is_file()
     assert (run_dir / "summary_condition.csv").is_file()
 

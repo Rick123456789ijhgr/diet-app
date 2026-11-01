@@ -4,7 +4,7 @@
 
 | 研究模組 | Flutter（app/lib/features） | Go（api/internal） | Python（ai/src/dietai） |
 | --- | --- | --- | --- |
-| 模組一 影像前處理 | `scan`（簡易品質檢查、壓縮） | — | `preprocess.quality`（品質檢查）、`preprocess.barcode`（條碼逐步升級）、`preprocess.decoders`（解碼器介面）、`preprocess.invoice_qr`（電子發票雙 QR 定位）、`preprocess.label`（營養標示：表格定位、透視校正、光斑、對比）、`preprocess.food`（食物照片：切出各道菜、盤緣橢圓、VLM 輸入縮放壓縮）、`preprocess.ops`（基本操作）、`preprocess.config`（門檻）、`preprocess.types`（共用型別）；`synthetic`（合成影像與條碼、已知程度的劣化、合成實驗資料集，以及由真實照片產生劣化變體的半合成資料集 `synthetic.variants`；測試與研究用）；`evaluation`（實驗評測：manifest、E1 批次執行與判定、「每個方法都執行」結果表與離線逐步升級、貪婪選擇（`evaluation.methods`）、Wilson／McNemar 統計；`research/experiments/e1_barcode` 只呼叫它） |
+| 模組一 影像前處理 | `scan`（簡易品質檢查、壓縮） | — | `preprocess.quality`（品質檢查）、`preprocess.barcode`（條碼逐步升級）、`preprocess.decoders`（解碼器介面）、`preprocess.invoice_qr`（電子發票雙 QR 定位）、`preprocess.label`（營養標示：表格定位、透視校正、光斑、對比）、`preprocess.food`（食物照片：切出各道菜、盤緣橢圓、VLM 輸入縮放壓縮）、`preprocess.ops`（基本操作）、`preprocess.config`（門檻）、`preprocess.types`（共用型別）；`synthetic`（合成影像與條碼、已知程度的劣化、合成實驗資料集，以及由真實照片產生劣化變體的半合成資料集 `synthetic.variants`；測試與研究用）；`evaluation`（實驗評測：manifest、E1 批次執行與判定、「每個方法都執行」結果表與離線逐步升級、貪婪選擇（`evaluation.methods`）、Wilson／McNemar 與以原始樣本為單位的集群 bootstrap、Holm 校正（`evaluation.stats`）；`research/experiments/e1_barcode` 只呼叫它） |
 | 模組二 條碼、發票、營養標示 | `scan` | `barcode`、`invoice` | `label_parsing`、`preprocess` |
 | 模組三 產品資料庫 | — | `product` | `adapters/db`（唯讀） |
 | 模組四 LLM 辨識與校正 | `diary`（確認修正） | `diary`、`job` | `recognition`、`adapters/llm` |
