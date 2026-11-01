@@ -61,6 +61,9 @@ export const RUNG_TEXT: Record<string, string> = {
   denoise: '去雜訊',
   deskew: '旋轉校正',
   multiscale: '多尺度',
+  otsu: 'Otsu 二值化',
+  clahe: 'CLAHE',
+  pipeline: '疊加流程',
 }
 
 /** E1 的判定結果（evaluation.Outcome）。 */

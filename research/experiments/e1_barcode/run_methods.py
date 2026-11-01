@@ -1,7 +1,7 @@
 """E1「每個方法都執行」（ADR 0005）：每張影像執行實驗組階梯中的所有方法，不提早停止。
 
     python run_methods.py --manifest synthetic/manifest.csv
-    python run_methods.py --manifest ... --only a6_full,p1_full_pyzbar --label stage0  # 引擎比較
+    python run_methods.py --manifest ... --only c0_all_methods,p1_full_pyzbar --label stage0
     python run_methods.py --manifest ... --include-test --label final   # 正式實驗才可讀測試集
 
 輸出到 runs/<時間>_<label>/：methods.csv（變體 × 方法結果表）、run.json 與 summary.md
@@ -36,9 +36,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--configs", type=Path, default=HERE / "configs", help="實驗組設定資料夾")
     p.add_argument(
         "--only",
-        default="a6_full",
+        default="c0_all_methods",
         help="實驗組（逗號分隔）；方法為各組 ladder.rungs 的每一階"
-        "（預設 a6_full：所有階、關閉 zxing-cpp 內建嘗試）",
+        "（預設 c0_all_methods：所有單一方法與疊加流程）",
     )
     p.add_argument("--out", type=Path, default=HERE / "runs", help="執行結果的上層資料夾")
     p.add_argument("--label", default="", help="執行名稱，加在資料夾名稱後")

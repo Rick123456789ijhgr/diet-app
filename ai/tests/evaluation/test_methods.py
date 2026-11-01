@@ -20,6 +20,7 @@ from dietai.evaluation import (
     method_id,
     methods_in,
     methods_report_markdown,
+    pipeline_vs_parts,
     read_manifest,
     read_methods,
     read_run,
@@ -67,6 +68,12 @@ def test_method_ids():
     assert method_id(Rung.SHARPEN, {}) == "sharpen"
     assert method_id(Rung.MULTISCALE, {"factor": 2.0}) == "multiscale@2"
     assert arm_methods(ARM.ladder) == ("raw", "gray", "multiscale@2", "multiscale@0.5")
+    piped = LadderConfig(
+        rungs=(Rung.OTSU, Rung.PIPELINE),
+        pipelines=((Rung.DENOISE, Rung.BINARIZE), (Rung.DESKEW, Rung.CLAHE)),
+    )
+    assert arm_methods(piped) == ("otsu", "pipeline@denoise+binarize", "pipeline@deskew+clahe")
+    assert method_id(Rung.PIPELINE, {"steps": "clahe+otsu"}) == "pipeline@clahe+otsu"
 
 
 @pytest.mark.parametrize(
@@ -337,7 +344,7 @@ def test_method_arms_feeds_summarize():
 # ---- 與實際逐步升級一致（真實 zxing-cpp、合成資料）----
 
 
-@pytest.mark.parametrize("config", ["a6_full", "m1_agree2"])
+@pytest.mark.parametrize("config", ["a6_full", "m1_agree2", "c0_all_methods"])
 def test_simulated_ladder_matches_decode_with_ladder(tmp_path, config):
     # 離線計算成立的前提：各方法由原圖獨立處理，依序找第一個已確認結果，
     # 必須與 decode_with_ladder 實際執行的判定完全相同
@@ -359,6 +366,9 @@ def test_simulated_ladder_matches_decode_with_ladder(tmp_path, config):
     assert f"## {arm.name}：單一方法" in report
     assert f"## {arm.name}：貪婪選擇（min_agree={arm.ladder.min_agree}）" in report
     assert "依 `condition` 分組" in report and "configured" in report
+    if config == "c0_all_methods":
+        assert "疊加流程 vs 所含最佳單一步驟（H3）" in report
+        assert "| pipeline@denoise+binarize |" in report
     assert "逐步升級比較 · 以原始樣本為單位" in report
     if any(r["skipped"] == "1" for r in rows):
         assert "略過（不送解碼、判為未讀到）：deskew" in report
@@ -397,3 +407,22 @@ def test_greedy_refuses_test_split_and_report_uses_fixed_orders():
     dev[0]["image"] = "data/splits/test/v1.png"
     with pytest.raises(SplitLockedError):
         greedy_ladder(dev)
+
+
+def test_pipeline_vs_parts():
+    # 流程 A+B 救回 v1、v2；A 單獨救回 v1、v2、v3（流程反而較差）；B 救回 v1
+    rows = []
+    for vid in ("v1", "v2", "v3", "v4"):
+        rows.append(_row(vid, "A", CODE if vid in ("v1", "v2", "v3") else ""))
+        rows.append(_row(vid, "B", CODE if vid == "v1" else ""))
+        rows.append(_row(vid, "pipeline@A+B", CODE if vid in ("v1", "v2") else OTHER))
+        rows.append(_row(vid, "pipeline@B+Z", ""))
+    by = {c["pipeline"]: c for c in pipeline_vs_parts(rows)}
+    ab = by["pipeline@A+B"]
+    assert (ab["rate"], ab["best_part"], ab["best_rate"]) == (0.5, "A", 0.75)
+    assert ab["diff"] == pytest.approx(-0.25) and (ab["misread"], ab["best_misread"]) == (2, 0)
+    # Z 沒有單獨執行：只和 B 比
+    assert by["pipeline@B+Z"]["best_part"] == "B"
+    with pytest.raises(ValueError, match="指定 arm"):
+        pipeline_vs_parts([*rows, _row("v1", "A", arm="b")])
+    assert pipeline_vs_parts([*rows, _row("v1", "A", arm="b")], arm="b") == []

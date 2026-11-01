@@ -211,6 +211,26 @@ DEFAULT_RUNGS: tuple[Rung, ...] = (
     Rung.SHARPEN,
 )
 
+# 疊加流程可用的步驟：只改像素的處理與旋轉校正（原圖、灰階、多尺度、疊加流程本身不行）
+PIPELINE_STEPS: tuple[Rung, ...] = (
+    Rung.BINARIZE,
+    Rung.OTSU,
+    Rung.CLAHE,
+    Rung.SHARPEN,
+    Rung.DENOISE,
+    Rung.DESKEW,
+)
+
+# 預設的疊加流程：實驗設計表 6.4 中適用於條碼的 C-01～C-05（去噪＝中值濾波、二值化＝自適應）。
+# 預設階梯不含 pipeline 階，上線行為不受影響；E1 以設定檔啟用。
+DEFAULT_PIPELINES: tuple[tuple[Rung, ...], ...] = (
+    (Rung.DENOISE, Rung.BINARIZE),
+    (Rung.CLAHE, Rung.BINARIZE),
+    (Rung.CLAHE, Rung.DENOISE),
+    (Rung.DENOISE, Rung.CLAHE, Rung.BINARIZE),
+    (Rung.DESKEW, Rung.DENOISE, Rung.BINARIZE),
+)
+
 # 預設採用的格式：台灣零售商品條碼（EAN-13 為主，含 EAN-8 與 UPC-A）。不收 UPC-E：
 # E1 發現斜拍的 EAN-13 會被部分掃描成合法的 UPC-E（2026-10-12 決定）。
 RETAIL_FORMATS: tuple[CodeFormat, ...] = (CodeFormat.EAN13, CodeFormat.EAN8, CodeFormat.UPCA)
@@ -224,15 +244,18 @@ class LadderConfig:
     ``scales`` 為多尺度階依序嘗試的倍率；``accept_formats`` 為採用的條碼格式
     （預設 ``RETAIL_FORMATS``，空 = 全部），其他格式的結果歸入 ``rejected``——例如斜拍的
     EAN-13 可能被部分掃描成另一個合法的 UPC-E，``verify_ean13`` 擋不住。
-    這三個欄位是序列，不以 ``param()`` 宣告，工作台的條碼頁另有專用元件。
+    ``pipelines`` 為 ``pipeline`` 階依序嘗試的疊加流程，每條流程是 ``PIPELINE_STEPS`` 中至少兩個
+    不重複步驟的序列（例如 ``("denoise", "binarize")``），各步驟沿用下方對應的參數。
+    這四個欄位是序列，不以 ``param()`` 宣告，工作台的條碼頁另有專用元件。
     由 JSON 讀入時接受字串與數字的串列。
     """
 
     rungs: tuple[Rung, ...] = DEFAULT_RUNGS
     scales: tuple[float, ...] = (2.0, 0.5)
     accept_formats: tuple[CodeFormat, ...] = RETAIL_FORMATS
-    # 以下各組參數只作用於對應的階（binarize、sharpen、denoise、deskew）；
-    # 該階不在 rungs 中時不會被使用
+    pipelines: tuple[tuple[Rung, ...], ...] = DEFAULT_PIPELINES
+    # 以下各組參數作用於對應的階（binarize、sharpen、denoise、deskew、clahe），
+    # 以及疊加流程中的同名步驟；兩者都沒用到時不會被使用
     binarize_block_size: int = param(
         31,
         "二值化鄰域",
@@ -287,6 +310,28 @@ class LadderConfig:
         step=2,
         group="denoise",
     )
+    clahe_clip: float = param(
+        2.0,
+        "CLAHE 對比上限",
+        "CLAHE clip limit",
+        "每格直方圖的高度上限；越大對比越強，雜訊也越明顯。",
+        min=0.5,
+        max=10.0,
+        step=0.5,
+        calibrate=True,
+        group="contrast",
+    )
+    clahe_tile: int = param(
+        8,
+        "CLAHE 格數",
+        "CLAHE tiles",
+        "把影像切成幾 × 幾格分別均衡化。",
+        min=1,
+        max=32,
+        step=1,
+        calibrate=True,
+        group="contrast",
+    )
     deskew_min_deg: float = param(
         3.0,
         "最小校正角度",
@@ -337,6 +382,21 @@ class LadderConfig:
             raise ValueError(f"scales 每個倍率須大於 0 且不等於 1，收到 {self.scales}")
         if Rung.MULTISCALE in self.rungs and not self.scales:
             raise ValueError("啟用多尺度（multiscale）時 scales 不得為空")
+        object.__setattr__(
+            self, "pipelines", tuple(tuple(Rung(s) for s in p) for p in self.pipelines)
+        )
+        for p in self.pipelines:
+            names = [s.value for s in p]
+            if len(p) < 2 or len(set(p)) != len(p):
+                raise ValueError(f"疊加流程須有至少兩個不重複的步驟，收到 {names}")
+            bad = [s.value for s in p if s not in PIPELINE_STEPS]
+            if bad:
+                allowed = [s.value for s in PIPELINE_STEPS]
+                raise ValueError(f"疊加流程不能含 {bad}；可用步驟：{allowed}")
+        if len(set(self.pipelines)) != len(self.pipelines):
+            raise ValueError("pipelines 不得重複")
+        if Rung.PIPELINE in self.rungs and not self.pipelines:
+            raise ValueError("啟用疊加流程（pipeline）時 pipelines 不得為空")
         # OpenCV 的自適應二值化與中值濾波都要求奇數視窗（以中心像素為準）
         for name in ("binarize_block_size", "denoise_ksize"):
             value = getattr(self, name)
@@ -344,6 +404,8 @@ class LadderConfig:
                 raise ValueError(f"{name} 必須為 ≥ 3 的奇數，收到 {value}")
         if self.sharpen_sigma <= 0 or self.sharpen_amount < 0:
             raise ValueError("須滿足 sharpen_sigma > 0、sharpen_amount ≥ 0")
+        if self.clahe_clip <= 0 or self.clahe_tile < 1:
+            raise ValueError("須滿足 clahe_clip > 0、clahe_tile ≥ 1")
         if self.deskew_min_deg < 0:
             raise ValueError("deskew_min_deg 不得為負")
         if self.min_agree < 1:

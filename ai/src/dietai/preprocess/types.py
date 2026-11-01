@@ -167,7 +167,8 @@ class Rung(StrEnum):
     """條碼逐步升級（``barcode.decode_with_ladder``）的一階。
 
     每一階都由原圖獨立產生一個影像版本，不疊加前一階的結果，
-    以便 E1 消融實驗判斷「是哪一個步驟救回來的」。
+    以便 E1 消融實驗判斷「是哪一個步驟救回來的」。``pipeline`` 階本身是「在同一張影像上
+    依序疊加多個處理」的固定流程，但仍由原圖開始，與其他階互相獨立（ADR 0005 第 5 點）。
     """
 
     RAW = "raw"  # 原圖
@@ -177,3 +178,7 @@ class Rung(StrEnum):
     DENOISE = "denoise"  # 中值濾波
     DESKEW = "deskew"  # 估計傾斜角後旋轉校正
     MULTISCALE = "multiscale"  # 依設定的倍率逐一縮放
+    OTSU = "otsu"  # Otsu 全域二值化
+    CLAHE = "clahe"  # 限制對比的自適應直方圖均衡化
+    # 疊加流程：同一張影像依序做多種處理（LadderConfig.pipelines），每條流程各產生一個版本
+    PIPELINE = "pipeline"

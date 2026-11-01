@@ -547,7 +547,7 @@
 | 劣化：手震模糊、椒鹽雜訊、對比降低、JPEG、曲面 | **未實作** |
 | 由真實照片產生變體與 manifest 的腳本 | **未實作** |
 | 「每個方法都執行」模式與「變體 × 方法」結果表 | 已有：`dietai.evaluation.methods`、`e1_barcode/run_methods.py`（條碼；前處理與辨識耗時分開記錄） |
-| 疊加型固定流程 | **未實作** |
+| 疊加型固定流程 | 已有：`Rung.PIPELINE` 與 `LadderConfig.pipelines`（條碼，預設 C-01～C-05；新增 Otsu、CLAHE 單一方法）、`evaluation.pipeline_vs_parts`（H3） |
 | 逐步升級的離線計算與貪婪選擇 | 已有：`simulate_ladder`、`greedy_ladder`、`e1_barcode/analyze_methods.py`（條碼） |
 | 以原始樣本為單位的 bootstrap、Holm 校正 | 已有：`stats.cluster_bootstrap_diff`（p 值為集群符號翻轉置換檢定）、`stats.holm`、`compare_by_source`；混合效果模型未實作 |
 | OCR 引擎、欄位正確率、CER；真實照片的定位誤差評估 | **未實作** |

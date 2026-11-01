@@ -183,6 +183,9 @@ def test_repository_configs_do_not_rely_on_code_defaults():
     for path in sorted(CONFIGS.glob("*.json")):
         ladder = json.loads(path.read_text(encoding="utf-8")).get("ladder", {})
         assert {"rungs", "accept_formats"} <= set(ladder), path.name
+        # 用到疊加流程時也要明寫 pipelines，程式預設改變時實驗組的意義才不會跟著變
+        if "pipeline" in ladder["rungs"]:
+            assert "pipelines" in ladder, path.name
 
 
 # ---- 批次執行 ----
