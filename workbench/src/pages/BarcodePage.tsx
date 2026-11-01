@@ -234,7 +234,7 @@ export function BarcodePage() {
     <Workspace
       panel={panel}
       title="條碼與發票 QR"
-      description="逐步升級：依序嘗試原圖、灰階、二值化、去雜訊、旋轉校正、多尺度、銳化，第一次成功即停止。"
+      description="逐步升級：依序嘗試原圖、灰階、二值化、去雜訊、旋轉校正、多尺度、銳化，第一次成功即停止。適用於相簿匯入、冷啟動上傳等無法重拍的靜態照片；APP 即時掃描不經此流程。"
       aside={
         <div className="flex items-center gap-2">
           {(pipeline.pending || analysis.busy) && (

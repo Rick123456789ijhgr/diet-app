@@ -372,6 +372,7 @@ def test_sweep_quality_and_barcode(wb):
 
     b = run("barcode", {"axis": "rotate_deg", "lo": 0, "hi": 45, "n": 3, "samples": 1})
     assert set(b["overall"]) == {"raw", "ladder"}
+    assert set(b["alarms"]) == {"retake", "false_alarm", "missed_alarm", "ok"}
     assert len(b["thumbs"]) == 3
     # 條碼掃描縮圖的來源鍵不是暫存影像 ID，仍要能重用（只改階梯設定時不新增影像）
     b2 = run(
@@ -387,6 +388,13 @@ def test_sweep_quality_and_barcode(wb):
         lambda: run("quality", {"image_id": "missing"}),
         grpc.StatusCode.NOT_FOUND,
         "IMAGE_NOT_FOUND",
+    )
+    # 條碼掃描也收 QualityConfig 覆寫（品質門檻對照），不合法時指出欄位
+    _expect_error(
+        lambda: run("barcode", {"n": 3, "samples": 1, "config": {"blur_min": "high"}}),
+        grpc.StatusCode.INVALID_ARGUMENT,
+        "INVALID_CONFIG",
+        "blur_min",
     )
 
 

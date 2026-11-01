@@ -167,7 +167,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         """參數掃描。params 共通欄位：axis、lo、hi、n。
 
         - quality：image_id、config（QualityConfig 覆寫）
-        - barcode：samples、module_px、seed、ladder、zxing（覆寫）
+        - barcode：samples、module_px、seed、ladder、zxing、config（QualityConfig；皆為覆寫）
 
         ``thumb_source`` 是縮圖衍生影像的來源鍵：quality 用來源影像 ID；barcode 沒有來源影像，
         改用由樣本參數組成的字串，並以 ``detached=True`` 登記（否則暫存區淘汰時會因來源鍵
@@ -190,6 +190,7 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
                 seed=seed,
                 ladder=config_from_override(LadderConfig, params.get("ladder")),
                 zxing=config_from_override(ZxingConfig, params.get("zxing")),
+                quality=config_from_override(QualityConfig, params.get("config")),
             )
         else:
             raise SceneError(f"未知的掃描對象 {request.target!r}（quality／barcode）", "target")

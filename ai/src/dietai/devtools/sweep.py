@@ -1,4 +1,4 @@
-"""參數掃描：一種退化由弱到強，觀察品質檢查的指標或條碼解碼的成功率如何變化。
+"""參數掃描：一種退化由弱到強，觀察品質檢查的指標或條碼解碼對真值的結果如何變化。
 
 回傳可直接序列化成 JSON 的字典（英文鍵），另附幾個等級的縮圖供介面顯示。
 解碼與檢查一律呼叫 ``dietai.preprocess``；成功率彙整沿用 ``ladder_eval``。
@@ -13,6 +13,7 @@ from typing import Any
 from dietai.devtools import ladder_eval
 from dietai.devtools.degradations import SWEEP_AXES, SweepAxis, first_trigger, sweep_levels
 from dietai.devtools.scenes import SceneError
+from dietai.evaluation.barcode import Outcome
 from dietai.preprocess import LadderConfig, QualityConfig, ZxingConfig, ZxingDecoder, check_quality
 from dietai.preprocess.ops import resize_short_side
 from dietai.preprocess.quality import QUALITY_WARNINGS
@@ -105,17 +106,31 @@ def barcode_sweep(
     seed: int,
     ladder: LadderConfig,
     zxing: ZxingConfig,
+    quality: QualityConfig,
 ) -> SweepResult:
-    """合成 EAN-13 樣本（內容各不相同），每個等級比較只用原圖與完整階梯的成功率。"""
-    scenes = [ean13_scene(code, module_px) for code in ean13_codes(samples, seed)]
-    rows = ladder_eval.ladder_sweep(scenes, ax.axis.fn, ax.levels, ZxingDecoder(zxing), ladder)
+    """合成 EAN-13 樣本（內容各不相同），每個等級比較只用原圖與完整階梯對真值的結果。
+
+    成功率只計讀對的樣本，誤讀另列；同一批退化影像也跑品質檢查，回傳品質門檻與
+    逐步升級結果的對照（``alarms``，見 ``ladder_eval.alarm_counts``）。
+    """
+    codes = ean13_codes(samples, seed)
+    scenes = [ean13_scene(code, module_px) for code in codes]
+    rows = ladder_eval.ladder_sweep(
+        scenes, codes, ax.axis.fn, ax.levels, ZxingDecoder(zxing), ladder, quality
+    )
     # ladder_eval 以中文為鍵，這裡轉成 JSON 用的英文鍵
     methods = {ladder_eval.RAW: "raw", ladder_eval.LADDER: "ladder"}
+    alarm_keys = {"該重拍": "retake", "誤報": "false_alarm", "漏報": "missed_alarm", "正常": "ok"}
     data = {
         "axis": ax.key,
         "levels": ax.levels,
         "rates": [
-            {"level": r["等級"], "method": methods[r["方法"]], "rate": r["成功率"]}
+            {
+                "level": r["等級"],
+                "method": methods[r["方法"]],
+                "rate": r["成功率"],
+                "misread": r["誤讀率"],
+            }
             for r in ladder_eval.success_rates(rows)
         ],
         "rung_counts": [
@@ -123,15 +138,25 @@ def barcode_sweep(
             for c in ladder_eval.rung_counts(rows)
         ],
         "overall": {m: ladder_eval.overall(rows, zh) for zh, m in methods.items()},
+        "misread": {m: ladder_eval.overall(rows, zh, Outcome.MISREAD) for zh, m in methods.items()},
         "first_failure": {m: ladder_eval.first_failure(rows, zh) for zh, m in methods.items()},
+        "quality_rates": [
+            {"level": r["等級"], "rate": r["不通過率"]} for r in ladder_eval.quality_rates(rows)
+        ],
+        "quality_triggers": ladder_eval.quality_triggers(rows),
+        "alarms": {alarm_keys[k]: v for k, v in ladder_eval.alarm_counts(rows).items()},
         "rows": [
             {
                 "level": r["等級"],
                 "sample": r["樣本"],
+                "truth": r["真值"],
                 "raw": r[ladder_eval.RAW],
                 "ladder": r[ladder_eval.LADDER],
+                "decoded": r["解出內容"],
                 "success_rung": r["成功階"],
                 "attempts": r["嘗試次數"],
+                "quality_passed": r["品質通過"],
+                "warnings": r["品質警告"],
             }
             for r in rows
         ],

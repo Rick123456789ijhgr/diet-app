@@ -23,6 +23,9 @@ test('參數掃描：品質檢查的觸發等級與條碼成功率', async ({ pa
   // 旋轉到 45° 時只用原圖會失敗，逐步升級全部成功
   await expect(page.getByText(/首次失敗於/)).toBeVisible()
   await expect(page.getByText('全部成功')).toBeVisible()
+  // 同一批樣本的品質門檻對照
+  await page.getByRole('radio', { name: /品質門檻/ }).click()
+  await expect(page.getByRole('img', { name: /品質不通過率/ })).toBeVisible()
 })
 
 test('資料夾批次：逐張結果、單張檢視，測試集被拒絕', async ({ page }) => {
