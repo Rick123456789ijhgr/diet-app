@@ -104,6 +104,27 @@ python analyze.py runs/<資料夾> --baseline a0_raw --primary z2_default_v2
 紀錄方式採本地執行資料夾，不使用 MLflow／W&B，理由見 `docs/adr/0002-experiment-records.md`。
 正式結論請把 `summary.md` 的關鍵表格與 `run.json` 的 commit、manifest sha256 抄到下方「結論」。
 
+## 由真實照片產生變體（ADR 0005）
+
+正式實驗的資料以真實照片為原圖，由程式產生參數已知的劣化變體（半合成）；真實拍攝的劣化照片另外收集、分開報告。
+
+```bash
+python make_variants.py --sources ../../data/e1/sources.csv --out ../../data/e1/variants
+python make_variants.py --sources ... --out ... --conditions blur,motion,jpeg --max-side 1200
+```
+
+- 來源 manifest 格式同上，每列一張品質良好的原圖；`id` 即 `source_id`，**每張原圖都必須有 `split`**（以原始樣本為單位切分，變體跟著原圖走）。
+- 每張原圖產生 `clean` 與 12 種條件 × 4 級（`dietai.synthetic.VARIANT_CONDITIONS`）：
+  `blur`、`motion`（手震，方向由種子決定）、`noise`、`salt_pepper`、`downscale`、`dark`、`contrast`、`gradient`、`glare`、`rotate`（到 80°）、`curve`（圓柱曲面）、`jpeg`。
+  劣化過重的等級也保留，結果以「劣化程度 → 成功率」曲線呈現。
+- 原圖先縮到長邊 1600 px（`--max-side`），等級才對不同手機的照片有一致意義。變體一律存 PNG（無損）。
+- 輸出 `splits/<split>/<source_id>/<條件>_<等級>.png`、`manifest.csv`（標籤欄 `source_id`、`condition`、`level`、`seed`，再接原圖的標籤）與 `manifest.json`（產生參數、來源 manifest 的 sha256、劣化程式的雜湊）。
+- 種子由整體 `--seed` 與 `source_id` 決定，與原圖順序無關：之後加入新原圖不會改變既有變體。
+- 測試集原圖的變體寫在 `splits/test/` 下，預設不產生；正式實驗前才加 `--include-test`。
+- `source_id`、`seed` 不會出現在「依標籤分組」的表格中；`source_id` 是以原始樣本為單位統計時的集群。
+- 合成資料（`make_synthetic.py`）也帶 `source_id`（條碼代碼），可以先用來演練整套流程。
+- 尚未實作：複合情境（例如「低亮度＋模糊」，設計 4.1 節第 3 點）、透視變形條件。
+
 ## 每個方法都執行（ADR 0005）
 
 `run.py` 的階梯在第一次有結果時就停止，只看得出「依這個順序加入時」每一步的貢獻。

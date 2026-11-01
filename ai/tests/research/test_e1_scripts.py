@@ -166,3 +166,58 @@ def test_analyze_methods_rejects_bad_order(tmp_path):
         check=False,
     )
     assert proc.returncode == 2
+
+
+def test_make_variants_then_run_methods(tmp_path):
+    # 以合成條碼的 clean 影像當「真實照片」，產生變體後接著跑每個方法都執行
+    data = tmp_path / "data"
+    _run("make_synthetic.py", "--out", str(data), "--codes", "2")
+    sources = tmp_path / "sources.csv"
+    lines = (data / "manifest.csv").read_text(encoding="utf-8").splitlines()
+    clean = [ln for ln in lines[1:] if "_clean," in ln]
+    rows = ["id,image,truth,split"]
+    for i, ln in enumerate(clean):
+        id_, image, truth, _ = ln.split(",")[:4]
+        rows.append(f"{id_},{data / image},{truth},{'test' if i else 'dev'}")
+    sources.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    out = _run(
+        "make_variants.py",
+        "--sources",
+        str(sources),
+        "--out",
+        str(tmp_path / "variants"),
+        "--conditions",
+        "motion,jpeg",
+    )
+    assert "測試集已鎖定：排除 1 張原圖" in out and "9 張變體" in out
+    runs = tmp_path / "runs"
+    report = _run(
+        "run_methods.py",
+        "--manifest",
+        str(tmp_path / "variants" / "manifest.csv"),
+        "--only",
+        "a0_raw",
+        "--out",
+        str(runs),
+    )
+    assert "9 張影像" in report
+    (run_dir,) = runs.iterdir()
+    summary = (run_dir / "summary.md").read_text(encoding="utf-8")
+    # 依標籤分組不含 source_id、seed
+    assert "依 `condition` 分組" in summary and "依 `source_id` 分組" not in summary
+    # 輸出資料夾已存在時拒絕
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(E1 / "make_variants.py"),
+            "--sources",
+            str(sources),
+            "--out",
+            str(tmp_path / "variants"),
+        ],
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert proc.returncode == 2 and "不覆寫" in proc.stderr

@@ -12,7 +12,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from dietai.evaluation.manifest import write_image, write_manifest
+from dietai.evaluation.manifest import SOURCE_COLUMN, write_image, write_manifest
 from dietai.preprocess.types import Image
 from dietai.synthetic.degrade import (
     brightness_gradient,
@@ -36,8 +36,9 @@ BARCODE_CONDITIONS: dict[str, tuple[Callable[[Image, float], Image], tuple[float
 }
 # 各等級的意義依退化函式而定：blur 為高斯 sigma（px）、rotate 為逆時針角度、downscale 為
 # 縮小倍率、gradient 為左右亮度梯度強度、dark 為亮度增益、noise 為雜訊標準差（灰階值）。
-# manifest 的標籤欄；E1 報告可用 ``--by condition`` 等依此分組。
-TAG_COLUMNS = ("condition", "level")
+# manifest 的標籤欄；E1 報告可用 ``--by condition`` 等依此分組。``source_id`` 為條碼代碼
+# （``c00``…；負樣本各自一個），同一條碼的各種退化屬於同一個原始樣本，統計時視為一個集群。
+TAG_COLUMNS = (SOURCE_COLUMN, "condition", "level")
 
 
 def write_barcode_dataset(
@@ -51,7 +52,7 @@ def write_barcode_dataset(
 
     每個條碼產生一張無退化影像（``condition=clean``）與 ``BARCODE_CONDITIONS`` 中每個等級
     各一張；``negatives`` 為 ``True`` 時另加兩張沒有條碼的負樣本（``truth`` 為空）。
-    標籤欄為 ``condition``、``level``，``split`` 一律為 ``dev``。
+    標籤欄為 ``source_id``（條碼代碼）、``condition``、``level``，``split`` 一律為 ``dev``。
     產生參數另寫入 ``manifest.json``（實驗紀錄會一併保存），相同參數產生相同影像。
     """
     if n_codes < 1:
@@ -59,7 +60,7 @@ def write_barcode_dataset(
     out = Path(out_dir)
     rows: list[dict[str, str]] = []
 
-    def add(name: str, img: Image, truth: str, condition: str, level: float) -> None:
+    def add(name: str, img: Image, truth: str, condition: str, level: float, source: str) -> None:
         """寫出一張影像並登記一列 manifest；``image`` 用相對路徑，資料夾搬動後仍可讀。"""
         rel = f"images/{name}.png"
         write_image(out / rel, img)
@@ -69,6 +70,7 @@ def write_barcode_dataset(
                 "image": rel,
                 "truth": truth,
                 "split": "dev",
+                SOURCE_COLUMN: source,
                 "condition": condition,
                 # ``:g`` 讓 1.0 寫成 "1"、0.35 寫成 "0.35"，與影像檔名一致
                 "level": f"{level:g}",
@@ -79,7 +81,7 @@ def write_barcode_dataset(
     # 再對同一張基準影像套用每個條件的每個等級，因此各影像之間只差在退化本身。
     for i, code in enumerate(ean13_codes(n_codes, seed)):
         base = ean13_scene(code, module_px)
-        add(f"c{i:02d}_clean", base, code, "clean", 0)
+        add(f"c{i:02d}_clean", base, code, "clean", 0, f"c{i:02d}")
         for condition, (fn, levels) in BARCODE_CONDITIONS.items():
             for level in levels:
                 if fn is gaussian_noise:
@@ -88,7 +90,7 @@ def write_barcode_dataset(
                     img = gaussian_noise(base, level, seed=seed + i)
                 else:
                     img = fn(base, level)
-                add(f"c{i:02d}_{condition}_{level:g}", img, code, condition, level)
+                add(f"c{i:02d}_{condition}_{level:g}", img, code, condition, level, f"c{i:02d}")
     if negatives:
         # 負樣本與正樣本同尺寸（EAN-13 符號寬度與內容無關，取任一條碼量尺寸即可）：
         # 一張是縮放後的標示文字（有大量邊緣、容易誘發誤報），一張是純紙色。
@@ -97,8 +99,15 @@ def write_barcode_dataset(
             cv2.resize(label_scene(seed=seed), (w, h), interpolation=cv2.INTER_AREA),
             dtype=np.uint8,
         )
-        add("neg_label", text, "", "negative", 0)
-        add("neg_paper", np.full((h, w, 3), (235, 240, 242), dtype=np.uint8), "", "negative", 0)
+        add("neg_label", text, "", "negative", 0, "neg_label")
+        add(
+            "neg_paper",
+            np.full((h, w, 3), (235, 240, 242), dtype=np.uint8),
+            "",
+            "negative",
+            0,
+            "neg_paper",
+        )
 
     manifest = write_manifest(out / "manifest.csv", rows, TAG_COLUMNS)
     # 產生參數寫成 manifest 旁的同名 .json；``evaluation.barcode`` 執行實驗時會把它

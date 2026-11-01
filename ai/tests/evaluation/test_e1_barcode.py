@@ -203,7 +203,9 @@ def test_synthetic_dataset_is_deterministic(dataset, tmp_path):
     m = read_manifest(dataset)
     n_levels = sum(len(levels) for _, levels in BARCODE_CONDITIONS.values())
     assert len(m.items) == 1 + n_levels + 2
-    assert m.tag_columns == ("condition", "level")
+    assert m.tag_columns == ("source_id", "condition", "level")
+    # 同一條碼的各種退化屬於同一個原始樣本；負樣本各自一個
+    assert len({i.tags["source_id"] for i in m.items}) == 1 + 2
     assert all(i.image.is_file() for i in m.items)
     assert sum(not i.truth for i in m.items) == 2
     again = write_barcode_dataset(tmp_path / "again", n_codes=1)
@@ -222,7 +224,7 @@ def test_run_experiment_writes_results(dataset, tmp_path):
     assert sum(summary.counts.values()) == n
     meta, rows = read_run(out)
     assert len(rows) == n
-    assert list(rows[0]) == [*RESULT_COLUMNS, "condition", "level"]
+    assert list(rows[0]) == [*RESULT_COLUMNS, "source_id", "condition", "level"]
     assert meta["manifest"]["sha256"] == manifest.sha256
     assert meta["manifest"]["dataset"]["n_codes"] == 1
     assert [a["name"] for a in meta["arms"]] == ["raw", "full"]

@@ -19,6 +19,7 @@ from typing import Any
 
 from dietai.evaluation import (
     compare_by_source,
+    grouping_columns,
     list_runs,
     read_run,
     report_markdown,
@@ -74,7 +75,11 @@ def main(argv: list[str] | None = None) -> int:
         arm_names = [a["name"] for a in meta["arms"]]
     except (KeyError, TypeError) as e:
         p.error(f"{run_dir / 'run.json'} 格式不符（缺少或錯誤的欄位 {e}）")
-    by = tags if args.by is None else [s.strip() for s in args.by.split(",") if s.strip()]
+    by = (
+        list(grouping_columns(tags))
+        if args.by is None
+        else [s.strip() for s in args.by.split(",") if s.strip()]
+    )
     unknown = [b for b in by if b not in tags]
     if unknown:
         p.error(f"沒有這些標籤欄：{unknown}；可用：{tags}")

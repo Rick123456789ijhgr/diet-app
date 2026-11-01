@@ -1,20 +1,26 @@
 """合成影像與已知退化（需安裝 ``vision`` extra）。
 
 測試（``tests/``）、工作台（``workbench/``）與研究實驗共用，避免各自複製產生邏輯。
-``write_barcode_dataset`` 把合成條碼寫成影像檔＋manifest，供 E1 實驗腳本端到端跑通。
+``write_barcode_dataset`` 把合成條碼寫成影像檔＋manifest，供 E1 實驗腳本端到端跑通；
+``write_variant_dataset`` 由真實照片產生劣化變體（半合成，正式實驗用）。
 """
 
 # 合成實驗資料集：影像檔＋manifest（E1 端到端用）
 from dietai.synthetic.datasets import write_barcode_dataset
 
-# 已知程度的退化：模擬模糊、旋轉、縮小、光線不均、雜訊、反光等拍攝條件
+# 已知程度的退化：模擬模糊、手震、旋轉、縮小、曲面、光線不均、對比、雜訊、反光、JPEG 等拍攝條件
 from dietai.synthetic.degrade import (
     add_glare,
     brightness_gradient,
+    cylinder_warp,
     downscale,
     gaussian_blur,
     gaussian_noise,
+    jpeg,
+    motion_blur,
+    reduce_contrast,
     rotate,
+    salt_pepper,
     scale_brightness,
 )
 
@@ -29,9 +35,14 @@ from dietai.synthetic.scenes import (
     nutrition_label,
 )
 
+# 半合成資料集：真實照片 → 參數已知的劣化變體＋manifest（含 source_id，ADR 0005）
+from dietai.synthetic.variants import VARIANT_CONDITIONS, write_variant_dataset
+
 __all__ = [
+    "VARIANT_CONDITIONS",
     "add_glare",
     "brightness_gradient",
+    "cylinder_warp",
     "downscale",
     "ean13_codes",
     "ean13_scene",
@@ -39,10 +50,15 @@ __all__ = [
     "gaussian_blur",
     "gaussian_noise",
     "invoice_qr_scene",
+    "jpeg",
     "label_perspective_scene",
     "label_scene",
+    "motion_blur",
     "nutrition_label",
+    "reduce_contrast",
     "rotate",
+    "salt_pepper",
     "scale_brightness",
     "write_barcode_dataset",
+    "write_variant_dataset",
 ]

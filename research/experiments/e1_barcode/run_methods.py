@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from dietai.evaluation import (
+    grouping_columns,
     load_arms,
     methods_report_markdown,
     new_run_dir,
@@ -83,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         p.error(str(e))
     # 以預設準則產生摘要；含測試集時不做貪婪選擇（規則 7），請用 analyze_methods.py --order
     meta, rows = read_methods(out)
-    report = methods_report_markdown(meta, rows, tuple(meta["manifest"]["tag_columns"]))
+    report = methods_report_markdown(meta, rows, grouping_columns(meta["manifest"]["tag_columns"]))
     (out / "summary.md").write_text(report, encoding="utf-8")
     print(f"完成（{summary.duration_s:.1f} 秒）：{dict(summary.counts)}")
     print(f"摘要：{out / 'summary.md'}")

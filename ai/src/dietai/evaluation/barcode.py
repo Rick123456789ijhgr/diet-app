@@ -34,7 +34,8 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-from dietai.evaluation.manifest import Manifest, read_image
+# SOURCE_COLUMN：同一原始樣本的變體在統計時視為一個集群（ADR 0005 第 9 點）
+from dietai.evaluation.manifest import SOURCE_COLUMN, Manifest, read_image
 from dietai.evaluation.stats import (
     cluster_bootstrap_diff,
     holm,
@@ -57,8 +58,6 @@ META_FILE = "run.json"
 _ARM_KEYS = frozenset({"name", "description", "decoder", "zxing", "ladder"})
 # 只接受 ASCII 數字（\d 會接受全形等 Unicode 數字）；搭配 fullmatch 使用
 _GTIN_12_13 = re.compile(r"[0-9]{12,13}")
-# 原始樣本代碼的標籤欄：同一原始樣本的變體在統計時視為一個集群（ADR 0005 第 9 點）
-SOURCE_COLUMN = "source_id"
 # 記錄到 run.json 的套件版本：解碼結果可能隨這些套件的版本而變
 _PACKAGES = ("dietai", "numpy", "opencv-python-headless", "zxing-cpp", "pyzbar")
 
