@@ -18,6 +18,7 @@ from dietai.devtools.images import PathNotFoundError, guard_path
 from dietai.devtools.scenes import SceneError
 from dietai.evaluation import (
     Outcome,
+    grouping_columns,
     list_runs,
     load_arms,
     new_run_dir,
@@ -80,6 +81,8 @@ def run_json(run_dir: str) -> dict[str, Any]:
     meta, rows = read_run(folder)
     manifest = meta.get("manifest", {})
     tags: list[str] = list(manifest.get("tag_columns", []))
+    # 分組熱度圖不含 source_id、seed（每組只有一個原始樣本，沒有意義）；失敗清單仍附所有標籤
+    groups = list(grouping_columns(tags))
     # 依結果中首次出現的順序去重複（保留執行時的實驗組順序）
     arms = list(dict.fromkeys(r["arm"] for r in rows))
     # 失敗列只挑介面需要的欄位（含各標籤欄），缺的欄位補空字串
@@ -113,10 +116,10 @@ def run_json(run_dir: str) -> dict[str, Any]:
             "created": meta.get("created"),
         },
         "arms": arms,
-        "tags": tags,
+        "tags": groups,
         # 基準組不同時 McNemar 的結果不同，每個基準組各算一次（實驗組數量不多）
         "overall": {b: summarize(rows, (), b) for b in arms},
-        "by_tag": {t: summarize(rows, (t,)) for t in tags},
+        "by_tag": {t: summarize(rows, (t,)) for t in groups},
         "rescues": rescue_counts(rows, meta.get("arms", ())),
         "failures": failures,
         "attempts": _failure_attempts(folder, {(f["arm"], f["id"]) for f in failures}),

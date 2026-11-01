@@ -8,7 +8,11 @@ manifest 每列一張影像：
 | ``truth`` | 是 | 真值（例如條碼內容）；空字串表示「影像中沒有目標」的負樣本 |
 | ``split`` | 否 | 資料切分（``train``／``dev``／``test``…）；``test`` 預設排除 |
 | ``id`` | 否 | 影像代碼；省略時用 ``image`` 欄位的原文 |
+| ``source_id`` | 否 | 原始樣本代碼：同一產品的所有變體同一值，統計分析的單位（ADR 0005） |
 | 其他欄位 | 否 | 拍攝條件標籤（如 ``distance``、``angle``、``lighting``），分析時依此分組 |
+
+``source_id`` 與 ``seed`` 也以標籤欄讀入（會照抄到結果檔），但不當成預設的分組依據
+（見 ``grouping_columns``）。
 
 所有欄位都以字串讀入（條碼的前導 0 不會遺失）；檔案為 UTF-8，可含 BOM（Excel 另存的 CSV）。
 注意：用 Excel 開啟再存檔會把長數字轉成科學記號，編輯 manifest 請用文字編輯器。
@@ -31,10 +35,18 @@ TEST_SPLIT = "test"  # split 欄為此值（不分大小寫）的列屬於鎖定
 REQUIRED_COLUMNS = ("image", "truth")
 # 保留欄位以外的欄位一律視為拍攝條件標籤（``tags``）
 RESERVED_COLUMNS = ("image", "truth", "split", "id")
+SOURCE_COLUMN = "source_id"  # 原始樣本代碼的標籤欄
+# 不適合當成分組依據的標籤欄：原始樣本代碼（每組只有該樣本的變體）與隨機種子
+NON_GROUPING_COLUMNS = (SOURCE_COLUMN, "seed")
 
 
 class SplitLockedError(ValueError):
     """嘗試在非正式實驗中讀取鎖定的測試集（根目錄 CLAUDE.md 規則 7）。"""
+
+
+def grouping_columns(tag_columns: Sequence[str]) -> tuple[str, ...]:
+    """可當成分組依據的標籤欄（排除 ``NON_GROUPING_COLUMNS``），供報告預設的「依標籤分組」使用。"""
+    return tuple(c for c in tag_columns if c not in NON_GROUPING_COLUMNS)
 
 
 def is_test_split(path: str | Path) -> bool:

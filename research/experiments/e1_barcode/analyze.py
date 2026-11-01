@@ -16,7 +16,13 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from dietai.evaluation import list_runs, read_run, report_markdown, summarize
+from dietai.evaluation import (
+    grouping_columns,
+    list_runs,
+    read_run,
+    report_markdown,
+    summarize,
+)
 
 # 以腳本所在資料夾為基準，從任何工作目錄執行都找得到 runs/
 HERE = Path(__file__).resolve().parent
@@ -63,7 +69,11 @@ def main(argv: list[str] | None = None) -> int:
         arm_names = [a["name"] for a in meta["arms"]]
     except (KeyError, TypeError) as e:
         p.error(f"{run_dir / 'run.json'} 格式不符（缺少或錯誤的欄位 {e}）")
-    by = tags if args.by is None else [s.strip() for s in args.by.split(",") if s.strip()]
+    by = (
+        list(grouping_columns(tags))
+        if args.by is None
+        else [s.strip() for s in args.by.split(",") if s.strip()]
+    )
     unknown = [b for b in by if b not in tags]
     if unknown:
         p.error(f"沒有這些標籤欄：{unknown}；可用：{tags}")

@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from dietai.evaluation import (
+    grouping_columns,
     load_arms,
     new_run_dir,
     read_manifest,
@@ -81,9 +82,11 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as e:
         p.error(str(e))
     # 從剛寫出的檔案重新讀回再產生摘要，與 analyze.py 走同一條路徑；
-    # 依所有標籤欄分組，以第一個實驗組為 McNemar 基準
+    # 依所有標籤欄（source_id、seed 除外）分組，以第一個實驗組為 McNemar 基準
     meta, rows = read_run(out)
-    report = report_markdown(meta, rows, tuple(meta["manifest"]["tag_columns"]), arms[0].name)
+    report = report_markdown(
+        meta, rows, grouping_columns(meta["manifest"]["tag_columns"]), arms[0].name
+    )
     (out / "summary.md").write_text(report, encoding="utf-8")
     print(f"完成（{summary.duration_s:.1f} 秒）：{dict(summary.counts)}")
     print(f"摘要：{out / 'summary.md'}")

@@ -207,6 +207,7 @@ def test_e1_quick_run_and_summary(e1_dir):
     full = next(r for r in run["overall"]["a0_raw"] if r["arm"] == "a6_full")
     assert {"rate", "ci_low", "ci_high", "p_value"} <= set(full)
     assert run["tags"] and set(run["by_tag"]) == set(run["tags"])
+    assert "source_id" not in run["tags"]  # 原始樣本代碼不做分組熱度圖
     assert run["meta"]["include_test"] is False
     for f in run["failures"]:
         assert f["outcome"] in {o.value for o in e1.FAILURES}

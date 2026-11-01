@@ -89,11 +89,48 @@ def test_schema_covers_every_param_field_and_is_json():
     assert {f["name"] for f in by_name["Degradation"]["fields"]} >= {"blur_sigma", "seed"}
 
 
-def test_degradation_rejects_invalid_values():
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"scale": 0},
+        {"blur_sigma": -1},
+        {"motion_len": -1},
+        {"curvature": 1.0},
+        {"contrast": 1.5},
+        {"salt_pepper": 2.0},
+        {"jpeg_quality": 101},
+    ],
+)
+def test_degradation_rejects_invalid_values(kwargs):
     with pytest.raises(ValueError):
-        Degradation(scale=0)
-    with pytest.raises(ValueError):
-        Degradation(blur_sigma=-1)
+        Degradation(**kwargs)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "changes_shape"),
+    [
+        ({"curvature": 0.5}, True),
+        ({"motion_len": 9.0, "motion_angle": 30.0}, False),
+        ({"contrast": 0.3}, False),
+        ({"salt_pepper": 0.05}, False),
+        ({"jpeg_quality": 30}, False),
+    ],
+)
+def test_degradation_new_fields_apply(kwargs, changes_shape):
+    from dietai.devtools.degradations import apply
+    from dietai.synthetic import label_scene
+
+    img = label_scene(seed=1)
+    d = Degradation(**kwargs)
+    assert d.active_count() == 1 and not d.is_identity()
+    out = apply(img, d)
+    assert (out.shape != img.shape) == changes_shape
+    assert changes_shape or not np.array_equal(out, img)
+    np.testing.assert_array_equal(apply(img, d), out)  # 相同參數相同結果
+
+
+def test_degradation_motion_angle_alone_is_identity():
+    assert Degradation(motion_angle=45.0).is_identity()
 
 
 def _img(h=10, w=10):
