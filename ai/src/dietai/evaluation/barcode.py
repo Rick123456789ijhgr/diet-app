@@ -35,7 +35,13 @@ from pathlib import Path
 from typing import Any
 
 from dietai.evaluation.manifest import Manifest, read_image
-from dietai.evaluation.stats import mcnemar_exact, paired_counts, wilson_interval
+from dietai.evaluation.stats import (
+    cluster_bootstrap_diff,
+    holm,
+    mcnemar_exact,
+    paired_counts,
+    wilson_interval,
+)
 from dietai.preprocess import ops
 from dietai.preprocess.barcode import LadderResult, decode_with_ladder
 from dietai.preprocess.config import LadderConfig, ZxingConfig
@@ -51,6 +57,8 @@ META_FILE = "run.json"
 _ARM_KEYS = frozenset({"name", "description", "decoder", "zxing", "ladder"})
 # 只接受 ASCII 數字（\d 會接受全形等 Unicode 數字）；搭配 fullmatch 使用
 _GTIN_12_13 = re.compile(r"[0-9]{12,13}")
+# 原始樣本代碼的標籤欄：同一原始樣本的變體在統計時視為一個集群（ADR 0005 第 9 點）
+SOURCE_COLUMN = "source_id"
 # 記錄到 run.json 的套件版本：解碼結果可能隨這些套件的版本而變
 _PACKAGES = ("dietai", "numpy", "opencv-python-headless", "zxing-cpp", "pyzbar")
 
@@ -542,13 +550,135 @@ def rescue_counts(
     ]
 
 
+def compare_by_source(
+    rows: Sequence[Mapping[str, str]],
+    baseline: str,
+    *,
+    cluster: str = SOURCE_COLUMN,
+    primary: str | None = None,
+    n_boot: int = 5000,
+    seed: int = 0,
+) -> list[dict[str, Any]]:
+    """各實驗組相對 ``baseline`` 的成功率差異，以原始樣本為統計單位（設計 9.1、9.2 節）。
+
+    只取兩組都有有效結果的正樣本依 ``id`` 配對，再依 ``cluster`` 欄（預設 ``source_id``）分成集群；
+    該欄不存在或為空時以 ``id`` 為集群，即每張影像視為獨立樣本。
+    信賴區間為集群 bootstrap，p 值為集群符號翻轉置換檢定（``stats.cluster_bootstrap_diff``）。
+
+    每組欄位：``arm``、``sources``（原始樣本數）、``n``（配對數）、``rate_baseline``、``rate``、
+    ``diff``、``ci_low``、``ci_high``、``lost``、``gained``、``p_value``、``p_holm``、``primary``。
+    ``primary`` 為事先寫定的主要比較，不納入 Holm 校正（``p_holm`` 等於 ``p_value``）；其餘各組
+    為探索性比較，一起以 Holm 校正。沒有可配對影像的實驗組不列出。
+    """
+    arm_order = list(dict.fromkeys(r["arm"] for r in rows))
+    if baseline not in arm_order:
+        raise ValueError(f"找不到基準實驗組 {baseline!r}；可用：{arm_order}")
+    if primary is not None and primary not in arm_order:
+        raise ValueError(f"找不到主要比較的實驗組 {primary!r}；可用：{arm_order}")
+
+    def correct(arm: str) -> dict[str, tuple[bool, str]]:
+        """某實驗組各正樣本 ``id`` →（是否 correct, 集群代碼），排除 error。"""
+        return {
+            r["id"]: (r["outcome"] == Outcome.CORRECT, r.get(cluster) or r["id"])
+            for r in rows
+            if r["arm"] == arm and r["truth"] and r["outcome"] != Outcome.ERROR
+        }
+
+    ref = correct(baseline)
+    out: list[dict[str, Any]] = []
+    for arm in arm_order:
+        if arm == baseline:
+            continue
+        mine = correct(arm)
+        groups: dict[str, list[tuple[bool, bool]]] = {}
+        for i in sorted(ref.keys() & mine.keys()):
+            groups.setdefault(ref[i][1], []).append((ref[i][0], mine[i][0]))
+        if not groups:
+            continue
+        pairs = [p for g in groups.values() for p in g]
+        lost, gained = paired_counts([b for b, _ in pairs], [o for _, o in pairs])
+        res = cluster_bootstrap_diff(list(groups.values()), n_boot=n_boot, seed=seed)
+        out.append(
+            {
+                "arm": arm,
+                "sources": res.n_clusters,
+                "n": res.n_pairs,
+                "rate_baseline": res.rate_baseline,
+                "rate": res.rate_other,
+                "diff": res.diff,
+                "ci_low": res.ci_low,
+                "ci_high": res.ci_high,
+                "lost": lost,
+                "gained": gained,
+                "p_value": res.p_value,
+                "p_holm": res.p_value,
+                "primary": arm == primary,
+            }
+        )
+    # 探索性比較（主要比較以外）一起做 Holm 校正
+    family = [e for e in out if not e["primary"]]
+    for e, p in zip(family, holm([e["p_value"] for e in family]), strict=True):
+        e["p_holm"] = p
+    return out
+
+
+def _source_section(
+    rows: Sequence[Mapping[str, str]], baseline: str, primary: str | None, seed: int
+) -> list[str]:
+    """``report_markdown`` 中「以原始樣本為單位」一節的各行。"""
+    has_source = any(r.get(SOURCE_COLUMN) for r in rows)
+    lines = [
+        f"相對 `{baseline}` 的成功率差異；95% CI 為依 `{SOURCE_COLUMN}` 的集群 bootstrap，"
+        "p 為集群符號翻轉置換檢定。"
+        + (
+            f"主要比較為 `{primary}`；其餘為探索性結果，以 Holm 校正。"
+            if primary
+            else "未指定主要比較，各組皆為探索性結果，以 Holm 校正。"
+        ),
+    ]
+    if not has_source:
+        lines += [
+            "",
+            f"> manifest 沒有 `{SOURCE_COLUMN}` 欄：每張影像視為一個原始樣本，"
+            "信賴區間會偏窄（變體不獨立），結果僅供探索。",
+        ]
+    head = [
+        "arm",
+        "原始樣本",
+        "配對",
+        "基準",
+        "本組",
+        "差異",
+        "95% CI",
+        "失去／救回",
+        "p",
+        "Holm p",
+    ]
+    lines += ["", "| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+    for e in compare_by_source(rows, baseline, primary=primary, seed=seed):
+        name = f"{e['arm']}（主要比較）" if e["primary"] else e["arm"]
+        cells = [name, str(e["sources"]), str(e["n"]), f"{e['rate_baseline']:.1%}"]
+        cells += [f"{e['rate']:.1%}", f"{e['diff']:+.1%}"]
+        cells += [f"{e['ci_low']:+.1%}–{e['ci_high']:+.1%}", f"{e['lost']}／{e['gained']}"]
+        cells += [f"{e['p_value']:.3g}", f"{e['p_holm']:.3g}"]
+        lines.append("| " + " | ".join(cells) + " |")
+    return lines
+
+
 def report_markdown(
     meta: Mapping[str, Any],
     rows: Sequence[Mapping[str, str]],
     by: Sequence[str] = (),
     baseline: str | None = None,
+    *,
+    primary: str | None = None,
+    seed: int = 0,
 ) -> str:
-    """產生 Markdown 摘要：實驗紀錄、整體成功率、依各標籤分組的成功率、成功階統計。"""
+    """產生 Markdown 摘要：實驗紀錄、整體成功率、依各標籤分組的成功率、成功階統計。
+
+    有 ``baseline`` 時另列以原始樣本為單位的比較（``compare_by_source``；``primary`` 為事先
+    寫定的主要比較，其餘以 Holm 校正並標示為探索性）。
+    """
     git = meta.get("git") or {}
     m = meta.get("manifest", {})
     lines = [
@@ -571,6 +701,13 @@ def report_markdown(
         lines += ["", "## 成功於哪一階 · Successful rung", "", "| arm | rung | count |"]
         lines += ["| --- | --- | ---: |"]
         lines += [f"| {r['arm']} | {r['rung']} | {r['count']} |" for r in rescues]
+    if baseline is not None:
+        lines += [
+            "",
+            "## 以原始樣本為單位 · By source",
+            "",
+            *_source_section(rows, baseline, primary, seed),
+        ]
     errors = sum(1 for r in rows if r["outcome"] == Outcome.ERROR)
     if errors:
         lines += ["", f"> 有 {errors} 筆 error（讀檔或處理失敗），未計入成功率；見 results.csv。"]

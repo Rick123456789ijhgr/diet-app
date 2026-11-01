@@ -10,6 +10,7 @@ from dietai.evaluation.barcode import (
     Arm,
     Outcome,
     RunSummary,
+    compare_by_source,
     evaluate,
     first_rung,
     judge,
@@ -36,18 +37,29 @@ from dietai.evaluation.manifest import (
     write_manifest,
 )
 
-# 統計：Wilson 信賴區間、McNemar 精確檢定與其配對計數
-from dietai.evaluation.stats import mcnemar_exact, paired_counts, wilson_interval
+# 統計：Wilson 信賴區間、McNemar 精確檢定與其配對計數、以原始樣本為單位的集群 bootstrap、Holm 校正
+from dietai.evaluation.stats import (
+    ClusterComparison,
+    cluster_bootstrap_diff,
+    holm,
+    mcnemar_exact,
+    paired_counts,
+    wilson_interval,
+)
 
 __all__ = [
     "Arm",
+    "ClusterComparison",
     "Manifest",
     "ManifestItem",
     "Outcome",
     "RunSummary",
     "SplitLockedError",
+    "cluster_bootstrap_diff",
+    "compare_by_source",
     "evaluate",
     "first_rung",
+    "holm",
     "is_test_split",
     "judge",
     "list_runs",
