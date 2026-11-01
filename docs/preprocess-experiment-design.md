@@ -538,7 +538,7 @@
 | manifest、split、真值判定（含誤讀、負樣本） | 已有：`dietai.evaluation` |
 | Wilson 信賴區間、McNemar | 已有：`dietai.evaluation.stats` |
 | 執行紀錄（`run.json`、明細、彙整） | 已有（ADR 0002） |
-| 條碼逐步升級與每一步紀錄 | 已有：`dietai.preprocess.barcode`、`attempts.csv`；但第一次有結果即停止 |
+| 條碼逐步升級與每一步紀錄 | 已有：`dietai.preprocess.barcode`、`attempts.csv`（第一次有結果即停止；不停止的版本見下方結果表） |
 | 電子發票雙 QR 定位 | 已有：`dietai.preprocess.invoice_qr` |
 | 營養標示定位、透視校正、光斑、CLAHE | 已有：`dietai.preprocess.label` |
 | 品質量測：模糊、曝光、解析度、傾斜 | 已有：`dietai.preprocess.quality`、`ops.estimate_skew` |
@@ -546,9 +546,9 @@
 | 營養標示定位對真實四角的評分（合成場景） | 已有：`dietai.devtools.label_eval`（`feat/workbench-label-sweep`，待合併） |
 | 劣化：手震模糊、椒鹽雜訊、對比降低、JPEG、曲面 | **未實作** |
 | 由真實照片產生變體與 manifest 的腳本 | **未實作** |
-| 「每個方法都執行」模式與「變體 × 方法」結果表 | **未實作** |
+| 「每個方法都執行」模式與「變體 × 方法」結果表 | 已有：`dietai.evaluation.methods`、`e1_barcode/run_methods.py`（條碼；前處理與辨識耗時分開記錄） |
 | 疊加型固定流程 | **未實作** |
-| 逐步升級的離線計算與貪婪選擇 | **未實作** |
+| 逐步升級的離線計算與貪婪選擇 | 已有：`simulate_ladder`、`greedy_ladder`、`e1_barcode/analyze_methods.py`（條碼） |
 | 以原始樣本為單位的 bootstrap、Holm 校正 | **未實作** |
 | OCR 引擎、欄位正確率、CER；真實照片的定位誤差評估 | **未實作** |
 | 規則式自適應策略 | **未實作**（量測函式已有） |

@@ -301,9 +301,14 @@ def test_new_run_dir_and_list_runs(tmp_path):
     second = new_run_dir(tmp_path, "x")
     assert second != first and not second.exists()
     second.mkdir()
-    (first / "run.json").write_text("{}")
-    (second / "run.json").write_text("{}")
+    for run in (first, second):
+        (run / "run.json").write_text("{}")
+        (run / "results.csv").write_text("id\n")
     (tmp_path / "incomplete").mkdir()
+    # 「每個方法都執行」的執行沒有 results.csv，不列出（見 evaluation.methods）
+    (tmp_path / "methods").mkdir()
+    (tmp_path / "methods" / "run.json").write_text("{}")
+    (tmp_path / "methods" / "methods.csv").write_text("id\n")
     assert list_runs(tmp_path) == [second, first]
     assert list_runs(tmp_path / "none") == []
 

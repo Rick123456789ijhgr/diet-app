@@ -234,23 +234,7 @@ def run_experiment(
     manifest 沒有任何影像（例如全部是測試集而被排除）時丟 ``ValueError``，不建立資料夾。
     ``decoder_factory`` 供測試替換解碼器。
     """
-    # 第二道防線：read_manifest 預設已排除測試集；這裡擋下「以 include_test=True 讀入、
-    # 卻沒有以正式實驗執行」的情形，確保兩處的設定一致
-    if not include_test and any(i.is_test for i in manifest.items):
-        raise ValueError("manifest 含測試集，但未標記 include_test（正式實驗）")
-    if not arms:
-        raise ValueError("沒有任何實驗組設定")
-    if not manifest.items:
-        raise ValueError(f"manifest 沒有可執行的影像（排除測試集 {manifest.excluded_test} 張）")
-    # 標籤欄與結果欄寫在同一列，同名會互相覆蓋，事先拒絕
-    clash = set(manifest.tag_columns) & set(RESULT_COLUMNS)
-    if clash:
-        raise ValueError(f"manifest 的標籤欄與結果欄同名：{sorted(clash)}")
-    out = Path(out_dir)
-    if out.exists() and any(out.iterdir()):
-        raise FileExistsError(f"輸出資料夾已存在且非空，實驗結果不覆寫：{out}")
-    out.mkdir(parents=True, exist_ok=True)
-
+    out = prepare_run_dir(manifest, arms, out_dir, RESULT_COLUMNS, include_test=include_test)
     # 每個實驗組只建立一次解碼器，整批影像共用
     factory = decoder_factory or Arm.make_decoder
     decoders = [factory(a) for a in arms]
@@ -318,7 +302,56 @@ def run_experiment(
 
     # run.json 在所有結果寫完後才寫出；list_runs 以它判斷一次執行是否完整
     duration = time.perf_counter() - t0
-    meta = {
+    meta = run_meta(
+        manifest, arms, started, duration, counts, include_test=include_test, label=label
+    )
+    (out / META_FILE).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return RunSummary(out, dict(counts), duration)
+
+
+def prepare_run_dir(
+    manifest: Manifest,
+    arms: Sequence[Arm],
+    out_dir: str | Path,
+    columns: Sequence[str],
+    *,
+    include_test: bool,
+) -> Path:
+    """執行前的共同檢查，通過後建立並回傳輸出資料夾（``run_experiment`` 等批次執行共用）。
+
+    ``columns`` 為結果檔的欄位，用來檢查是否與 manifest 的標籤欄同名。
+    """
+    # 第二道防線：read_manifest 預設已排除測試集；這裡擋下「以 include_test=True 讀入、
+    # 卻沒有以正式實驗執行」的情形，確保兩處的設定一致
+    if not include_test and any(i.is_test for i in manifest.items):
+        raise ValueError("manifest 含測試集，但未標記 include_test（正式實驗）")
+    if not arms:
+        raise ValueError("沒有任何實驗組設定")
+    if not manifest.items:
+        raise ValueError(f"manifest 沒有可執行的影像（排除測試集 {manifest.excluded_test} 張）")
+    # 標籤欄與結果欄寫在同一列，同名會互相覆蓋，事先拒絕
+    clash = set(manifest.tag_columns) & set(columns)
+    if clash:
+        raise ValueError(f"manifest 的標籤欄與結果欄同名：{sorted(clash)}")
+    out = Path(out_dir)
+    if out.exists() and any(out.iterdir()):
+        raise FileExistsError(f"輸出資料夾已存在且非空，實驗結果不覆寫：{out}")
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def run_meta(
+    manifest: Manifest,
+    arms: Sequence[Arm],
+    started: datetime,
+    duration: float,
+    counts: Mapping[str, int],
+    *,
+    include_test: bool,
+    label: str,
+) -> dict[str, Any]:
+    """``run.json`` 的內容：時間、git commit、套件版本、manifest 雜湊、各組完整設定與次數。"""
+    return {
         "experiment": EXPERIMENT,
         "label": label,
         "created": started.isoformat(timespec="seconds"),
@@ -339,8 +372,6 @@ def run_experiment(
         "arms": [a.to_dict() for a in arms],
         "counts": dict(sorted(counts.items())),
     }
-    (out / META_FILE).write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    return RunSummary(out, dict(counts), duration)
 
 
 RESULT_COLUMNS = (
@@ -426,13 +457,20 @@ def read_run(run_dir: str | Path) -> tuple[dict[str, Any], list[dict[str, str]]]
 
 
 def list_runs(root: str | Path) -> list[Path]:
-    """``root`` 下所有完整的執行資料夾（含 ``run.json``），新的在前。"""
+    """``root`` 下所有完整的逐步升級執行資料夾（含 ``run.json`` 與 ``results.csv``），新的在前。
+
+    「每個方法都執行」的執行（``evaluation.methods``，只有 ``methods.csv``）不列出，
+    兩種執行可以放在同一個 ``runs/`` 下。
+    """
     root = Path(root)
     if not root.is_dir():
         return []
     # 資料夾名稱以時間戳記開頭，路徑字串反向排序即新的在前；
     # 沒有 run.json 的資料夾（執行中或中斷）不列出
-    return sorted((p.parent for p in root.glob(f"*/{META_FILE}")), reverse=True)
+    return sorted(
+        (p.parent for p in root.glob(f"*/{META_FILE}") if (p.parent / RESULTS_FILE).is_file()),
+        reverse=True,
+    )
 
 
 def summarize(
@@ -549,23 +587,16 @@ def report_markdown(
     baseline: str | None = None,
 ) -> str:
     """產生 Markdown 摘要：實驗紀錄、整體成功率、依各標籤分組的成功率、成功階統計。"""
-    git = meta.get("git") or {}
-    m = meta.get("manifest", {})
     lines = [
-        f"# E1 結果摘要 · {meta.get('label') or meta.get('created', '')}",
-        "",
-        f"- 執行時間：{meta.get('created', '')}（{meta.get('duration_s', 0):.1f} 秒）",
-        f"- git：`{git.get('commit', '?')}`{'（有未提交的變更）' if git.get('dirty') else ''}",
-        f"- manifest：`{m.get('path', '')}`（{m.get('items', 0)} 張，"
-        f"sha256 `{str(m.get('sha256', ''))[:12]}`，排除測試集 {m.get('excluded_test', 0)} 張）",
-        f"- 套件：{', '.join(f'{k} {v}' for k, v in meta.get('packages', {}).items())}",
+        *meta_lines(meta, "E1 結果摘要"),
         "",
         "## 整體 · Overall",
         "",
-        _table(summarize(rows, (), baseline), ()),
+        summary_table(summarize(rows, (), baseline), ()),
     ]
     for tag in by:
-        lines += ["", f"## 依 `{tag}` 分組", "", _table(summarize(rows, (tag,), baseline), (tag,))]
+        table = summary_table(summarize(rows, (tag,), baseline), (tag,))
+        lines += ["", f"## 依 `{tag}` 分組", "", table]
     rescues = rescue_counts(rows, meta.get("arms", ()))
     if rescues:
         lines += ["", "## 成功於哪一階 · Successful rung", "", "| arm | rung | count |"]
@@ -577,7 +608,22 @@ def report_markdown(
     return "\n".join(lines) + "\n"
 
 
-def _table(summary: Sequence[Mapping[str, Any]], by: Sequence[str]) -> str:
+def meta_lines(meta: Mapping[str, Any], title: str) -> list[str]:
+    """Markdown 報告開頭：標題與實驗紀錄（時間、git、manifest、套件）。"""
+    git = meta.get("git") or {}
+    m = meta.get("manifest", {})
+    return [
+        f"# {title} · {meta.get('label') or meta.get('created', '')}",
+        "",
+        f"- 執行時間：{meta.get('created', '')}（{meta.get('duration_s', 0):.1f} 秒）",
+        f"- git：`{git.get('commit', '?')}`{'（有未提交的變更）' if git.get('dirty') else ''}",
+        f"- manifest：`{m.get('path', '')}`（{m.get('items', 0)} 張，"
+        f"sha256 `{str(m.get('sha256', ''))[:12]}`，排除測試集 {m.get('excluded_test', 0)} 張）",
+        f"- 套件：{', '.join(f'{k} {v}' for k, v in meta.get('packages', {}).items())}",
+    ]
+
+
+def summary_table(summary: Sequence[Mapping[str, Any]], by: Sequence[str]) -> str:
     """把 ``summarize`` 的結果排成 Markdown 表格；有 ``baseline`` 時多兩欄 McNemar。"""
     has_p = bool(summary) and "p_value" in summary[0]
     head = ["arm", *by, "n", "成功率", "95% CI", "誤讀", "漏讀", "負樣本誤報", "耗時中位數 ms"]

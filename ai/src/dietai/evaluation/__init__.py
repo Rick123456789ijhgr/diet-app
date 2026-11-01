@@ -1,4 +1,4 @@
-"""實驗評測：manifest 讀取、批次執行、判定與統計彙整（研究腳本與工作台共用）。
+"""實驗評測：manifest 讀取、批次執行（逐步升級、每個方法都執行）、判定與統計彙整。
 
 處理邏輯一律呼叫 ``dietai.preprocess`` 等套件，這裡只負責「跑哪些設定、怎麼判對錯、
 怎麼記錄與彙整」。測試集鎖定（根目錄 CLAUDE.md 規則 7）由 ``read_manifest`` 執行。
@@ -36,32 +36,66 @@ from dietai.evaluation.manifest import (
     write_manifest,
 )
 
+# 每個方法都執行（ADR 0005）：「變體 × 方法」結果表、離線計算逐步升級、貪婪選擇
+from dietai.evaluation.methods import (
+    GreedyCriteria,
+    GreedyResult,
+    GreedyStep,
+    arm_methods,
+    greedy_ladder,
+    is_test_row,
+    judge_attempt,
+    list_method_runs,
+    method_arms,
+    method_id,
+    methods_in,
+    methods_report_markdown,
+    read_methods,
+    run_methods,
+    simulate_ladder,
+)
+
 # 統計：Wilson 信賴區間、McNemar 精確檢定與其配對計數
 from dietai.evaluation.stats import mcnemar_exact, paired_counts, wilson_interval
 
 __all__ = [
     "Arm",
+    "GreedyCriteria",
+    "GreedyResult",
+    "GreedyStep",
     "Manifest",
     "ManifestItem",
     "Outcome",
     "RunSummary",
     "SplitLockedError",
+    "arm_methods",
     "evaluate",
     "first_rung",
+    "greedy_ladder",
+    "is_test_row",
     "is_test_split",
     "judge",
+    "judge_attempt",
+    "list_method_runs",
     "list_runs",
     "load_arm",
     "load_arms",
     "mcnemar_exact",
+    "method_arms",
+    "method_id",
+    "methods_in",
+    "methods_report_markdown",
     "new_run_dir",
     "paired_counts",
     "read_image",
     "read_manifest",
+    "read_methods",
     "read_run",
     "report_markdown",
     "rescue_counts",
     "run_experiment",
+    "run_methods",
+    "simulate_ladder",
     "summarize",
     "wilson_interval",
     "write_image",
