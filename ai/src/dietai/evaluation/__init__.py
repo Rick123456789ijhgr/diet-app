@@ -25,6 +25,18 @@ from dietai.evaluation.barcode import (
     summarize,
 )
 
+# 營養標示：真值格式、欄位完全正確率、定位誤差、CER（ADR 0005 第 8 點）
+from dietai.evaluation.label import (
+    DEFAULT_QUAD_TOL,
+    FieldScore,
+    LabelTruth,
+    cer,
+    load_label_truth,
+    located,
+    quad_error,
+    score_fields,
+)
+
 # manifest 讀寫與測試集鎖定、影像讀寫（支援中文路徑）
 from dietai.evaluation.manifest import (
     Manifest,
@@ -71,15 +83,19 @@ from dietai.evaluation.stats import (
 __all__ = [
     "Arm",
     "ClusterComparison",
+    "DEFAULT_QUAD_TOL",
+    "FieldScore",
     "GreedyCriteria",
     "GreedyResult",
     "GreedyStep",
+    "LabelTruth",
     "Manifest",
     "ManifestItem",
     "Outcome",
     "RunSummary",
     "SplitLockedError",
     "arm_methods",
+    "cer",
     "cluster_bootstrap_diff",
     "compare_by_source",
     "evaluate",
@@ -95,6 +111,8 @@ __all__ = [
     "list_runs",
     "load_arm",
     "load_arms",
+    "load_label_truth",
+    "located",
     "mcnemar_exact",
     "method_arms",
     "method_id",
@@ -103,6 +121,7 @@ __all__ = [
     "new_run_dir",
     "paired_counts",
     "pipeline_vs_parts",
+    "quad_error",
     "read_image",
     "read_manifest",
     "read_methods",
@@ -111,6 +130,7 @@ __all__ = [
     "rescue_counts",
     "run_experiment",
     "run_methods",
+    "score_fields",
     "simulate_ladder",
     "summarize",
     "wilson_interval",

@@ -73,6 +73,7 @@ files = [
   "src/dietai/preprocess",
   "src/dietai/synthetic",
   "src/dietai/evaluation",
+  "src/dietai/label_parsing",
   "src/dietai/devtools",
   "src/dietai/server",
   "../research/experiments/e1_barcode",
