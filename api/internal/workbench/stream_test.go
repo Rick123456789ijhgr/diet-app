@@ -152,10 +152,11 @@ func TestSweepAndE1Runs(t *testing.T) {
 	var gotList *dietaiv1.ListE1RunsRequest
 	ai := &streamAI{
 		sweep: func(r *dietaiv1.SweepRequest) (*dietaiv1.SweepResponse, error) {
-			if r.GetTarget() != "barcode" || r.GetParamsJson() != `{"axis":"rotate_deg"}` {
+			if r.GetParamsJson() != `{"axis":"rotate_deg"}` {
 				t.Errorf("sweep request = %v", r)
 			}
-			return &dietaiv1.SweepResponse{Json: `{"overall":{"raw":0.5}}`}, nil
+			// 掃描對象原樣轉給 Python（營養標示 label 也是）
+			return &dietaiv1.SweepResponse{Json: `{"overall":{"raw":0.5},"target":"` + r.GetTarget() + `"}`}, nil
 		},
 		listRuns: func(r *dietaiv1.ListE1RunsRequest) (*dietaiv1.ListE1RunsResponse, error) {
 			gotList = r
@@ -174,6 +175,10 @@ func TestSweepAndE1Runs(t *testing.T) {
 	// 條碼掃描可能超過 30 秒，期限要比預設的長
 	if dl, ok := ai.sweepCtx.Deadline(); !ok || time.Until(dl) <= aiclient.DefaultTimeout {
 		t.Errorf("sweep deadline = %v, %v", dl, ok)
+	}
+	lab := decode[map[string]any](t, postJSON(t, base+"/sweeps", `{"target":"label","params":{"axis":"rotate_deg"}}`))
+	if lab["target"] != "label" {
+		t.Errorf("label sweep = %v", lab)
 	}
 
 	get := func(url string) *http.Response {

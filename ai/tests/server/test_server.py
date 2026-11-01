@@ -389,6 +389,22 @@ def test_sweep_quality_and_barcode(wb):
         grpc.StatusCode.NOT_FOUND,
         "IMAGE_NOT_FOUND",
     )
+    lab = run("label", {"axis": "perspective", "lo": 0, "hi": 0.2, "n": 3, "samples": 1})
+    assert set(lab["overall"]) == {"correct", "off", "missed"}
+    assert lab["tol"] == 0.03
+    assert len(lab["thumbs"]) == 3
+    _expect_error(
+        lambda: run("label", {"n": 3, "samples": 1, "label": {"canny_low": "x"}}),
+        grpc.StatusCode.INVALID_ARGUMENT,
+        "INVALID_CONFIG",
+        "canny_low",
+    )
+    _expect_error(
+        lambda: run("label", {"n": 3, "tol": 1}),
+        grpc.StatusCode.INVALID_ARGUMENT,
+        "INVALID_PARAMS",
+        "tol",
+    )
     # 條碼掃描也收 QualityConfig 覆寫（品質門檻對照），不合法時指出欄位
     _expect_error(
         lambda: run("barcode", {"n": 3, "samples": 1, "config": {"blur_min": "high"}}),

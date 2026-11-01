@@ -364,6 +364,55 @@ export const handlers = [
   http.post('*/workbench/v1/dev/sweeps', async ({ request }) => {
     const body = (await json(request)) as { target: string; params: Record<string, unknown> }
     const thumbs = [{ level: 0, image_id: 'thumb-0', width: 200, height: 120 }]
+    if (body.target === 'label') {
+      return HttpResponse.json({
+        axis: 'perspective',
+        levels: [0, 0.3],
+        tol: 0.03,
+        rates: [
+          {
+            level: 0,
+            rate: 1,
+            off: 0,
+            median_error: 0.004,
+            warnings: { LABEL_NOT_LOCATED: 0, GLARE_RETAKE: 0 },
+          },
+          {
+            level: 0.3,
+            rate: 0.5,
+            off: 0.25,
+            median_error: 0.05,
+            warnings: { LABEL_NOT_LOCATED: 0.25, GLARE_RETAKE: 0 },
+          },
+        ],
+        overall: { correct: 0.75, off: 0.125, missed: 0.125 },
+        first_failure: 0.3,
+        quality_rates: [
+          { level: 0, rate: 0 },
+          { level: 0.3, rate: 0.5 },
+        ],
+        quality_triggers: {
+          LOW_RESOLUTION: null,
+          TOO_BLURRY: 0.3,
+          TOO_DARK: null,
+          TOO_BRIGHT: null,
+        },
+        alarms: { retake: 1, false_alarm: 1, missed_alarm: 1, ok: 5 },
+        rows: [
+          {
+            level: 0.3,
+            sample: 0,
+            outcome: 'off',
+            error: 0.125,
+            method: 'hough',
+            label_warnings: [],
+            quality_passed: true,
+            warnings: [],
+          },
+        ],
+        thumbs,
+      })
+    }
     if (body.target === 'barcode') {
       return HttpResponse.json({
         levels: [0, 45],

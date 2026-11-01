@@ -179,6 +179,7 @@ func (e SubmissionStatus) Valid() bool {
 // Defines values for SweepRequestTarget.
 const (
 	SweepRequestTargetBarcode SweepRequestTarget = "barcode"
+	SweepRequestTargetLabel   SweepRequestTarget = "label"
 	SweepRequestTargetQuality SweepRequestTarget = "quality"
 )
 
@@ -186,6 +187,8 @@ const (
 func (e SweepRequestTarget) Valid() bool {
 	switch e {
 	case SweepRequestTargetBarcode:
+		return true
+	case SweepRequestTargetLabel:
 		return true
 	case SweepRequestTargetQuality:
 		return true
@@ -710,10 +713,12 @@ type SubmissionSummary struct {
 // SweepRequest defines model for SweepRequest.
 type SweepRequest struct {
 	Params *map[string]interface{} `json:"params,omitempty"`
-	Target SweepRequestTarget      `json:"target"`
+
+	// Target quality：品質檢查；barcode：條碼解碼；label：營養標示定位（合成場景對真實四角評分）
+	Target SweepRequestTarget `json:"target"`
 }
 
-// SweepRequestTarget defines model for SweepRequest.Target.
+// SweepRequestTarget quality：品質檢查；barcode：條碼解碼；label：營養標示定位（合成場景對真實四角評分）
 type SweepRequestTarget string
 
 // SynthesizeRequest defines model for SynthesizeRequest.

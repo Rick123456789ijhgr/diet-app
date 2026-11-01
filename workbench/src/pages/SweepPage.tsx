@@ -1,6 +1,16 @@
 // 模組一：參數掃描。一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；
-// 條碼以合成樣本對真值評分，比較只用原圖與逐步升級的成功率與誤讀率，並對照品質門檻。
-import { Barcode, ChartLine, Gauge, Layers, ScanSearch, Table, TrendingUp } from 'lucide-react'
+// 條碼與營養標示以合成樣本對真值評分（條碼號碼、標示四角），並對照品質門檻。
+import {
+  Barcode,
+  ChartLine,
+  Crosshair,
+  Gauge,
+  Layers,
+  ReceiptText,
+  ScanSearch,
+  Table,
+  TrendingUp,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { api, artifactUrl, overrideBody, unwrap, type ConfigOverride } from '@/api/client'
@@ -21,10 +31,13 @@ import { cn } from '@/lib/cn'
 import { valueOf } from '@/lib/config'
 import { orderRungs } from '@/lib/ordering'
 import { SWEEP_AXES, axisOf } from '@/lib/sweepAxes'
-import { rungText, warningText } from '@/lib/text'
+import { QUAD_METHOD_TEXT, rungText, warningText } from '@/lib/text'
 
-/** 評估對象：品質檢查（用使用者的基準影像）或條碼解碼（用後端產生的合成 EAN-13）。 */
-type Target = 'quality' | 'barcode'
+/**
+ * 評估對象：品質檢查（用使用者的基準影像）、條碼解碼（後端產生的合成 EAN-13）
+ * 或營養標示定位（後端產生的合成標示，帶真實四角）。
+ */
+type Target = 'quality' | 'barcode' | 'label'
 
 // 以下型別是本頁自行宣告的掃描結果形狀（規格中 /dev/sweeps 的回應是自由 JSON：FreeJson），
 // 取得後以 'triggers' / 'overall' 欄位判斷是哪一種再轉型。
@@ -73,7 +86,7 @@ type Outcome = 'correct' | 'misread' | 'missed'
  * - alarms：品質檢查與逐步升級結果的四格對照（該重拍、誤報、漏報、正常），單位為樣本數。
  * - rows：每個等級 × 每個樣本的明細（sample 從 0 起算）。
  */
-interface BarcodeSweep {
+interface BarcodeSweep extends QualityAlarms {
   axis: string
   levels: number[]
   rates: { level: number; method: 'raw' | 'ladder'; rate: number; misread: number }[]
@@ -81,9 +94,6 @@ interface BarcodeSweep {
   overall: { raw: number; ladder: number }
   misread: { raw: number; ladder: number }
   first_failure: { raw: number | null; ladder: number | null }
-  quality_rates: { level: number; rate: number }[]
-  quality_triggers: Record<string, number | null>
-  alarms: { retake: number; false_alarm: number; missed_alarm: number; ok: number }
   rows: {
     level: number
     sample: number
@@ -93,6 +103,50 @@ interface BarcodeSweep {
     decoded: string
     success_rung: string
     attempts: number
+    quality_passed: boolean
+    warnings: string[]
+  }[]
+  thumbs: Thumb[]
+}
+
+/** 營養標示定位的判定：四角在容許誤差內、找到但超出容許誤差、找不到。 */
+type LocateOutcome = 'correct' | 'off' | 'missed'
+
+/** 品質門檻與處理結果的對照（條碼與營養標示共用的欄位）。 */
+interface QualityAlarms {
+  quality_rates: { level: number; rate: number }[]
+  quality_triggers: Record<string, number | null>
+  alarms: { retake: number; false_alarm: number; missed_alarm: number; ok: number }
+}
+
+/**
+ * 營養標示掃描結果：每個樣本跑營養標示前處理，找到的四角對照合成場景的真實四角
+ * （幾何類退化已同時換算真值）。
+ * - tol：容許誤差（最大四角誤差 ÷ 真值平均邊長），由請求帶入。
+ * - rates：每個等級的成功率、偏移率、誤差比中位數（都找不到時為 null）與各標示警告的比例。
+ * - overall：三種判定在所有等級與樣本中的比例；first_failure：成功率首次低於 100% 的等級。
+ * - rows：每個等級 × 每個樣本的明細；error 為最大誤差比（找不到為 null）。
+ */
+interface LabelSweep extends QualityAlarms {
+  axis: string
+  levels: number[]
+  tol: number
+  rates: {
+    level: number
+    rate: number
+    off: number
+    median_error: number | null
+    warnings: Record<string, number>
+  }[]
+  overall: Record<LocateOutcome, number>
+  first_failure: number | null
+  rows: {
+    level: number
+    sample: number
+    outcome: LocateOutcome
+    error: number | null
+    method: string
+    label_warnings: string[]
     quality_passed: boolean
     warnings: string[]
   }[]
@@ -112,6 +166,14 @@ type MetricKey = keyof typeof METRICS
 const METHOD_TEXT = { raw: '只用原圖', ladder: '逐步升級' }
 /** 判定代碼的中文（明細表用）。 */
 const OUTCOME_TEXT: Record<Outcome, string> = { correct: '正確', misread: '誤讀', missed: '漏讀' }
+/** 營養標示定位判定的中文。 */
+const LOCATE_TEXT: Record<LocateOutcome, string> = {
+  correct: '正確',
+  off: '偏移',
+  missed: '找不到',
+}
+/** 營養標示定位容許誤差的預設值與範圍（同 Python 的 sweep.TOL_DEFAULT／TOL_RANGE）。 */
+const TOL = { default: 0.03, lo: 0.005, hi: 0.2 }
 /** 適用範圍（ADR 0004）：伺服器端的逐步升級只服務無法重拍的靜態照片。 */
 const SCOPE_NOTE = '適用：相簿匯入、冷啟動上傳等無法重拍的靜態照片；APP 即時掃描不經此流程。'
 /** 比例轉整數百分比（圖表軸與讀數用）。 */
@@ -122,6 +184,8 @@ const pct = (v: number) => `${Math.round(v * 100)}%`
  * - 品質檢查：對基準影像退化後跑品質檢查，看各指標的曲線與在哪個等級首次觸發警告；左側可調 QualityConfig。
  * - 條碼解碼：對合成 EAN-13 樣本退化後解碼並對真值判定，比較只用原圖與逐步升級的成功率與誤讀率；
  *   同一批樣本也跑品質檢查，對照門檻的誤報與漏報。左側可調 LadderConfig／ZxingConfig／QualityConfig。
+ * - 營養標示：對合成標示退化後做營養標示前處理，找到的四角對照真實四角；同樣對照品質門檻。
+ *   左側可調 LabelConfig／QualityConfig 與容許誤差。
  * 請求經 useAnalysis（防抖、取消舊請求、保留上一次結果並淡化）。
  */
 export function SweepPage() {
@@ -130,6 +194,7 @@ export function SweepPage() {
   const quality = useConfigClass('QualityConfig').schema
   const ladderSchema = useConfigClass('LadderConfig').schema
   const zxingSchema = useConfigClass('ZxingConfig').schema
+  const labelSchema = useConfigClass('LabelConfig').schema
   // 品質掃描的基準影像（以營養標示場景為預設）
   const pipeline = useImagePipeline('label')
   const [target, setTarget] = useState<Target>('quality')
@@ -139,12 +204,15 @@ export function SweepPage() {
   const [range, setRange] = useState<[number, number]>([axis.defaultLo, axis.defaultHi])
   // 取點數
   const [n, setN] = useState(9)
-  // 條碼掃描的合成樣本設定：每個等級的樣本數、條碼模組寬（像素）、亂數種子
+  // 條碼與營養標示掃描的合成樣本設定：每個等級的樣本數、條碼模組寬（像素，只用於條碼）、亂數種子
   const [samples, setSamples] = useState({ samples: 5, module_px: 4, seed: 0 })
+  // 營養標示定位的容許誤差（比例）
+  const [tol, setTol] = useState(TOL.default)
   // 三組設定覆寫（只帶與預設值不同的欄位）
   const [config, setConfig] = useState<ConfigOverride>({})
   const [ladder, setLadder] = useState<ConfigOverride>({})
   const [zxing, setZxing] = useState<ConfigOverride>({})
+  const [labelCfg, setLabelCfg] = useState<ConfigOverride>({})
   // 品質曲線要畫的指標；view 為主檢視分頁（兩種對象共用，切換對象時重設為 chart）
   const [metric, setMetric] = useState<MetricKey>('blur_score')
   const [view, setView] = useState('chart')
@@ -153,23 +221,29 @@ export function SweepPage() {
   // 送給後端的掃描參數。用 useMemo 讓物件在輸入不變時保持同一參照：
   // useAnalysis 以「防抖後的值 === 目前的值」判斷防抖已跟上，每次 render 都產生新物件就永遠不會送出。
   // 品質掃描帶 image_id 與 QualityConfig；條碼掃描帶樣本設定與 ladder／zxing／config（沒有覆寫時為
-  // undefined）。兩種對象共用同一組 QualityConfig 覆寫，切換時門檻不變。
-  const params = useMemo(
-    () =>
-      target === 'quality'
-        ? { axis: axisKey, lo: range[0], hi: range[1], n, image_id: image?.image_id, config }
-        : {
-            axis: axisKey,
-            lo: range[0],
-            hi: range[1],
-            n,
-            ...samples,
-            ladder: overrideBody(ladder),
-            zxing: overrideBody(zxing),
-            config: overrideBody(config),
-          },
-    [target, axisKey, range, n, image?.image_id, config, samples, ladder, zxing],
-  )
+  // undefined）；營養標示帶樣本數、種子、容許誤差與 label／config。
+  // 三種對象共用同一組 QualityConfig 覆寫，切換時門檻不變。
+  const params = useMemo(() => {
+    const sweep = { axis: axisKey, lo: range[0], hi: range[1], n }
+    if (target === 'quality') return { ...sweep, image_id: image?.image_id, config }
+    if (target === 'label') {
+      return {
+        ...sweep,
+        samples: samples.samples,
+        seed: samples.seed,
+        tol,
+        label: overrideBody(labelCfg),
+        config: overrideBody(config),
+      }
+    }
+    return {
+      ...sweep,
+      ...samples,
+      ladder: overrideBody(ladder),
+      zxing: overrideBody(zxing),
+      config: overrideBody(config),
+    }
+  }, [target, axisKey, range, n, image?.image_id, config, samples, tol, ladder, zxing, labelCfg])
   // 下限必須小於上限；不成立時不送出請求，並在範圍輸入旁顯示錯誤
   // （不在輸入時阻擋：使用者可能先改下限再改上限，中途暫時不成立）
   const rangeError = range[0] < range[1] ? undefined : '下限必須小於上限'
@@ -177,8 +251,8 @@ export function SweepPage() {
   const analysis = useAnalysis({
     enabled: !rangeError,
     name: `sweep-${target}`,
-    // 條碼掃描用合成樣本，不需要影像
-    imageId: target === 'quality' ? image?.image_id : 'synthetic-ean13',
+    // 條碼與營養標示掃描用後端產生的合成樣本，不需要影像
+    imageId: target === 'quality' ? image?.image_id : `synthetic-${target}`,
     config: params,
     run: (_id, p, signal) =>
       unwrap(api.POST('/workbench/v1/dev/sweeps', { body: { target, params: p }, signal })),
@@ -195,11 +269,13 @@ export function SweepPage() {
     setRange([a.defaultLo, a.defaultHi])
   }
   // 切換評估對象：分頁回到圖表（兩種對象的分頁不完全相同，例如條碼才有「成功階」）；
-  // 切到條碼時若仍是預設的模糊，改成旋轉角度作為條碼的預設退化
+  // 切到條碼或營養標示時若仍是預設的模糊，改成旋轉角度（條碼）或透視強度（營養標示）
   const switchTarget = (t: Target) => {
     setTarget(t)
     setView('chart')
-    if (t === 'barcode' && axisKey === 'blur_sigma') setAxis('rotate_deg')
+    if (axisKey !== 'blur_sigma') return
+    if (t === 'barcode') setAxis('rotate_deg')
+    if (t === 'label') setAxis('perspective')
   }
 
   // 掃描設定（兩種對象共用）：退化種類、範圍、點數；條碼另有合成樣本設定
@@ -261,35 +337,59 @@ export function SweepPage() {
       <p className="text-muted text-xs">
         可用範圍 {axis.lo}–{axis.hi}；在範圍內等距取點。
       </p>
-      {target === 'barcode' && (
+      {target !== 'quality' && (
         <div className="border-card-border space-y-2 border-t pt-3">
-          <p className="text-muted text-xs">
-            樣本為合成
-            EAN-13，內容各不相同；成功率為讀對的樣本數除以樣本數，讀成別的號碼另計為誤讀。
-          </p>
+          {target === 'barcode' ? (
+            <p className="text-muted text-xs">
+              樣本為合成
+              EAN-13，內容各不相同；成功率為讀對的樣本數除以樣本數，讀成別的號碼另計為誤讀。
+            </p>
+          ) : (
+            <p className="text-muted text-xs">
+              樣本為合成營養標示（各自隨機透視），已知真實四角；四角中最大的誤差不超過「真值平均邊長
+              × 容許誤差」才算正確，找到但超過算偏移。
+            </p>
+          )}
           <p className="text-muted text-xs">{SCOPE_NOTE}</p>
           <div className="flex items-end gap-2">
-            {/* [欄位, 標籤, 最小值, 最大值]；輸入四捨五入成整數並限制在範圍內 */}
+            {/* [欄位, 標籤, 最小值, 最大值]；輸入四捨五入成整數並限制在範圍內；模組寬只用於條碼 */}
             {(
               [
                 ['samples', '樣本數', 1, 30],
                 ['module_px', '模組寬', 1, 12],
                 ['seed', '種子', 0, 10000],
               ] as const
-            ).map(([key, label, lo, hi]) => (
-              <div key={key} className="flex flex-col gap-1 text-xs">
-                <span className="text-muted">{label}</span>
+            )
+              .filter(([key]) => target === 'barcode' || key !== 'module_px')
+              .map(([key, label, lo, hi]) => (
+                <div key={key} className="flex flex-col gap-1 text-xs">
+                  <span className="text-muted">{label}</span>
+                  <DraftNumberInput
+                    aria-label={label}
+                    value={samples[key]}
+                    parse={(t) => {
+                      const v = Math.round(Number(t))
+                      return v >= lo && v <= hi ? v : undefined
+                    }}
+                    onCommit={(v) => setSamples({ ...samples, [key]: v })}
+                  />
+                </div>
+              ))}
+            {target === 'label' && (
+              <div className="flex flex-col gap-1 text-xs">
+                <span className="text-muted">容許誤差</span>
                 <DraftNumberInput
-                  aria-label={label}
-                  value={samples[key]}
+                  aria-label="容許誤差"
+                  step={0.005}
+                  value={tol}
                   parse={(t) => {
-                    const v = Math.round(Number(t))
-                    return v >= lo && v <= hi ? v : undefined
+                    const v = Number(t)
+                    return v >= TOL.lo && v <= TOL.hi ? v : undefined
                   }}
-                  onCommit={(v) => setSamples({ ...samples, [key]: v })}
+                  onCommit={setTol}
                 />
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -297,9 +397,59 @@ export function SweepPage() {
   )
 
   // 左側面板依評估對象切換：品質＝掃描設定＋基準影像／QualityConfig；
-  // 條碼＝掃描設定／階梯參數（LadderConfig＋ZxingConfig）＋品質門檻（QualityConfig，對照用）
+  // 條碼＝掃描設定／階梯參數（LadderConfig＋ZxingConfig）＋品質門檻（QualityConfig，對照用）；
+  // 營養標示＝掃描設定／標示參數（LabelConfig）＋品質門檻
+  const qualityForm = quality && (
+    <div className="border-card-border space-y-2 border-t pt-4">
+      <h3 className="text-sm font-semibold">品質門檻（對照用）</h3>
+      <ParamForm
+        schema={quality}
+        overrides={config}
+        onChange={setConfig}
+        invalidField={analysis.configError?.field}
+        invalidMessage={analysis.configError?.message}
+      />
+    </div>
+  )
   const panel =
-    target === 'quality' ? (
+    target === 'label' ? (
+      <ToolPanel
+        imageLabel="掃描"
+        paramsLabel="標示參數"
+        changed={Object.keys(labelCfg).length + Object.keys(config).length}
+        image={sweepControls}
+        params={
+          labelSchema &&
+          quality && (
+            <div className="space-y-6">
+              {/* 後端回 INVALID_CONFIG 時兩個表單都傳入；只有含該欄位的表單會標紅 */}
+              <ParamForm
+                schema={labelSchema}
+                overrides={labelCfg}
+                onChange={setLabelCfg}
+                invalidField={analysis.configError?.field}
+                invalidMessage={analysis.configError?.message}
+              />
+              {qualityForm}
+            </div>
+          )
+        }
+        io={
+          labelSchema &&
+          quality && (
+            <div className="space-y-8">
+              <ConfigIO
+                title="標示設定"
+                schema={labelSchema}
+                overrides={labelCfg}
+                onImport={setLabelCfg}
+              />
+              <ConfigIO title="品質門檻" schema={quality} overrides={config} onImport={setConfig} />
+            </div>
+          )
+        }
+      />
+    ) : target === 'quality' ? (
       <ToolPanel
         changed={Object.keys(config).length}
         image={
@@ -373,16 +523,7 @@ export function SweepPage() {
                 invalidMessage={analysis.configError?.message}
               />
               {/* 品質門檻不影響解碼，只用來對照「該不該請使用者重拍」（結果的品質門檻檢視） */}
-              <div className="border-card-border space-y-2 border-t pt-4">
-                <h3 className="text-sm font-semibold">品質門檻（對照用）</h3>
-                <ParamForm
-                  schema={quality}
-                  overrides={config}
-                  onChange={setConfig}
-                  invalidField={analysis.configError?.field}
-                  invalidMessage={analysis.configError?.message}
-                />
-              </div>
+              {qualityForm}
             </div>
           )
         }
@@ -418,15 +559,17 @@ export function SweepPage() {
       ? (result as unknown as QualitySweep)
       : undefined
   const barcodeResult =
-    target === 'barcode' && result && 'overall' in result
+    target === 'barcode' && result && 'misread' in result
       ? (result as unknown as BarcodeSweep)
       : undefined
+  const labelResult =
+    target === 'label' && result && 'tol' in result ? (result as unknown as LabelSweep) : undefined
 
   return (
     <Workspace
       panel={panel}
       title="參數掃描"
-      description="一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；條碼對真值評分，比較只用原圖與逐步升級的成功率與誤讀率，並對照品質門檻。"
+      description="一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；條碼與營養標示對真值評分（號碼、四角），並對照品質門檻。"
       aside={
         <div className="flex items-center gap-2">
           {(pipeline.pending || analysis.busy) && (
@@ -441,6 +584,7 @@ export function SweepPage() {
             options={[
               { value: 'quality', label: withIcon(ScanSearch, '品質檢查') },
               { value: 'barcode', label: withIcon(Barcode, '條碼解碼') },
+              { value: 'label', label: withIcon(ReceiptText, '營養標示') },
             ]}
           />
         </div>
@@ -457,7 +601,7 @@ export function SweepPage() {
         )}
         {/* 沒有可顯示的結果時：有錯誤就只顯示上方錯誤，否則顯示計算中；
             有結果時，參數已改或請求進行中則淡化舊結果（analysis.stale） */}
-        {!qualityResult && !barcodeResult ? (
+        {!qualityResult && !barcodeResult && !labelResult ? (
           !analysis.query.error && <EmptyState>計算中…</EmptyState>
         ) : (
           <div className={cn('min-h-0 flex-1 transition-opacity', stale && 'opacity-60')}>
@@ -485,6 +629,13 @@ export function SweepPage() {
               <BarcodeResultView
                 r={barcodeResult}
                 axisLabel={axisOf(barcodeResult.axis).label}
+                view={view}
+                setView={setView}
+              />
+            ) : labelResult ? (
+              <LabelResultView
+                r={labelResult}
+                axisLabel={axisOf(labelResult.axis).label}
                 view={view}
                 setView={setView}
               />
@@ -660,7 +811,6 @@ function BarcodeResultView({
   // 某方法某指標（成功率或誤讀率）隨等級變化的點
   const points = (method: 'raw' | 'ladder', key: 'rate' | 'misread') =>
     r.rates.filter((x) => x.method === method).map((x) => ({ x: x.level, y: x[key] }))
-  const total = r.rows.length
   return (
     <Split
       readout={
@@ -696,32 +846,7 @@ function BarcodeResultView({
               />
             </MetricGrid>
           </ReadoutBlock>
-          <ReadoutBlock title="品質門檻對照">
-            <MetricGrid>
-              <Metric
-                label="該重拍"
-                value={`${r.alarms.retake} / ${total}`}
-                help="品質檢查不通過，且逐步升級讀不對：請使用者重拍是對的。"
-              />
-              <Metric
-                label="正常"
-                value={`${r.alarms.ok} / ${total}`}
-                help="品質檢查通過，且逐步升級讀對。"
-              />
-              <Metric
-                label="誤報"
-                value={`${r.alarms.false_alarm} / ${total}`}
-                good={r.alarms.false_alarm > 0 ? false : undefined}
-                help="品質檢查不通過，但逐步升級其實讀對了：門檻太嚴，不必要地請使用者重拍。"
-              />
-              <Metric
-                label="漏報"
-                value={`${r.alarms.missed_alarm} / ${total}`}
-                good={r.alarms.missed_alarm > 0 ? false : undefined}
-                help="品質檢查通過，但逐步升級讀不對：門檻太鬆，該提醒卻沒提醒。"
-              />
-            </MetricGrid>
-          </ReadoutBlock>
+          <AlarmBlock r={r} />
           <Thumbs thumbs={r.thumbs} axisLabel={axisLabel} />
         </>
       }
@@ -784,39 +909,12 @@ function BarcodeResultView({
               />
             )
           ) : view === 'quality' ? (
-            <div className="space-y-4">
-              <p className="text-muted text-xs">
-                門檻設得好時，品質不通過率應在逐步升級的成功率下滑處才開始上升：太早上升是誤報（白白請使用者重拍），
-                太晚是漏報。請先調好前處理，再依此調整左側的品質門檻。
-              </p>
-              <LineChart
-                label={`逐步升級成功率與品質不通過率隨${axisLabel}變化`}
-                xLabel={axisLabel}
-                yDomain={[0, 1]}
-                yFormat={pct}
-                series={[
-                  { name: '逐步升級成功率', color: PALETTE[1]!, points: points('ladder', 'rate') },
-                  {
-                    name: '品質不通過率',
-                    color: PALETTE[3]!,
-                    dashed: true,
-                    points: r.quality_rates.map((q) => ({ x: q.level, y: q.rate })),
-                  },
-                ]}
-              />
-              <ReadoutBlock title="各警告首次在半數樣本出現的等級">
-                <MetricGrid>
-                  {Object.entries(r.quality_triggers).map(([code, level]) => (
-                    <Metric
-                      key={code}
-                      label={warningText(code)}
-                      value={level === null ? '未觸發' : `≥ ${Number(level.toPrecision(3))}`}
-                      help={`${axisLabel}達到此等級時，至少半數樣本出現「${warningText(code)}」。`}
-                    />
-                  ))}
-                </MetricGrid>
-              </ReadoutBlock>
-            </div>
+            <QualityThresholdView
+              r={r}
+              axisLabel={axisLabel}
+              successName="逐步升級成功率"
+              success={points('ladder', 'rate')}
+            />
           ) : (
             <LineChart
               label={`兩種方法的成功率與誤讀率隨${axisLabel}變化`}
@@ -833,6 +931,231 @@ function BarcodeResultView({
                   points: points(method, key),
                 })),
               )}
+            />
+          )}
+        </MainView>
+      }
+    />
+  )
+}
+
+/** 品質門檻與處理結果的四格對照（讀數欄；條碼與營養標示共用），單位為樣本數。 */
+function AlarmBlock({ r }: { r: QualityAlarms & { rows: unknown[] } }) {
+  const total = r.rows.length
+  return (
+    <ReadoutBlock title="品質門檻對照">
+      <MetricGrid>
+        <Metric
+          label="該重拍"
+          value={`${r.alarms.retake} / ${total}`}
+          help="品質檢查不通過，且處理結果不正確：請使用者重拍是對的。"
+        />
+        <Metric
+          label="正常"
+          value={`${r.alarms.ok} / ${total}`}
+          help="品質檢查通過，且處理結果正確。"
+        />
+        <Metric
+          label="誤報"
+          value={`${r.alarms.false_alarm} / ${total}`}
+          good={r.alarms.false_alarm > 0 ? false : undefined}
+          help="品質檢查不通過，但處理結果其實正確：門檻太嚴，不必要地請使用者重拍。"
+        />
+        <Metric
+          label="漏報"
+          value={`${r.alarms.missed_alarm} / ${total}`}
+          good={r.alarms.missed_alarm > 0 ? false : undefined}
+          help="品質檢查通過，但處理結果不正確：門檻太鬆，該提醒卻沒提醒。"
+        />
+      </MetricGrid>
+    </ReadoutBlock>
+  )
+}
+
+/**
+ * 品質門檻檢視（主檢視；條碼與營養標示共用）：處理成功率與品質不通過率疊在同一張圖，
+ * 下方列出各警告首次在半數樣本出現的等級。
+ */
+function QualityThresholdView({
+  r,
+  axisLabel,
+  successName,
+  success,
+}: {
+  r: QualityAlarms
+  axisLabel: string
+  successName: string
+  success: { x: number; y: number }[]
+}) {
+  return (
+    <div className="space-y-4">
+      <p className="text-muted text-xs">
+        門檻設得好時，品質不通過率應在成功率下滑處才開始上升：太早上升是誤報（白白請使用者重拍），
+        太晚是漏報。請先調好前處理，再依此調整左側的品質門檻。
+      </p>
+      <LineChart
+        label={`${successName}與品質不通過率隨${axisLabel}變化`}
+        xLabel={axisLabel}
+        yDomain={[0, 1]}
+        yFormat={pct}
+        series={[
+          { name: successName, color: PALETTE[1]!, points: success },
+          {
+            name: '品質不通過率',
+            color: PALETTE[3]!,
+            dashed: true,
+            points: r.quality_rates.map((q) => ({ x: q.level, y: q.rate })),
+          },
+        ]}
+      />
+      <ReadoutBlock title="各警告首次在半數樣本出現的等級">
+        <MetricGrid>
+          {Object.entries(r.quality_triggers).map(([code, level]) => (
+            <Metric
+              key={code}
+              label={warningText(code)}
+              value={level === null ? '未觸發' : `≥ ${Number(level.toPrecision(3))}`}
+              help={`${axisLabel}達到此等級時，至少半數樣本出現「${warningText(code)}」。`}
+            />
+          ))}
+        </MetricGrid>
+      </ReadoutBlock>
+    </div>
+  )
+}
+
+/**
+ * 營養標示掃描的結果檢視：讀數欄為三種判定的比例、首次失敗等級與品質門檻對照；
+ * 主檢視為成功率折線（含偏移、找不到與光斑重拍警告）、四角誤差中位數（附容許誤差線）、
+ * 品質門檻對照，或逐樣本明細表。
+ */
+function LabelResultView({
+  r,
+  axisLabel,
+  view,
+  setView,
+}: {
+  r: LabelSweep
+  axisLabel: string
+  view: string
+  setView: (v: string) => void
+}) {
+  const success = r.rates.map((x) => ({ x: x.level, y: x.rate }))
+  const errorPoints = r.rates.flatMap((x) =>
+    x.median_error === null ? [] : [{ x: x.level, y: x.median_error }],
+  )
+  return (
+    <Split
+      readout={
+        <>
+          <ReadoutBlock title="定位結果">
+            <MetricGrid>
+              <Metric
+                label="正確"
+                value={pct(r.overall.correct)}
+                delta={
+                  r.first_failure === null
+                    ? '全部正確'
+                    : `首次失敗於 ${Number(r.first_failure.toPrecision(3))}`
+                }
+                help={`四角中最大的誤差不超過真值平均邊長的 ${pct(r.tol)}。`}
+              />
+              <Metric
+                label="偏移"
+                value={pct(r.overall.off)}
+                good={r.overall.off > 0 ? false : undefined}
+                help="找到四邊形但超出容許誤差：後續會把錯的區域拉正送去辨識，而且沒有警告，比找不到更糟。"
+              />
+              <Metric
+                label="找不到"
+                value={pct(r.overall.missed)}
+                help="找不到四邊形：前處理以原圖繼續並警告「找不到標示表格框」。"
+                wide
+              />
+            </MetricGrid>
+          </ReadoutBlock>
+          <AlarmBlock r={r} />
+          <Thumbs thumbs={r.thumbs} axisLabel={axisLabel} />
+        </>
+      }
+      main={
+        <MainView
+          scroll
+          toolbar={
+            <Segmented
+              label="檢視"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'chart', label: withIcon(TrendingUp, '成功率') },
+                { value: 'error', label: withIcon(Crosshair, '四角誤差') },
+                { value: 'quality', label: withIcon(Gauge, '品質門檻') },
+                { value: 'table', label: withIcon(Table, '明細') },
+              ]}
+            />
+          }
+        >
+          {view === 'table' ? (
+            <DataTable
+              label="每個等級與樣本的定位結果"
+              columns={['等級', '樣本', '判定', '最大誤差', '方法', '標示警告', '品質']}
+              rows={r.rows.map((row) => [
+                Number(row.level.toPrecision(4)),
+                row.sample + 1, // 樣本編號從 1 起顯示
+                LOCATE_TEXT[row.outcome],
+                row.error === null ? '—' : `${(row.error * 100).toFixed(1)}%`,
+                row.method ? (QUAD_METHOD_TEXT[row.method] ?? row.method) : '—',
+                row.label_warnings.map(warningText).join('、') || '—',
+                row.quality_passed ? '通過' : row.warnings.map(warningText).join('、'),
+              ])}
+            />
+          ) : view === 'error' ? (
+            errorPoints.length === 0 ? (
+              <EmptyState>所有等級都找不到四邊形，沒有誤差可畫。</EmptyState>
+            ) : (
+              <LineChart
+                label={`四角誤差中位數隨${axisLabel}變化`}
+                xLabel={axisLabel}
+                // 誤差比通常只有幾個百分點，取整數會讓刻度重複，改顯示一位小數
+                yFormat={(v) => `${(v * 100).toFixed(1)}%`}
+                // 只計找到四邊形的樣本；整個等級都找不到時該點略過
+                series={[{ name: '最大誤差中位數', color: PALETTE[0]!, points: errorPoints }]}
+                thresholds={[{ y: r.tol, label: `容許誤差 = ${pct(r.tol)}` }]}
+              />
+            )
+          ) : view === 'quality' ? (
+            <QualityThresholdView
+              r={r}
+              axisLabel={axisLabel}
+              successName="定位成功率"
+              success={success}
+            />
+          ) : (
+            <LineChart
+              label={`定位結果隨${axisLabel}變化`}
+              xLabel={axisLabel}
+              yDomain={[0, 1]}
+              yFormat={pct}
+              series={[
+                { name: '正確', color: PALETTE[0]!, points: success },
+                {
+                  name: '偏移',
+                  color: PALETTE[1]!,
+                  points: r.rates.map((x) => ({ x: x.level, y: x.off })),
+                },
+                {
+                  name: '找不到',
+                  color: PALETTE[2]!,
+                  // 不用「找不到標示表格框」警告的比例：關閉定位時沒有警告，但同樣找不到
+                  points: r.rates.map((x) => ({ x: x.level, y: Math.max(0, 1 - x.rate - x.off) })),
+                },
+                {
+                  name: warningText('GLARE_RETAKE'),
+                  color: PALETTE[3]!,
+                  dashed: true,
+                  points: r.rates.map((x) => ({ x: x.level, y: x.warnings.GLARE_RETAKE ?? 0 })),
+                },
+              ]}
             />
           )}
         </MainView>

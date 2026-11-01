@@ -91,7 +91,7 @@ message GetArtifactResponse {
 }
 
 message SweepRequest {
-  string target = 1; // quality／barcode
+  string target = 1; // quality／barcode／label
   string params_json = 2;
 }
 

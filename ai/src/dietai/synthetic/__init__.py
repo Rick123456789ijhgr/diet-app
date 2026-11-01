@@ -8,7 +8,7 @@
 # 合成實驗資料集：影像檔＋manifest（E1 端到端用）
 from dietai.synthetic.datasets import write_barcode_dataset
 
-# 已知程度的退化：模擬模糊、手震、旋轉、縮小、曲面、光線不均、對比、雜訊、反光、JPEG 等拍攝條件
+# 已知程度的退化：模糊、手震、旋轉、透視、縮小、曲面、光線、對比、雜訊、反光、JPEG 等拍攝條件
 from dietai.synthetic.degrade import (
     add_glare,
     brightness_gradient,
@@ -18,6 +18,8 @@ from dietai.synthetic.degrade import (
     gaussian_noise,
     jpeg,
     motion_blur,
+    perspective,
+    perspective_matrix,
     reduce_contrast,
     rotate,
     salt_pepper,
@@ -55,6 +57,8 @@ __all__ = [
     "label_scene",
     "motion_blur",
     "nutrition_label",
+    "perspective",
+    "perspective_matrix",
     "reduce_contrast",
     "rotate",
     "salt_pepper",
