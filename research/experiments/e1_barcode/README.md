@@ -72,6 +72,7 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 | `m4_retail_sharpen_last` | m3＋sharpen 移到最後 | 關 | 誤讀對策 |
 | `m5_retail_zxing_default` | 同 z1，加格式限制 | 開 | 誤讀對策 |
 | `z2_default_v2` | sharpen 最後＋只收零售格式 | 開 | 目前的程式預設（2026-10-12 起） |
+| `c0_all_methods` | 所有單一方法（含 otsu、clahe）＋多尺度＋疊加流程 C-01～C-05 | 關 | `run_methods.py` 的預設（每個方法都執行） |
 
 消融組關閉 zxing-cpp 內建的旋轉／縮小／反色，才量得到階梯本身的貢獻（模組一 Phase 2 決議）。
 
@@ -140,7 +141,7 @@ python analyze_methods.py runs/<資料夾> --min-gain 2 --max-new-wrong 0 --max-
 python analyze_methods.py runs/<資料夾> --order frozen=raw,multiscale@2,deskew   # 評估指定順序
 ```
 
-- 方法代碼為階的代碼；多尺度的每個倍率各算一個方法（`multiscale@2`、`multiscale@0.5`）。
+- 方法代碼為階的代碼；多尺度的每個倍率各算一個方法（`multiscale@2`、`multiscale@0.5`），每條疊加流程也各算一個方法（`pipeline@denoise+binarize`）。
 - 每個方法以「只含這一階」的設定分別執行，耗時互不影響；單一方法丟出例外只有該方法記為 `error`。
 - 離線算出的逐步升級與 `decode_with_ladder` 實際執行的判定完全相同（含 `min_agree`，有測試比對）；
   耗時為已嘗試方法的總和，每個方法都含轉灰階，因此比上線時略高。
@@ -153,6 +154,20 @@ python analyze_methods.py runs/<資料夾> --order frozen=raw,multiscale@2,deske
 | `run.json` | 同 `run.py`，另有 `mode: "methods"` 與各實驗組的方法代碼 |
 | `summary.md` | 引擎比較（多個實驗組時）、單一方法比較（相對 `raw` 的失去／救回）、貪婪選擇各步、逐步升級的離線比較 |
 | `methods_<實驗組>.csv`／`greedy_<實驗組>.csv` | `analyze_methods.py` 寫出的單一方法比較與貪婪選擇各步 |
+
+### 疊加流程（設計 6.4 節）
+
+疊加流程是逐步升級中的一階 `pipeline`：同一張灰階影像依序做多個處理後送解碼一次，仍由原圖開始、與其他階互相獨立，
+因此可以和單一方法一起放進結果表、離線計算與貪婪選擇。流程寫在實驗組的 `ladder.pipelines`（用到 `pipeline` 時必須明寫）：
+
+```json
+"pipelines": [["denoise", "binarize"], ["clahe", "binarize"], ["deskew", "denoise", "binarize"]]
+```
+
+- 可用步驟：`binarize`（自適應）、`otsu`、`clahe`、`sharpen`、`denoise`（中值）、`deskew`；每條至少兩步、不重複。各步驟沿用 `LadderConfig` 中同名的參數。
+- `deskew` 在流程中依「目前的影像」估計角度，小於門檻時這一步不旋轉，其餘步驟照常；解出的四角一律回推到原圖。
+- `summary.md` 的「疊加流程 vs 所含最佳單一步驟（H3）」比較每條流程與它所含步驟單獨執行的最佳者；差異為負表示方法互相干擾。
+- 預設流程為設計表 6.4 的 C-01～C-05；C-06（透視校正）、C-07（光斑修補）屬於營養標示，待營養標示實驗再加。
 
 貪婪法（`dietai.evaluation.greedy_ladder`）：從 `raw`（A0）開始，每一步在尚未加入的方法中，選擇救回最多
 「目前仍未讀到的正樣本」、且新增的誤讀＋負樣本誤報不超過 `--max-new-wrong` 的方法加到最後；

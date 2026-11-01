@@ -107,8 +107,9 @@ def ean13_checksum_ok(code: str) -> bool:
 def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[Variant]:
     """依 ``cfg.rungs`` 的順序逐一產生影像版本（惰性產生，呼叫端可提早停止）。
 
-    使用的設定欄位：``rungs``、``scales``、``binarize_*``、``sharpen_*``、
-    ``denoise_ksize``、``deskew_min_deg``。多尺度階每個倍率產生一個版本。
+    使用的設定欄位：``rungs``、``scales``、``pipelines``、``binarize_*``、``sharpen_*``、
+    ``denoise_ksize``、``clahe_*``、``deskew_min_deg``。多尺度階每個倍率、疊加流程階每條流程
+    各產生一個版本。
 
     為避免每次嘗試都複製整張影像，``raw`` 階的 ``image`` 就是輸入本身、``gray`` 階與其他階
     共用同一份灰階；解碼器不會修改輸入，呼叫端也不得修改這些影像（需要時自行 ``copy()``）。
@@ -130,17 +131,13 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
             yield Variant(rung, img, _IDENTITY)
         elif rung is Rung.GRAY:
             yield Variant(rung, get_gray(), _IDENTITY)
-        elif rung is Rung.BINARIZE:
-            params = {"block_size": cfg.binarize_block_size, "c": cfg.binarize_c}
-            out = ops.adaptive_threshold(get_gray(), cfg.binarize_block_size, cfg.binarize_c)
+        elif rung in _PIXEL_STEPS:
+            out, params = _pixel_step(get_gray(), rung, cfg)
             yield Variant(rung, out, _IDENTITY, params)
-        elif rung is Rung.SHARPEN:
-            params = {"sigma": cfg.sharpen_sigma, "amount": cfg.sharpen_amount}
-            out = ops.unsharp_mask(get_gray(), cfg.sharpen_sigma, cfg.sharpen_amount)
-            yield Variant(rung, out, _IDENTITY, params)
-        elif rung is Rung.DENOISE:
-            params = {"ksize": cfg.denoise_ksize}
-            yield Variant(rung, ops.median_blur(get_gray(), cfg.denoise_ksize), _IDENTITY, params)
+        elif rung is Rung.PIPELINE:
+            for steps in cfg.pipelines:
+                out, to_original, params = _pipeline(get_gray(), steps, cfg)
+                yield Variant(rung, out, to_original, params)
         elif rung is Rung.DESKEW:
             # 以整張灰階的梯度結構張量估計主方向（見 ``ops.estimate_skew``）；
             # 回傳值為內容被逆時針轉了幾度，所以下方以 ``-skew`` 轉回
@@ -170,6 +167,65 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
                     dtype=np.float64,
                 )
                 yield Variant(rung, out, inverse, {"factor": factor})
+
+
+# 只改像素、不改幾何的處理；單獨一階與疊加流程中的步驟共用 ``_pixel_step``
+_PIXEL_STEPS = frozenset({Rung.BINARIZE, Rung.OTSU, Rung.CLAHE, Rung.SHARPEN, Rung.DENOISE})
+
+
+def _pixel_step(gray: Image, step: Rung, cfg: LadderConfig) -> tuple[Image, dict[str, Any]]:
+    """對灰階影像做一個只改像素的處理，回傳（結果, 使用的參數）。"""
+    if step is Rung.BINARIZE:
+        params = {"block_size": cfg.binarize_block_size, "c": cfg.binarize_c}
+        return ops.adaptive_threshold(gray, cfg.binarize_block_size, cfg.binarize_c), params
+    if step is Rung.OTSU:
+        return ops.otsu_threshold(gray), {}
+    if step is Rung.CLAHE:
+        params = {"clip": cfg.clahe_clip, "tile": cfg.clahe_tile}
+        return ops.clahe(gray, cfg.clahe_clip, cfg.clahe_tile), params
+    if step is Rung.SHARPEN:
+        params = {"sigma": cfg.sharpen_sigma, "amount": cfg.sharpen_amount}
+        return ops.unsharp_mask(gray, cfg.sharpen_sigma, cfg.sharpen_amount), params
+    if step is Rung.DENOISE:
+        return ops.median_blur(gray, cfg.denoise_ksize), {"ksize": cfg.denoise_ksize}
+    raise ValueError(f"不是只改像素的步驟：{step.value}")
+
+
+def _pipeline(
+    gray: Image, steps: tuple[Rung, ...], cfg: LadderConfig
+) -> tuple[Image, Affine, dict[str, Any]]:
+    """在同一張灰階影像上依序做 ``steps``，回傳（結果, 回推原圖的矩陣, 參數）。
+
+    參數為 ``steps``（以 ``+`` 串接的步驟代碼）與各步驟的參數（鍵為 ``步驟.參數``）。
+    旋轉校正依「目前的影像」估計角度，小於 ``deskew_min_deg`` 時這一步不旋轉
+    （``deskew.applied`` 為 ``False``），流程其餘步驟照常執行。
+    """
+    out = gray
+    to_original = _IDENTITY
+    params: dict[str, Any] = {"steps": "+".join(s.value for s in steps)}
+    for step in steps:
+        if step is Rung.DESKEW:
+            skew = ops.estimate_skew(out)
+            applied = abs(skew) >= cfg.deskew_min_deg
+            params.update({"deskew.skew_deg": round(skew, 2), "deskew.applied": applied})
+            if applied:
+                m, _ = ops.rotation_matrix(out.shape, -skew)
+                inverse = np.asarray(cv2.invertAffineTransform(m), dtype=np.float64)
+                # 新座標 → 旋轉前 → 原圖：先套 inverse 再套目前的 to_original
+                to_original = _compose(to_original, inverse)
+                out = ops.rotate(out, -skew)
+        else:
+            out, step_params = _pixel_step(out, step, cfg)
+            params.update({f"{step.value}.{k}": v for k, v in step_params.items()})
+    return out, to_original, params
+
+
+def _compose(outer: Affine, inner: Affine) -> Affine:
+    """兩個 2×3 仿射的合成 ``outer(inner(p))``；``outer`` 為恆等時直接回傳 ``inner``。"""
+    if outer is _IDENTITY:
+        return inner
+    a = np.vstack([outer, [0.0, 0.0, 1.0]]) @ np.vstack([inner, [0.0, 0.0, 1.0]])
+    return np.asarray(a[:2], dtype=np.float64)
 
 
 def iter_attempts(

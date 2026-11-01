@@ -1,7 +1,18 @@
 // 顯示順序（只影響畫圖與表格的排列，不改數值）。
 
 /** 解碼階梯由簡到繁的固定順序，讓「成功階」堆疊長條的顏色與圖例順序在各頁一致。 */
-export const RUNG_ORDER = ['raw', 'gray', 'binarize', 'sharpen', 'denoise', 'deskew', 'multiscale']
+export const RUNG_ORDER = [
+  'raw',
+  'gray',
+  'binarize',
+  'otsu',
+  'clahe',
+  'sharpen',
+  'denoise',
+  'deskew',
+  'multiscale',
+  'pipeline',
+]
 
 /**
  * 依 RUNG_ORDER 排列出現過的階；不在 RUNG_ORDER 的新階不略過，依出現順序接在最後

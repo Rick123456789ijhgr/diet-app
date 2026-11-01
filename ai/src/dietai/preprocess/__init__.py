@@ -20,7 +20,9 @@ from dietai.preprocess.barcode import (
     ladder_variants,
 )
 from dietai.preprocess.config import (
+    DEFAULT_PIPELINES,
     DEFAULT_RUNGS,
+    PIPELINE_STEPS,
     RETAIL_FORMATS,
     FoodConfig,
     InvoiceQrConfig,
@@ -69,7 +71,9 @@ from dietai.preprocess.types import Box, Ellipse, PreprocessWarning, Quad, Rung,
 
 # 對外公開的名稱；新增公開介面時，上方的 import 與此清單兩處都要加
 __all__ = [
+    "DEFAULT_PIPELINES",
     "DEFAULT_RUNGS",
+    "PIPELINE_STEPS",
     "Box",
     "CodeFormat",
     "DecodeHit",

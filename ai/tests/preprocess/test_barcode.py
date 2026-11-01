@@ -16,6 +16,7 @@ from dietai.preprocess import (
     ean13_check_digit,
     ean13_checksum_ok,
     ladder_variants,
+    ops,
 )
 from dietai.synthetic import (
     brightness_gradient,
@@ -335,3 +336,88 @@ def test_code_format_old_import_path_still_works():
     from dietai.preprocess import decoders, types
 
     assert decoders.CodeFormat is types.CodeFormat
+
+
+# ---- Otsu、CLAHE 與疊加流程（ADR 0005 第 5 點）----
+
+PIPE = LadderConfig(
+    rungs=(Rung.PIPELINE,),
+    pipelines=((Rung.DENOISE, Rung.BINARIZE), (Rung.CLAHE, Rung.OTSU)),
+)
+
+
+def test_otsu_and_clahe_rungs(ean13_img):
+    gray = ops.to_gray(ean13_img)
+    cfg = LadderConfig(rungs=(Rung.OTSU, Rung.CLAHE), clahe_clip=3.0, clahe_tile=4)
+    otsu, clahe = ladder_variants(ean13_img, cfg)
+    assert set(np.unique(otsu.image)) <= {0, 255}
+    np.testing.assert_array_equal(otsu.image, ops.otsu_threshold(gray))
+    np.testing.assert_array_equal(clahe.image, ops.clahe(gray, 3.0, 4))
+    assert clahe.params == {"clip": 3.0, "tile": 4}
+
+
+def test_pipeline_applies_steps_in_order(ean13_img):
+    gray = ops.to_gray(ean13_img)
+    first, second = ladder_variants(ean13_img, PIPE)
+    assert first.rung is second.rung is Rung.PIPELINE
+    expected = ops.adaptive_threshold(ops.median_blur(gray, 3), 31, 5.0)
+    np.testing.assert_array_equal(first.image, expected)
+    assert first.params == {
+        "steps": "denoise+binarize",
+        "denoise.ksize": 3,
+        "binarize.block_size": 31,
+        "binarize.c": 5.0,
+    }
+    np.testing.assert_array_equal(second.image, ops.otsu_threshold(ops.clahe(gray, 2.0, 8)))
+    # 疊加流程與其他階一樣由原圖開始，不受前一階影響
+    alone = LadderConfig(rungs=(Rung.PIPELINE,), pipelines=((Rung.CLAHE, Rung.OTSU),))
+    (again,) = ladder_variants(ean13_img, alone)
+    np.testing.assert_array_equal(again.image, second.image)
+
+
+@pytest.mark.parametrize(
+    "steps", [(Rung.DESKEW, Rung.DENOISE), (Rung.DENOISE, Rung.DESKEW), (Rung.CLAHE, Rung.DESKEW)]
+)
+def test_pipeline_deskew_maps_coordinates_back(zxing, ean13_img, steps):
+    """疊加流程中的旋轉校正，不論在第幾步，四角都要回推到原圖（與單獨的 deskew 階一致）。"""
+    img = rotate(ean13_img, 30)
+    single = decode_with_ladder(img, zxing, LadderConfig(rungs=(Rung.DESKEW,)))
+    cfg = LadderConfig(rungs=(Rung.PIPELINE,), pipelines=(steps,))
+    result = decode_with_ladder(img, zxing, cfg)
+    assert result.success and single.success
+    assert result.attempts[0].params["deskew.applied"] is True
+    for (x1, y1), (x2, y2) in zip(result.hits[0].corners, single.hits[0].corners, strict=True):
+        assert abs(x1 - x2) < 4 and abs(y1 - y2) < 4
+
+
+def test_pipeline_deskew_below_threshold_keeps_going(ean13_img):
+    cfg = LadderConfig(rungs=(Rung.PIPELINE,), pipelines=((Rung.DESKEW, Rung.DENOISE),))
+    (v,) = ladder_variants(ean13_img, cfg)
+    assert v.params["deskew.applied"] is False and not v.skipped
+    np.testing.assert_array_equal(v.image, ops.median_blur(ops.to_gray(ean13_img), 3))
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"pipelines": ((Rung.DENOISE,),)},  # 只有一步
+        {"pipelines": ((Rung.DENOISE, Rung.DENOISE),)},  # 步驟重複
+        {"pipelines": ((Rung.RAW, Rung.BINARIZE),)},  # 不可用的步驟
+        {"pipelines": ((Rung.MULTISCALE, Rung.BINARIZE),)},
+        {"pipelines": (("denoise", "binarize"), (Rung.DENOISE, Rung.BINARIZE))},  # 流程重複
+        {"rungs": (Rung.PIPELINE,), "pipelines": ()},
+        {"clahe_clip": 0.0},
+        {"clahe_tile": 0},
+    ],
+)
+def test_pipeline_config_rejects_invalid(kwargs):
+    with pytest.raises(ValueError):
+        LadderConfig(**kwargs)
+
+
+def test_pipeline_config_round_trips_through_json():
+    loaded = LadderConfig(**json.loads(json.dumps(asdict(PIPE))))
+    assert loaded == PIPE and isinstance(loaded.pipelines[0][0], Rung)
+    # 預設階梯不含疊加流程，上線行為不變
+    assert Rung.PIPELINE not in LadderConfig().rungs
+    assert len(LadderConfig().pipelines) == 5

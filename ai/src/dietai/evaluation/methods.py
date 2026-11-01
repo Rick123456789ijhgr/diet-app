@@ -86,18 +86,24 @@ _TEST_NOTE = "結果表含測試集，不做貪婪選擇（規則 7）；請以 
 
 
 def method_id(rung: Rung, params: Mapping[str, Any]) -> str:
-    """方法代碼：階的代碼；多尺度加上倍率（``multiscale@2``、``multiscale@0.5``）。"""
+    """方法代碼：階的代碼；多尺度加上倍率（``multiscale@2``），疊加流程加上步驟
+    （``pipeline@denoise+binarize``）。"""
     if rung is Rung.MULTISCALE:
         return f"{rung.value}@{float(params['factor']):g}"
+    if rung is Rung.PIPELINE:
+        return f"{rung.value}@{params['steps']}"
     return rung.value
 
 
 def arm_methods(cfg: LadderConfig) -> tuple[str, ...]:
-    """設定中 ``rungs`` 展開後的方法代碼（依階梯順序，多尺度依 ``scales`` 順序）。"""
+    """設定中 ``rungs`` 展開後的方法代碼（依階梯順序，多尺度依 ``scales``、疊加流程依
+    ``pipelines`` 的順序）。"""
     out: list[str] = []
     for rung in cfg.rungs:
         if rung is Rung.MULTISCALE:
             out += [method_id(rung, {"factor": f}) for f in cfg.scales]
+        elif rung is Rung.PIPELINE:
+            out += [method_id(rung, {"steps": "+".join(s.value for s in p)}) for p in cfg.pipelines]
         else:
             out.append(rung.value)
     return tuple(out)
@@ -575,6 +581,61 @@ def greedy_ladder(
     return GreedyResult(tuple(steps), len(variants) - n, stop)
 
 
+def pipeline_vs_parts(
+    rows: Sequence[Mapping[str, str]], arm: str | None = None
+) -> list[dict[str, Any]]:
+    """每條疊加流程與其所含步驟的單一方法比較（研究假設 H3：方法之間會互相干擾）。
+
+    每條流程一列：``pipeline``、``rate``（流程的成功率）、``best_part``（所含步驟中成功率最高的
+    單一方法；並列時取流程中較前者）、``best_rate``、``diff``（流程 − 最佳單一方法）、
+    ``misread``／``best_misread``（誤讀數）。所含步驟沒有單獨執行時 ``best_part`` 為空字串、
+    ``best_rate``／``diff`` 為 ``None``。成功率以正樣本為分母、排除 error（同 ``summarize``）。
+    """
+    if arm is not None:
+        rows = [r for r in rows if r["arm"] == arm]
+    elif len({r["arm"] for r in rows}) > 1:
+        raise ValueError("結果表有多個實驗組，請指定 arm")
+    stats = {s["arm"]: s for s in summarize(method_arms(rows))}
+    out: list[dict[str, Any]] = []
+    prefix = f"{Rung.PIPELINE.value}@"
+    for name, s in stats.items():
+        if not name.startswith(prefix):
+            continue
+        parts = [
+            p for p in name[len(prefix) :].split("+") if p in stats and stats[p]["rate"] is not None
+        ]
+        best = max(parts, key=lambda p: stats[p]["rate"], default="")
+        out.append(
+            {
+                "pipeline": name,
+                "rate": s["rate"],
+                "misread": s["misread"],
+                "best_part": best,
+                "best_rate": stats[best]["rate"] if best else None,
+                "best_misread": stats[best]["misread"] if best else None,
+                "diff": s["rate"] - stats[best]["rate"] if best and s["rate"] is not None else None,
+            }
+        )
+    return out
+
+
+def pipeline_table(comparison: Sequence[Mapping[str, Any]]) -> str:
+    """把 ``pipeline_vs_parts`` 的結果排成 Markdown 表格。"""
+    head = ["疊加流程", "成功率", "誤讀", "最佳單一步驟", "成功率", "誤讀", "差異"]
+    lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+    for c in comparison:
+        rate = "—" if c["rate"] is None else f"{c['rate']:.1%}"
+        if c["best_part"]:
+            best = [c["best_part"], f"{c['best_rate']:.1%}", str(c["best_misread"])]
+        else:
+            best = ["—", "—", "—"]
+        diff = "—" if c["diff"] is None else f"{c['diff']:+.1%}"
+        lines.append(
+            "| " + " | ".join([c["pipeline"], rate, str(c["misread"]), *best, diff]) + " |"
+        )
+    return "\n".join(lines)
+
+
 # ---- 報告 ----
 
 _STOP_TEXT = {
@@ -652,6 +713,16 @@ def methods_report_markdown(
         for tag in by:
             table = summary_table(summarize(per_method, (tag,), baseline), (tag,))
             lines += ["", f"### {arm}：依 `{tag}` 分組", "", table]
+        pipelines = pipeline_vs_parts(sub)
+        if pipelines:
+            lines += [
+                "",
+                f"### {arm}：疊加流程 vs 所含最佳單一步驟（H3）",
+                "",
+                "差異為負表示疊加後反而不如只做其中一步（方法互相干擾）。",
+                "",
+                pipeline_table(pipelines),
+            ]
         min_agree = int(arm_cfg.get(arm, {}).get("ladder", {}).get("min_agree", 1))
         # 要比較的逐步升級順序：開頭步驟（基準）、設定的階梯順序、貪婪選出的順序、呼叫端指定的順序
         ladders: dict[str, Sequence[str]] = {}

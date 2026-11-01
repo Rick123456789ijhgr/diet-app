@@ -147,6 +147,17 @@ def unsharp_mask(img: Image, sigma: float, amount: float) -> Image:
     return np.asarray(out, dtype=np.uint8)
 
 
+def otsu_threshold(img: Image) -> Image:
+    """Otsu 全域二值化，回傳 0／255 的灰階影像；彩色輸入先轉灰階。
+
+    門檻由灰階直方圖自動決定（使前景與背景的類內變異最小），適合前景背景對比明顯、
+    光線均勻的影像；光線不均時不如 ``adaptive_threshold``。
+    """
+    gray = to_gray(img)
+    _, out = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    return np.asarray(out, dtype=np.uint8)
+
+
 def median_blur(img: Image, ksize: int) -> Image:
     """中值濾波（去除椒鹽雜訊），``ksize`` 為奇數、≥ 3。"""
     validate_image(img)
