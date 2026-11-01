@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 
 from dietai.preprocess import ops
 from dietai.preprocess.ops import validate_image
@@ -52,9 +53,19 @@ def gaussian_noise(img: Image, std: float, seed: int = 0) -> Image:
     return np.clip(img.astype(np.float64) + noise, 0, 255).astype(np.uint8)
 
 
-def rotate(img: Image, degrees: float, border: int = 255) -> Image:
-    """以中心逆時針旋轉，畫布擴大以保留整張影像，空白處填 ``border``（同 ``ops.rotate``）。"""
-    return ops.rotate(img, degrees, border)
+def rotate(img: Image, degrees: float, border: int | None = 255) -> Image:
+    """以中心逆時針旋轉，畫布擴大以保留整張影像，空白處填 ``border``（同 ``ops.rotate``）。
+
+    ``border`` 為 ``None`` 時改為延伸邊緣像素：定值填色會在原畫面邊緣形成一圈高對比的
+    人工外框，營養標示定位可能把它當成表格框；真實照片沒有這種外框。
+    """
+    if border is not None:
+        return ops.rotate(img, degrees, border)
+    validate_image(img)
+    m, size = ops.rotation_matrix(img.shape, degrees)
+    mode, value = _border(img, None)
+    out = cv2.warpAffine(img, m, size, flags=cv2.INTER_LINEAR, borderMode=mode, borderValue=value)
+    return np.asarray(out, dtype=np.uint8)
 
 
 def downscale(img: Image, factor: float) -> Image:
@@ -69,6 +80,51 @@ def downscale(img: Image, factor: float) -> Image:
     # 縮小用 INTER_AREA（面積平均），模擬遠拍時解析度不足，不會產生鋸齒狀假影。
     size = (max(1, round(w * factor)), max(1, round(h * factor)))
     return np.asarray(cv2.resize(img, size, interpolation=cv2.INTER_AREA), dtype=np.uint8)
+
+
+def perspective_matrix(
+    shape: tuple[int, ...], strength: float, seed: int = 0
+) -> npt.NDArray[np.float64]:
+    """``perspective`` 使用的 3×3 透視矩陣（原圖座標 → 變形後座標）。
+
+    四角各自向內位移，x、y 方向的幅度為 ``strength`` 倍的寬、高再乘上 0–1 的隨機係數
+    （由 ``seed`` 決定）。同一個 ``seed`` 下隨機係數固定，``strength`` 越大變形越大。
+    """
+    if not 0 <= strength <= 0.4:
+        raise ValueError(f"strength 必須介於 0 與 0.4，收到 {strength}")
+    h, w = shape[:2]
+    rng = np.random.default_rng(seed)
+    src = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float64)
+    # 向內的方向：左上往右下、右上往左下……；只往內縮，變形後的影像不會超出畫布
+    inward = np.array([[1, 1], [-1, 1], [-1, -1], [1, -1]], dtype=np.float64)
+    dst = src + inward * rng.uniform(0, 1, (4, 2)) * strength * np.array([w, h])
+    m = cv2.getPerspectiveTransform(src.astype(np.float32), dst.astype(np.float32))
+    return np.asarray(m, dtype=np.float64)
+
+
+def perspective(img: Image, strength: float, seed: int = 0, border: int | None = 255) -> Image:
+    """模擬斜拍的透視變形：四角向內位移（見 ``perspective_matrix``），畫布尺寸不變。
+
+    空白處填 ``border``；``None`` 為延伸邊緣像素（見 ``rotate``）。
+    """
+    validate_image(img)
+    if strength == 0:
+        return img.copy()
+    h, w = img.shape[:2]
+    m = perspective_matrix(img.shape, strength, seed)
+    mode, value = _border(img, border)
+    out = cv2.warpPerspective(
+        img, m, (w, h), flags=cv2.INTER_LINEAR, borderMode=mode, borderValue=value
+    )
+    return np.asarray(out, dtype=np.uint8)
+
+
+def _border(img: Image, border: int | None) -> tuple[int, tuple[float, ...]]:
+    """``cv2.warpAffine``／``warpPerspective`` 的（borderMode, borderValue）：
+    ``None`` 為延伸邊緣像素（不使用填色值），否則以 ``border`` 定值填色。"""
+    if border is None:
+        return cv2.BORDER_REPLICATE, (0.0,)
+    return cv2.BORDER_CONSTANT, (float(border),) * (3 if img.ndim == 3 else 1)
 
 
 def add_glare(img: Image, radius_ratio: float, seed: int = 0) -> Image:
