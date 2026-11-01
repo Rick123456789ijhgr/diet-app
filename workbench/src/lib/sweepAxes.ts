@@ -36,6 +36,15 @@ export const SWEEP_AXES: SweepAxis[] = [
   },
   { key: 'glare', label: '光斑半徑比例', lo: 0, hi: 0.6, defaultLo: 0, defaultHi: 0.4, step: 0.02 },
   { key: 'rotate_deg', label: '旋轉角度', lo: -90, hi: 90, defaultLo: 0, defaultHi: 45, step: 1 },
+  {
+    key: 'perspective',
+    label: '透視強度',
+    lo: 0,
+    hi: 0.4,
+    defaultLo: 0,
+    defaultHi: 0.3,
+    step: 0.02,
+  },
 ]
 
 /** 依 key 找掃描軸；找不到時退回第一個，呼叫端不必處理 undefined。 */
