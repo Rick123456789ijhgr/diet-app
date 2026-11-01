@@ -119,3 +119,50 @@ def test_run_reports_tag_column_shadowing_result_column(tmp_path):
         "run.py", "--manifest", str(manifest), "--only", "a0_raw", "--out", str(tmp_path / "r")
     )
     assert "同名" in stderr
+
+
+def test_e1_methods_end_to_end(tmp_path):
+    data, runs = tmp_path / "data", tmp_path / "runs"
+    _run("make_synthetic.py", "--out", str(data), "--codes", "1")
+    out = _run(
+        "run_methods.py",
+        "--manifest",
+        str(data / "manifest.csv"),
+        "--only",
+        "a6_full,p1_full_pyzbar",
+        "--out",
+        str(runs),
+        "--label",
+        "methods",
+    )
+    assert "完成" in out
+    (run_dir,) = runs.iterdir()
+    for name in ("methods.csv", "run.json", "summary.md"):
+        assert (run_dir / name).is_file(), name
+    summary = (run_dir / "summary.md").read_text(encoding="utf-8")
+    assert "## 引擎比較（皆不做前處理）" in summary
+
+    # 不指定資料夾時取最新一次 run_methods.py 的結果（這裡用 --out 以外的預設位置，故明確指定）
+    report = _run(
+        "analyze_methods.py",
+        str(run_dir),
+        "--by",
+        "condition",
+        "--max-new-wrong",
+        "1",
+        "--order",
+        "short=raw,gray",
+    )
+    assert "## a6_full：貪婪選擇" in report and "- short：raw > gray" in report
+    for name in ("methods_a6_full.csv", "greedy_a6_full.csv", "greedy_p1_full_pyzbar.csv"):
+        assert (run_dir / name).is_file(), name
+
+
+def test_analyze_methods_rejects_bad_order(tmp_path):
+    proc = subprocess.run(
+        [sys.executable, str(E1 / "analyze_methods.py"), str(tmp_path), "--order", "x"],
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert proc.returncode == 2

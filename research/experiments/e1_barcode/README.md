@@ -104,6 +104,43 @@ python analyze.py runs/<資料夾> --baseline a0_raw --primary z2_default_v2
 紀錄方式採本地執行資料夾，不使用 MLflow／W&B，理由見 `docs/adr/0002-experiment-records.md`。
 正式結論請把 `summary.md` 的關鍵表格與 `run.json` 的 commit、manifest sha256 抄到下方「結論」。
 
+## 每個方法都執行（ADR 0005）
+
+`run.py` 的階梯在第一次有結果時就停止，只看得出「依這個順序加入時」每一步的貢獻。
+`run_methods.py` 改為每張影像執行實驗組 `ladder.rungs` 中的**所有方法、不提早停止**，輸出「變體 × 方法」結果表；
+各方法都從原圖獨立處理，因此任何「方法子集＋順序」的逐步升級都能由結果表離線算出，再以貪婪法選擇步驟與順序
+（設計見 `docs/preprocess-experiment-design.md` 6.3、6.5 節）。
+
+```bash
+python run_methods.py --manifest synthetic/manifest.csv                     # 預設 a6_full（所有階、關閉 zxing-cpp 內建嘗試）
+python run_methods.py --manifest ... --only a6_full,p1_full_pyzbar --label stage0   # 階段零：同時比較引擎
+python analyze_methods.py                                                   # 最新一次結果，預設準則
+python analyze_methods.py runs/<資料夾> --min-gain 2 --max-new-wrong 0 --max-mean-ms 20
+python analyze_methods.py runs/<資料夾> --order frozen=raw,multiscale@2,deskew   # 評估指定順序
+```
+
+- 方法代碼為階的代碼；多尺度的每個倍率各算一個方法（`multiscale@2`、`multiscale@0.5`）。
+- 每個方法以「只含這一階」的設定分別執行，耗時互不影響；單一方法丟出例外只有該方法記為 `error`。
+- 離線算出的逐步升級與 `decode_with_ladder` 實際執行的判定完全相同（含 `min_agree`，有測試比對）；
+  耗時為已嘗試方法的總和，每個方法都含轉灰階，因此比上線時略高。
+- 單一方法的判定同 `run.py`；略過的方法（`deskew` 角度小於門檻）不送解碼、判為未讀到，單獨的成功率應以逐步升級解讀。
+- 結果放在同一個 `runs/` 下（只有 `methods.csv`，沒有 `results.csv`）；`analyze.py` 與工作台的 E1 頁不會列出這種執行。
+
+| 檔案 | 內容 |
+| --- | --- |
+| `methods.csv` | 每張影像 × 實驗組 × 方法一列：`method`、`rung`、`params`、`outcome`、解出的文字與格式、`rejected`、`skipped`、`elapsed_ms`（`preprocess_ms` ＋ `decode_ms`）、標籤欄 |
+| `run.json` | 同 `run.py`，另有 `mode: "methods"` 與各實驗組的方法代碼 |
+| `summary.md` | 引擎比較（多個實驗組時）、單一方法比較（相對 `raw` 的失去／救回）、貪婪選擇各步、逐步升級的離線比較 |
+| `methods_<實驗組>.csv`／`greedy_<實驗組>.csv` | `analyze_methods.py` 寫出的單一方法比較與貪婪選擇各步 |
+
+貪婪法（`dietai.evaluation.greedy_ladder`）：從 `raw`（A0）開始，每一步在尚未加入的方法中，選擇救回最多
+「目前仍未讀到的正樣本」、且新增的誤讀＋負樣本誤報不超過 `--max-new-wrong` 的方法加到最後；
+救回數相同時選平均耗時較低者。救回數低於 `--min-gain`，或剩下的方法都會增加誤讀或超過 `--max-mean-ms` 時停止。
+**選擇只在 dev 上進行**：結果含測試集時 `greedy_ladder` 拒絕執行，報告只評估 `--order` 指定的順序（規則 7）。
+正式實驗前，`--min-gain`、`--max-new-wrong`、`--max-mean-ms` 的數值要寫進下方「結論」並不再修改（ADR 0005 第 7 點）。
+
+`summary.md` 的信賴區間與 McNemar 仍以變體為單位，只供探索；以原始樣本為單位的分析見 ADR 0005 後續工作 2。
+
 ## 合成資料冒煙結果（不是結論）
 
 2026-10-12，4 個條碼 × 16 種條件＋2 張負樣本，模組寬 3 px：消融組整體成功率由 `a0_raw` 37.5% 逐步升到

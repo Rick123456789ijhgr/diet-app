@@ -52,6 +52,7 @@ class RungAttempt:
 
     ``rejected`` 也包含格式不在 ``LadderConfig.accept_formats`` 中的結果（見 ``iter_attempts``）。
     ``hits``／``rejected`` 的座標皆已回推到原圖。
+    ``elapsed_ms`` 含產生影像版本與解碼；``decode_ms`` 只含解碼，兩者相減即前處理耗時。
     """
 
     rung: Rung
@@ -60,6 +61,7 @@ class RungAttempt:
     hits: tuple[DecodeHit, ...]
     rejected: tuple[DecodeHit, ...] = ()
     skipped: bool = False
+    decode_ms: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -190,9 +192,13 @@ def iter_attempts(
             return
         hits: list[DecodeHit] = []
         rejected: list[DecodeHit] = []
+        decode_ms = 0.0
         # skipped 的版本 image 為 None：不解碼，但仍產出一筆（空的）嘗試紀錄
         if variant.image is not None:
-            for hit in decoder(variant.image):
+            decode_start = time.perf_counter()
+            decoded = decoder(variant.image)
+            decode_ms = (time.perf_counter() - decode_start) * 1000
+            for hit in decoded:
                 # 先回推到原圖座標再分類，hits 與 rejected 的座標系才一致
                 mapped = _map_hit(hit, variant.to_original)
                 # 兩種情況捨棄：(1) 設定了允許格式而此格式不在其中；
@@ -212,6 +218,7 @@ def iter_attempts(
             hits=tuple(hits),
             rejected=tuple(rejected),
             skipped=variant.skipped,
+            decode_ms=decode_ms,
         )
         yield variant, attempt
 
