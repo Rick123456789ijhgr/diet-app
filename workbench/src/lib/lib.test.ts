@@ -10,6 +10,7 @@ import {
   pythonCtor,
   setOverride,
 } from './config'
+import { featureText, methodText } from './text'
 import { fitView, toImage, zoomAt } from './viewport'
 
 const blurMin = qualitySchema.fields.find((f) => f.name === 'blur_min')!
@@ -295,5 +296,17 @@ describe('排序、數字輸入與下載', () => {
       Object.assign(URL, original)
       vi.useRealTimers()
     }
+  })
+})
+
+describe('方法代碼與量測值的中文名稱', () => {
+  it('多尺度帶倍率、疊加流程列出步驟，未知代碼原樣顯示', () => {
+    expect(methodText('raw')).toBe('原圖')
+    expect(methodText('multiscale@2')).toBe('多尺度 ×2')
+    expect(methodText('pipeline@denoise+binarize')).toBe('疊加：去雜訊＋自適應二值化')
+    expect(methodText('deskew@x')).toBe('旋轉校正（x）')
+    expect(methodText('mystery')).toBe('mystery')
+    expect(featureText('impulse_ratio')).toBe('椒鹽比例')
+    expect(featureText('new_feature')).toBe('new_feature')
   })
 })

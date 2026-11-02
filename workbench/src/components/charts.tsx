@@ -349,19 +349,23 @@ export function StackedBars({
  * 熱度圖：列×欄的 0–1 比例，格內顯示百分比。
  * - value(row, col) 回傳該格的比例與懸停提示；回傳 undefined 或 rate 為 null 時畫成灰底空格（無資料）。
  * - 顏色深淺以主色的不透明度表示（0.12–1.0），格內同時寫出百分比，不單靠顏色。
+ * - rowLabel 把列鍵轉成顯示文字（預設原樣）；列名較長時以 left 加寬左側（預設 150）。
  */
 export function Heatmap({
   rows,
   cols,
   value,
   label,
+  rowLabel = (r) => r,
+  left = 150,
 }: {
   rows: string[]
   cols: string[]
   value: (row: string, col: string) => { rate: number | null; title: string } | undefined
   label: string
+  rowLabel?: (row: string) => string
+  left?: number
 }) {
-  const left = 150
   // 格寬：把可用寬度平均分給各欄，但最寬 64，欄少時不會被拉得很寬；Math.max(1, …) 防止沒有欄時除以 0。
   // 上方 24 留給欄標題，每列高 26（格高 24＋上下各 1 的間隙）。
   const cell = Math.min(64, (W - left - 8) / Math.max(1, cols.length))
@@ -388,7 +392,7 @@ export function Heatmap({
             textAnchor="end"
             className="fill-ink text-[11px]"
           >
-            {r}
+            {rowLabel(r)}
           </text>
           {cols.map((c, j) => {
             const v = value(r, c)

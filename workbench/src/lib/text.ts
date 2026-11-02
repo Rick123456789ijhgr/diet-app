@@ -66,6 +66,21 @@ export const RUNG_TEXT: Record<string, string> = {
   pipeline: '疊加流程',
 }
 
+/** 自適應策略的品質量測值（dietai.preprocess.features.QualityFeatures）。 */
+export const FEATURE_TEXT: Record<string, string> = {
+  blur: '模糊分數',
+  brightness: '亮度',
+  dark_ratio: '過暗比例',
+  bright_ratio: '過亮比例',
+  contrast: '對比',
+  noise: '雜訊',
+  impulse_ratio: '椒鹽比例',
+  illumination: '光線不均',
+  skew: '傾斜角',
+  short_side: '短邊',
+  glare_ratio: '反光比例',
+}
+
 /** E1 的判定結果（evaluation.Outcome）。 */
 export const OUTCOME_TEXT: Record<string, string> = {
   correct: '正確',
@@ -181,6 +196,18 @@ export const warningText = (code: string) => WARNING_TEXT[code] ?? code
 export const errorText = (code: string) => ERROR_TEXT[code] ?? code
 export const groupText = (group: string) => GROUP_TEXT[group] ?? group
 export const rungText = (rung: string) => RUNG_TEXT[rung] ?? rung
+export const featureText = (f: string) => FEATURE_TEXT[f] ?? f
+/**
+ * 「每個方法都執行」的方法代碼（evaluation.method_id）：多尺度帶倍率（multiscale@2 → 多尺度 ×2），
+ * 疊加流程列出各步驟（pipeline@denoise+binarize → 疊加：去雜訊＋自適應二值化）。
+ */
+export function methodText(id: string): string {
+  const [rung = '', param] = id.split('@')
+  if (param === undefined) return rungText(rung)
+  if (rung === 'multiscale') return `${rungText(rung)} ×${param}`
+  if (rung === 'pipeline') return `疊加：${param.split('+').map(rungText).join('＋')}`
+  return `${rungText(rung)}（${param}）`
+}
 export const outcomeText = (o: string) => OUTCOME_TEXT[o] ?? o
 export const imageKindText = (k: string) => IMAGE_KIND_TEXT[k] ?? k
 export const statusText = (s: string) => STATUS_TEXT[s] ?? s

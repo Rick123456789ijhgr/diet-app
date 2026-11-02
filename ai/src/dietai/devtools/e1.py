@@ -14,11 +14,14 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
+from dietai.devtools.adaptive import adaptive_run_json, is_methods_run
 from dietai.devtools.images import PathNotFoundError, guard_path
 from dietai.devtools.scenes import SceneError
 from dietai.evaluation import (
+    FEATURES_FILE,
     Outcome,
     grouping_columns,
+    list_method_runs,
     list_runs,
     load_arms,
     new_run_dir,
@@ -70,14 +73,25 @@ def list_runs_json(root: str) -> dict[str, Any]:
     return {
         "root": str(folder),
         "runs": [{"name": p.name, "path": str(p)} for p in list_runs(folder)],
+        # 「每個方法都執行」的結果（自適應頁使用）；features 為是否已量測品質
+        "method_runs": [
+            {"name": p.name, "path": str(p), "features": (p / FEATURES_FILE).is_file()}
+            for p in list_method_runs(folder)
+        ],
         "arms": arms,
         "default_arms": [a for a in ("a0_raw", "a6_full") if a in arms],
     }
 
 
 def run_json(run_dir: str) -> dict[str, Any]:
-    """一次執行的完整彙整：各基準組的整體成功率、各標籤分組、成功階、失敗影像與其嘗試紀錄。"""
+    """一次執行的完整彙整：各基準組的整體成功率、各標籤分組、成功階、失敗影像與其嘗試紀錄。
+
+    「每個方法都執行」的資料夾改回傳自適應策略的結果（``devtools.adaptive``，``mode`` 為
+    ``methods``）。
+    """
     folder = resolve_run(run_dir)
+    if is_methods_run(folder):
+        return adaptive_run_json(folder)
     meta, rows = read_run(folder)
     manifest = meta.get("manifest", {})
     tags: list[str] = list(manifest.get("tag_columns", []))

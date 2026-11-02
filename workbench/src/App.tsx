@@ -46,6 +46,10 @@ export const routes = [
         lazy: async () => ({ Component: (await import('@/pages/E1Page')).E1Page }),
       },
       {
+        path: 'm1/adaptive',
+        lazy: async () => ({ Component: (await import('@/pages/AdaptivePage')).AdaptivePage }),
+      },
+      {
         // 冷啟動上傳：須登入，未登入時顯示登入表單，登入後留在原網址
         path: 'coldstart',
         element: <LoginGate />,

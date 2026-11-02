@@ -147,7 +147,7 @@ describe('外框', () => {
   it('總覽列出各模組的工具', () => {
     renderAt('/')
     expect(screen.getByText('影像前處理')).toBeInTheDocument()
-    // 模組一的七個工具都已遷移，另有冷啟動的上傳清單
-    expect(screen.getAllByText('可用')).toHaveLength(8)
+    // 模組一的八個工具（含自適應策略），另有冷啟動的上傳清單
+    expect(screen.getAllByText('可用')).toHaveLength(9)
   })
 })
