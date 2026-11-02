@@ -10,9 +10,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import cv2
+import numpy as np
+import numpy.typing as npt
+
 from dietai import synthetic
 from dietai.preprocess.config import param
+from dietai.preprocess.ops import rotation_matrix
 from dietai.preprocess.types import Image
+
+# 座標點（N×2，x、y）；用來把合成場景的真值四角換算到退化後的影像座標
+Points = npt.NDArray[np.float64]
 
 
 @dataclass(frozen=True)
@@ -255,7 +263,12 @@ def apply(img: Image, d: Degradation) -> Image:
 class SweepAxis:
     """參數掃描的一個維度。
 
-    ``fn(影像, 等級)`` 只收兩個參數，因此光斑與雜訊使用 ``synthetic`` 函式的預設種子。
+    ``fn(影像, 等級)`` 只收兩個參數，因此光斑、雜訊與透視使用 ``synthetic`` 函式的預設種子。
+    ``warp(點, 原圖尺寸, 等級)`` 把原圖座標換算成退化後的座標（與 ``fn`` 的幾何一致），
+    營養標示掃描據此移動真值四角；不改變幾何的退化為 ``None``。
+
+    旋轉與透視以延伸邊緣像素補空白（``border=None``），不像退化表單的白色填邊：
+    白邊會形成人工外框，營養標示定位會把它誤認成表格框。
     """
 
     label: str  # 中文
@@ -265,6 +278,33 @@ class SweepAxis:
     default_lo: float  # 前端未指定時的掃描起點
     default_hi: float  # 前端未指定時的掃描終點
     fn: Callable[[Image, float], Image]
+    warp: Callable[[Points, tuple[int, ...], float], Points] | None = None
+
+
+def _rotate(img: Image, level: float) -> Image:
+    return synthetic.rotate(img, level, border=None)
+
+
+def _perspective(img: Image, level: float) -> Image:
+    return synthetic.perspective(img, level, border=None)
+
+
+def _warp_rotate(pts: Points, shape: tuple[int, ...], level: float) -> Points:
+    m, _ = rotation_matrix(shape, level)
+    return np.asarray(pts @ m[:, :2].T + m[:, 2], dtype=np.float64)
+
+
+def _warp_scale(pts: Points, shape: tuple[int, ...], level: float) -> Points:
+    # 與 synthetic.downscale 相同的取整，換算比例以實際輸出尺寸為準
+    h, w = shape[:2]
+    sx, sy = max(1, round(w * level)) / w, max(1, round(h * level)) / h
+    return np.asarray(pts * np.array([sx, sy]), dtype=np.float64)
+
+
+def _warp_perspective(pts: Points, shape: tuple[int, ...], level: float) -> Points:
+    m = synthetic.perspective_matrix(shape, level)
+    out = cv2.perspectiveTransform(pts.reshape(-1, 1, 2).astype(np.float64), m)
+    return np.asarray(out.reshape(-1, 2), dtype=np.float64)
 
 
 SWEEP_AXES: dict[str, SweepAxis] = {
@@ -277,14 +317,28 @@ SWEEP_AXES: dict[str, SweepAxis] = {
     "gradient": SweepAxis(
         "亮度梯度強度", "Brightness gradient", 0.0, 1.0, 0.0, 0.9, synthetic.brightness_gradient
     ),
-    "scale": SweepAxis("縮小倍率", "Downscale factor", 0.05, 1.0, 0.1, 1.0, synthetic.downscale),
+    "scale": SweepAxis(
+        "縮小倍率", "Downscale factor", 0.05, 1.0, 0.1, 1.0, synthetic.downscale, _warp_scale
+    ),
     "noise_std": SweepAxis(
         "高斯雜訊標準差", "Gaussian noise std", 0.0, 80.0, 0.0, 40.0, synthetic.gaussian_noise
     ),
     "glare": SweepAxis(
         "光斑半徑比例", "Glare radius ratio", 0.0, 0.6, 0.0, 0.4, synthetic.add_glare
     ),
-    "rotate_deg": SweepAxis("旋轉角度", "Rotation (deg)", -90.0, 90.0, 0.0, 45.0, synthetic.rotate),
+    "rotate_deg": SweepAxis(
+        "旋轉角度", "Rotation (deg)", -90.0, 90.0, 0.0, 45.0, _rotate, _warp_rotate
+    ),
+    "perspective": SweepAxis(
+        "透視強度",
+        "Perspective strength",
+        0.0,
+        0.4,
+        0.0,
+        0.3,
+        _perspective,
+        _warp_perspective,
+    ),
 }
 
 

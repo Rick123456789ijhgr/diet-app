@@ -1354,7 +1354,8 @@ components:
       properties:
         target:
           type: string
-          enum: [quality, barcode]
+          description: quality：品質檢查；barcode：條碼解碼；label：營養標示定位（合成場景對真實四角評分）
+          enum: [quality, barcode, label]
         params:
           type: object
           additionalProperties: true

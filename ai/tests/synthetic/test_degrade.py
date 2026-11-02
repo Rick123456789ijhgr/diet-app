@@ -1,5 +1,6 @@
 """合成退化的回歸測試：E1 的合成資料集由這些函式產生，最佳化時輸出必須逐像素不變。"""
 
+import cv2
 import numpy as np
 import pytest
 
@@ -10,7 +11,10 @@ from dietai.synthetic import (
     jpeg,
     label_scene,
     motion_blur,
+    perspective,
+    perspective_matrix,
     reduce_contrast,
+    rotate,
     salt_pepper,
 )
 
@@ -51,6 +55,38 @@ def test_glare_does_not_modify_input():
     img = IMAGES["label"].copy()
     add_glare(img, 0.3)
     np.testing.assert_array_equal(img, IMAGES["label"])
+
+
+def test_perspective_zero_is_identity_and_keeps_size():
+    img = IMAGES["label"]
+    assert np.array_equal(perspective(img, 0), img)
+    out = perspective(img, 0.2)
+    assert out.shape == img.shape
+    with pytest.raises(ValueError):
+        perspective(img, 0.5)
+
+
+def test_perspective_moves_corners_inward_more_with_strength():
+    shape = (200, 300)
+    corners = np.array([[0, 0], [300, 0], [300, 200], [0, 200]], dtype=np.float64)
+
+    def moved(strength):
+        m = perspective_matrix(shape, strength)
+        out = cv2.perspectiveTransform(corners.reshape(-1, 1, 2), m).reshape(-1, 2)
+        return np.linalg.norm(out - corners, axis=1)
+
+    assert np.all(moved(0.1) > 0)
+    assert np.all(moved(0.3) > moved(0.1))
+
+
+@pytest.mark.parametrize(
+    "fn", [lambda im: rotate(im, 30, border=None), lambda im: perspective(im, 0.3, border=None)]
+)
+def test_border_none_extends_edges_instead_of_white(fn):
+    # 全黑影像延伸邊緣後仍全黑；定值填色（預設 255）則會出現白邊
+    img = np.zeros((80, 120, 3), dtype=np.uint8)
+    assert fn(img).max() == 0
+    assert rotate(img, 30).max() == 255
 
 
 # ---- ADR 0005 新增的劣化 ----
