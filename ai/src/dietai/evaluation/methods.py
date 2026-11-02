@@ -371,32 +371,36 @@ def simulate_ladder(
     variants = _variants(rows, arm)
     _check_methods(variants, order)
     label = name or ">".join(order)
-    out: list[dict[str, Any]] = []
-    for v in variants:
-        res = _ladder(v, order, min_agree)
-        tags = {k: val for k, val in v.row.items() if k not in METHOD_COLUMNS}
-        out.append(
-            {
-                # 欄位順序同 RESULT_COLUMNS
-                "id": v.row["id"],
-                "image": v.row["image"],
-                "arm": label,
-                "truth": v.truth,
-                "split": v.row["split"],
-                "outcome": res.outcome.value,
-                "success_rung": "" if res.index is None else order[res.index],
-                "success_index": "" if res.index is None else res.index,
-                "first_rung": res.first,
-                "attempts": res.tried,
-                "elapsed_ms": f"{res.elapsed_ms:.3f}",
-                "decoded": "|".join(text for _, text in res.hits),
-                "formats": "|".join(fmt for fmt, _ in res.hits),
-                "rejected": res.rejected,
-                "error": res.error,
-                **tags,
-            }
-        )
-    return out
+    return [_result_row(v, _ladder(v, order, min_agree), order, label) for v in variants]
+
+
+def _result_row(
+    v: _Variant, res: _LadderOutcome, order: Sequence[str], label: str, extra_ms: float = 0.0
+) -> dict[str, Any]:
+    """一個變體依 ``order`` 逐步升級的結果列（欄位同 ``RESULT_COLUMNS``，後接標籤欄）。
+
+    ``extra_ms`` 加到耗時（例如自適應策略的品質量測）。
+    """
+    tags = {k: val for k, val in v.row.items() if k not in METHOD_COLUMNS}
+    return {
+        # 欄位順序同 RESULT_COLUMNS
+        "id": v.row["id"],
+        "image": v.row["image"],
+        "arm": label,
+        "truth": v.truth,
+        "split": v.row["split"],
+        "outcome": res.outcome.value,
+        "success_rung": "" if res.index is None else order[res.index],
+        "success_index": "" if res.index is None else res.index,
+        "first_rung": res.first,
+        "attempts": res.tried,
+        "elapsed_ms": f"{res.elapsed_ms + extra_ms:.3f}",
+        "decoded": "|".join(text for _, text in res.hits),
+        "formats": "|".join(fmt for fmt, _ in res.hits),
+        "rejected": res.rejected,
+        "error": res.error,
+        **tags,
+    }
 
 
 def method_arms(rows: Sequence[Mapping[str, str]]) -> list[dict[str, str]]:

@@ -221,3 +221,27 @@ def test_make_variants_then_run_methods(tmp_path):
         check=False,
     )
     assert proc.returncode == 2 and "不覆寫" in proc.stderr
+
+
+def test_adaptive_end_to_end(tmp_path):
+    data, runs = tmp_path / "data", tmp_path / "runs"
+    _run("make_synthetic.py", "--out", str(data), "--codes", "1")
+    _run("run_methods.py", "--manifest", str(data / "manifest.csv"), "--out", str(runs))
+    (run_dir,) = runs.iterdir()
+    report = _run("adaptive.py", str(run_dir), "--tune", "--gate", "blur<100")
+    assert "## 規則" in report and "## 門檻調整（dev）" in report and "`blur < 100`" in report
+    assert "| greedy |" in report  # 預設以同一份結果貪婪選出的逐步升級為基準
+    for name in (
+        "features.csv",
+        "adaptive_r0_default_tuned.csv",
+        "feature_bins.csv",
+        "summary_adaptive_r0_default_tuned.md",
+        "policy_r0_default_tuned.json",
+    ):
+        assert (run_dir / name).is_file(), name
+    # 沿用調整後的策略與已量測的品質，以凍結的順序比較
+    tuned = run_dir / "policy_r0_default_tuned.json"
+    again = _run("adaptive.py", str(run_dir), "--policy", str(tuned), "--order", "f=raw,deskew")
+    assert "量測" not in again.splitlines()[0] and "| f |" in again
+    assert "--gate" in _fail("adaptive.py", str(run_dir), "--gate", "blur<=1")
+    assert "multiscale@9" in _fail("adaptive.py", str(run_dir), "--order", "x=raw,multiscale@9")

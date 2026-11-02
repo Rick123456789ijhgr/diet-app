@@ -1,0 +1,15 @@
+{
+  "name": "r0_default",
+  "description": "設計 6.7 節的規則範例對應到條碼方法；門檻為合成資料上的粗略起點，待 dev 調整",
+  "start": ["raw"],
+  "rules": [
+    {"feature": "skew", "op": ">", "threshold": 5, "methods": ["deskew", "pipeline@deskew+denoise+binarize"], "note": "傾斜角度超過門檻 → Deskew"},
+    {"feature": "impulse_ratio", "op": ">", "threshold": 0.01, "methods": ["denoise", "pipeline@denoise+binarize"], "note": "椒鹽雜訊明顯 → 中值濾波"},
+    {"feature": "contrast", "op": "<", "threshold": 90, "methods": ["clahe", "pipeline@clahe+binarize"], "note": "對比低 → CLAHE"},
+    {"feature": "illumination", "op": ">", "threshold": 0.2, "methods": ["binarize"], "note": "光線不均 → 自適應二值化"},
+    {"feature": "short_side", "op": "<", "threshold": 400, "methods": ["multiscale@2"], "note": "目標過小 → 放大"},
+    {"feature": "blur", "op": "<", "threshold": 100, "methods": ["sharpen"], "note": "模糊 → 銳化"}
+  ],
+  "fallback": ["pipeline@deskew+denoise+binarize", "multiscale@2"],
+  "max_attempts": 4
+}
