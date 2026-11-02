@@ -1,4 +1,4 @@
-.PHONY: up down db-up setup test lint gen test-api test-ai test-web lint-api lint-ai lint-web workbench workbench-dev e1-synthetic
+.PHONY: up down db-up setup setup-paddle test lint gen test-api test-ai test-web lint-api lint-ai lint-web workbench workbench-dev e1-synthetic
 
 # Windows（PowerShell／cmd 下由 cmd.exe 執行）與 Linux／macOS（sh）共用：
 # 指令只用兩邊都支援的語法，含斜線的執行檔路徑一律加引號。
@@ -36,6 +36,11 @@ db-up:
 setup:
 	cd ai && python -m venv .venv
 	cd ai && "$(VENV_BIN)/python" -m pip install -e ".[dev,vision,grpc]"
+
+# PaddleOCR 的獨立環境 ai/.venv-paddle（與專案的 OpenCV 版本衝突，見 ai/requirements-paddle.txt）
+setup-paddle:
+	cd ai && python -m venv .venv-paddle
+	cd ai && "$(subst .venv,.venv-paddle,$(VENV_BIN))/python" -m pip install -r requirements-paddle.txt
 
 test: test-api test-ai test-web
 

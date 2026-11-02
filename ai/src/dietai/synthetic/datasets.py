@@ -22,7 +22,13 @@ from dietai.synthetic.degrade import (
     rotate,
     scale_brightness,
 )
-from dietai.synthetic.scenes import ean13_codes, ean13_scene, label_scene
+from dietai.synthetic.scenes import (
+    _LABEL_ROWS,
+    ean13_codes,
+    ean13_scene,
+    label_perspective_scene,
+    label_scene,
+)
 
 # 條件 → 退化函式與等級。等級以模組寬 3 px 的 EAN-13 試出：涵蓋「只用原圖就成功」、
 # 「只用原圖失敗、逐步升級救回」與「兩者都失敗」三種情形，讓消融結果有差異可看。
@@ -119,6 +125,71 @@ def write_barcode_dataset(
         "module_px": module_px,
         "negatives": negatives,
         "conditions": {k: list(v[1]) for k, v in BARCODE_CONDITIONS.items()},
+    }
+    manifest.with_suffix(".json").write_text(
+        json.dumps(params, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return manifest
+
+
+# 合成營養標示的真值：與 ``scenes.nutrition_label`` 畫出的各列一致（只有每份一欄）
+LABEL_TRUTH: dict[str, object] = {
+    "columns": ["per_serving"],
+    "header": {"serving_size": "30 g", "servings": "6"},
+    "facts": {
+        "energy": ["152 kcal"],
+        "protein": ["2.1 g"],
+        "fat": ["8.4 g"],
+        "saturated_fat": ["3.2 g"],
+        "trans_fat": ["0 g"],
+        "carbohydrate": ["17.0 g"],
+        "sugar": ["1.5 g"],
+        "sodium": ["125 mg"],
+    },
+}
+
+
+def write_label_dataset(
+    out_dir: str | Path,
+    n: int = 4,
+    seed: int = 0,
+    strength: float = 0.15,
+) -> Path:
+    """在 ``out_dir`` 寫出合成營養標示（透視變形貼在桌面上）、各自的真值 JSON 與 ``manifest.csv``。
+
+    每張影像的透視由 ``seed + i`` 決定；真值含欄位（``LABEL_TRUTH``）、真實四角與全文。
+    標籤欄為 ``source_id``（每張各自一個）與 ``strength``，``split`` 一律為 ``dev``。
+    內容為英文（OpenCV 無法繪製中文），只供演練流程，不代表真實營養標示。
+    """
+    if n < 1:
+        raise ValueError(f"n 至少為 1，收到 {n}")
+    out = Path(out_dir)
+    text = "\n".join(["Nutrition Facts", *(f"{k.strip()} {v}" for k, v in _LABEL_ROWS)])
+    rows: list[dict[str, str]] = []
+    for i in range(n):
+        name = f"l{i:02d}"
+        img, quad = label_perspective_scene(strength=strength, seed=seed + i)
+        write_image(out / "images" / f"{name}.png", img)
+        truth = {**LABEL_TRUTH, "quad": np.asarray(quad).round(2).tolist(), "text": text}
+        truth_rel = f"truth/{name}.json"
+        (out / "truth").mkdir(parents=True, exist_ok=True)
+        (out / truth_rel).write_text(json.dumps(truth, ensure_ascii=False, indent=2), "utf-8")
+        rows.append(
+            {
+                "id": name,
+                "image": f"images/{name}.png",
+                "truth": truth_rel,
+                "split": "dev",
+                SOURCE_COLUMN: name,
+                "strength": f"{strength:g}",
+            }
+        )
+    manifest = write_manifest(out / "manifest.csv", rows, (SOURCE_COLUMN, "strength"))
+    params = {
+        "generator": "dietai.synthetic.write_label_dataset",
+        "n": n,
+        "seed": seed,
+        "strength": strength,
     }
     manifest.with_suffix(".json").write_text(
         json.dumps(params, ensure_ascii=False, indent=2), encoding="utf-8"

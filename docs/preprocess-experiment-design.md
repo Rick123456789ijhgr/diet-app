@@ -550,7 +550,7 @@
 | 疊加型固定流程 | 已有：`Rung.PIPELINE` 與 `LadderConfig.pipelines`（條碼，預設 C-01～C-05；新增 Otsu、CLAHE 單一方法）、`evaluation.pipeline_vs_parts`（H3） |
 | 逐步升級的離線計算與貪婪選擇 | 已有：`simulate_ladder`、`greedy_ladder`、`e1_barcode/analyze_methods.py`（條碼） |
 | 以原始樣本為單位的 bootstrap、Holm 校正 | 已有：`stats.cluster_bootstrap_diff`（p 值為集群符號翻轉置換檢定）、`stats.holm`、`compare_by_source`；混合效果模型未實作 |
-| OCR 引擎、欄位正確率、CER；真實照片的定位誤差評估 | **未實作** |
+| OCR 引擎、欄位正確率、CER；真實照片的定位誤差評估 | 部分：真值格式、欄位解析、欄位正確率、定位誤差、CER 已有（`evaluation.label`、`label_parsing.fields`）；OCR 介面、快取、Tesseract adapter、批次評估（`evaluation.label_run`、`research/experiments/e2_label`）已有；**PaddleOCR 待決定安裝方式**（與 OpenCV 版本衝突） |
 | 規則式自適應策略 | **未實作**（量測函式已有） |
 
 ## 附錄 B：修訂紀錄（相對於初版）
