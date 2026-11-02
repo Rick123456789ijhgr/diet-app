@@ -40,6 +40,7 @@ tests/
 - 設定欄位以 `config.param()` 宣告中英文名稱、說明、範圍與 `calibrate`，工作台據此自動產生表單。
 - 條碼／QR 解碼只透過 `preprocess.decoders.Decoder` 介面；`ZxingDecoder` 為預設實作，`PyzbarDecoder` 僅供實驗對照（ZBar 會轉碼 QR 內容，不可用於電子發票）。
 - 條碼逐步升級的每一階都由原圖獨立產生，順序與啟用由 `LadderConfig.rungs` 控制；新增一階時加到 `types.Rung` 與 `barcode.ladder_variants`。疊加多個處理的固定流程以 `pipeline` 階表示（`LadderConfig.pipelines`），同樣由原圖開始；新的流程步驟加到 `config.PIPELINE_STEPS` 與 `barcode._pixel_step`。
+- 自適應策略（`preprocess.adaptive`）只決定嘗試順序、不執行處理，方法以 `evaluation.methods.method_id` 的代碼表示；新增品質量測值加到 `features.QualityFeatures`（規則以欄位名稱引用）。門檻調整只能用 dev（`tune_policy` 遇到測試集會拒絕）。
 - 實驗的執行、判定與統計放在 `evaluation`，`research/` 的腳本只解析參數；讀 manifest 一律經 `evaluation.read_manifest`（測試集鎖定）。
 - 單元測試不得呼叫真實 LLM 或網路；使用假實作（fake）。
 - 隨機性（抽樣、bootstrap）一律接受 `seed` 參數。

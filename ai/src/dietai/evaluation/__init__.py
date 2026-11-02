@@ -5,6 +5,22 @@
 需要 ``vision`` extra（讀取影像與解碼）。
 """
 
+# E1 規則式自適應策略的離線評估（ADR 0005 後續 6）
+from dietai.evaluation.adaptive import (
+    FEATURES_FILE,
+    PolicyScore,
+    TuneResult,
+    adaptive_report_markdown,
+    feature_bins,
+    gate_confusion,
+    measure_manifest,
+    read_features,
+    score_policy,
+    simulate_adaptive,
+    tune_policy,
+    write_features,
+)
+
 # E1 條碼消融：實驗組設定、單張判定、批次執行、讀取與彙整報告
 from dietai.evaluation.barcode import (
     Arm,
@@ -93,6 +109,7 @@ __all__ = [
     "Arm",
     "ClusterComparison",
     "DEFAULT_QUAD_TOL",
+    "FEATURES_FILE",
     "FieldScore",
     "GreedyCriteria",
     "GreedyResult",
@@ -101,14 +118,19 @@ __all__ = [
     "Manifest",
     "ManifestItem",
     "Outcome",
+    "PolicyScore",
     "RunSummary",
     "SplitLockedError",
+    "TuneResult",
+    "adaptive_report_markdown",
     "arm_methods",
     "cer",
     "cluster_bootstrap_diff",
     "compare_by_source",
     "evaluate",
+    "feature_bins",
     "first_rung",
+    "gate_confusion",
     "greedy_ladder",
     "grouping_columns",
     "holm",
@@ -125,6 +147,7 @@ __all__ = [
     "load_label_truth",
     "located",
     "mcnemar_exact",
+    "measure_manifest",
     "method_arms",
     "method_id",
     "methods_in",
@@ -133,6 +156,7 @@ __all__ = [
     "paired_counts",
     "pipeline_vs_parts",
     "quad_error",
+    "read_features",
     "read_image",
     "read_label_run",
     "read_manifest",
@@ -144,10 +168,14 @@ __all__ = [
     "run_label_ocr",
     "run_methods",
     "score_fields",
+    "score_policy",
+    "simulate_adaptive",
     "simulate_ladder",
     "summarize",
     "summarize_label",
+    "tune_policy",
     "wilson_interval",
+    "write_features",
     "write_image",
     "write_manifest",
 ]
