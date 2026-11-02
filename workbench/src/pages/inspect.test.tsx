@@ -25,9 +25,9 @@ beforeEach(() => {
   requests.length = 0
 })
 
-describe('品質檢查頁', () => {
+describe('單張檢視：品質檢查', () => {
   it('合成影像後顯示檢查結果與指標', async () => {
-    renderAt('/m1/quality')
+    renderAt('/m1/inspect/quality')
     expect(await screen.findByText('通過品質檢查', {}, { timeout: 3000 })).toBeInTheDocument()
     expect(screen.getByText('模糊分數')).toBeInTheDocument()
     expect(screen.getByText('900')).toBeInTheDocument()
@@ -45,8 +45,9 @@ describe('品質檢查頁', () => {
 
   it('調整退化後送出新的退化影像並顯示警告', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/quality')
+    renderAt('/m1/inspect/quality')
     await screen.findByText('通過品質檢查', {}, { timeout: 3000 })
+    await user.click(screen.getByRole('button', { name: '加入模糊 σ' }))
     const sigma = screen.getByLabelText('模糊 σ', { selector: 'input' })
     await user.clear(sigma)
     await user.type(sigma, '4')
@@ -58,9 +59,9 @@ describe('品質檢查頁', () => {
 
   it('只送出與預設值不同的參數', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/quality')
+    renderAt('/m1/inspect/quality')
     await screen.findByText('通過品質檢查', {}, { timeout: 3000 })
-    await user.click(screen.getByRole('tab', { name: /參數/ }))
+    await user.click(screen.getByRole('button', { name: /品質檢查參數/ }))
     const blurMin = screen.getByLabelText('模糊下限', { selector: 'input' })
     await user.clear(blurMin)
     await user.type(blurMin, '1500')
@@ -72,9 +73,9 @@ describe('品質檢查頁', () => {
 
   it('參數不合法時標出欄位', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/quality')
+    renderAt('/m1/inspect/quality')
     await screen.findByText('通過品質檢查', {}, { timeout: 3000 })
-    await user.click(screen.getByRole('tab', { name: /參數/ }))
+    await user.click(screen.getByRole('button', { name: /品質檢查參數/ }))
     const blurMin = screen.getByLabelText('模糊下限', { selector: 'input' })
     // jsdom 的 number 輸入框會丟掉打到一半的「-」，直接給完整值
     fireEvent.change(blurMin, { target: { value: '-5' } })
@@ -92,7 +93,7 @@ describe('品質檢查頁', () => {
         ),
       ),
     )
-    renderAt('/m1/quality')
+    renderAt('/m1/inspect/quality')
     const alert = await screen.findByRole('alert', {}, { timeout: 5000 })
     expect(within(alert).getByText(/Python 服務沒有回應/)).toBeInTheDocument()
   })
@@ -113,7 +114,7 @@ describe('品質檢查頁', () => {
         }),
       ),
     )
-    renderAt('/m1/quality')
+    renderAt('/m1/inspect/quality')
     expect(await screen.findByText('未通過', {}, { timeout: 3000 })).toBeInTheDocument()
     const mark = (label: string) => screen.getByText(label).parentElement!.textContent
     expect(mark('過暗比例')).toContain('✕')
@@ -124,7 +125,7 @@ describe('品質檢查頁', () => {
 
   it('直方圖檢視標出門檻', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/quality')
+    renderAt('/m1/inspect/quality')
     await screen.findByText('通過品質檢查', {}, { timeout: 3000 })
     await user.click(screen.getByRole('radio', { name: /直方圖/ }))
     expect(await screen.findByText('過暗灰階 30')).toBeInTheDocument()
@@ -147,7 +148,7 @@ describe('外框', () => {
   it('總覽列出各模組的工具', () => {
     renderAt('/')
     expect(screen.getByText('影像前處理')).toBeInTheDocument()
-    // 模組一的八個工具（含自適應策略），另有冷啟動的上傳清單
-    expect(screen.getAllByText('可用')).toHaveLength(9)
+    // 模組一的五個工具（單張檢視、參數掃描、資料夾批次、E1 消融、自適應策略），另有冷啟動的上傳清單
+    expect(screen.getAllByText('可用')).toHaveLength(6)
   })
 })

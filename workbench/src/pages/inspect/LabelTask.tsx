@@ -1,4 +1,4 @@
-// 模組一：營養標示。定位表格框並透視校正，再處理反光與增強對比。
+// 單張檢視的「營養標示」任務：定位表格框並透視校正，再處理反光與增強對比。
 import { Crop, Download, FileOutput, Flashlight, ListOrdered, ScanLine } from 'lucide-react'
 import { useState } from 'react'
 
@@ -11,9 +11,8 @@ import {
   type Point,
 } from '@/api/client'
 import { ConfigIO } from '@/components/ConfigIO'
-import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { ImageViewer } from '@/components/ImageViewer'
-import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Split } from '@/components/layout/Workspace'
 import { FOUND, Quad, TRUTH } from '@/components/overlays'
 import { ParamForm } from '@/components/ParamForm'
 import {
@@ -27,16 +26,16 @@ import {
   WarningBadges,
 } from '@/components/results'
 import { StepsTable } from '@/components/StepsTable'
-import { ToolPanel } from '@/components/ToolPanel'
-import { Badge, Segmented } from '@/components/ui/primitives'
+import { Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass } from '@/hooks/useConfigSchemas'
-import { useImagePipeline } from '@/hooks/useImagePipeline'
 import { useRenderView } from '@/hooks/useRenderView'
 import { valueOf } from '@/lib/config'
 import { CORNER_NAMES, mean, quadErrors } from '@/lib/geometry'
 import { QUAD_METHOD_TEXT } from '@/lib/text'
+
+import { InspectWorkspace, type InspectShared } from './shared'
 
 type ViewKind = 'located' | 'edges' | 'glare' | 'output' | 'steps'
 
@@ -50,22 +49,28 @@ const VIEWS = [
 ]
 
 /**
- * 營養標示工具頁（`LabelConfig`）。
+ * 營養標示任務（`LabelConfig`）。
  *
  * 資料流：
- * 1. `useImagePipeline('nutrition')` 產生合成標示或上傳照片，再套用模擬退化，得到 `image`。
+ * 1. 單張檢視共用的影像管線（`shared.pipeline`）提供套用模擬退化後、要分析的 `image`。
  * 2. `useAnalysis` 以「影像 id＋參數覆寫（防抖後）」呼叫 `/dev/label`，取得四角、定位方法、
  *    光斑比例與輸出影像；參數改變時保留上一次結果並淡化，舊請求經 `signal` 取消。
  * 3. 「邊緣」「光斑遮罩」分頁另外查詢診斷檢視（`useRenderView`），只在分頁開啟時送出。
  *
  * 唯一在前端計算的數字是「四角誤差」（與合成真值比較，`lib/geometry.ts`），屬評測顯示的例外。
  */
-export function LabelPage() {
+export function LabelTask({
+  shared,
+  config,
+  setConfig,
+}: {
+  shared: InspectShared
+  /** 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）；放在頁面層，切換任務時保留 */
+  config: ConfigOverride
+  setConfig: (c: ConfigOverride) => void
+}) {
   const label = useConfigClass('LabelConfig')
-  const degradationSchema = useConfigClass('Degradation').schema
-  const pipeline = useImagePipeline('nutrition')
-  // 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）
-  const [config, setConfig] = useState<ConfigOverride>({})
+  const { pipeline } = shared
   const [view, setView] = useState<ViewKind>('located')
   const image = pipeline.image
 
@@ -97,16 +102,11 @@ export function LabelPage() {
     return f ? valueOf(f, cfg) : undefined
   }
 
-  const panel = (
-    <ToolPanel
+  return (
+    <InspectWorkspace
+      shared={shared}
       changed={Object.keys(config).length}
-      image={
-        <ImageSourcePanel
-          pipeline={pipeline}
-          scene="nutrition"
-          degradationSchema={degradationSchema}
-        />
-      }
+      busy={pipeline.pending || analysis.busy}
       params={
         label.schema ? (
           <ParamForm
@@ -123,21 +123,6 @@ export function LabelPage() {
       }
       io={
         label.schema && <ConfigIO schema={label.schema} overrides={config} onImport={setConfig} />
-      }
-    />
-  )
-
-  return (
-    <Workspace
-      panel={panel}
-      title="營養標示"
-      description="定位表格框並透視校正，再處理反光與增強對比；各段可在「參數」個別關閉。"
-      aside={
-        (pipeline.pending || analysis.busy) && (
-          <Badge tone="primary" aria-live="polite">
-            計算中…
-          </Badge>
-        )
       }
     >
       {/* AnalysisFrame 只在影像與結果屬於同一張圖時才呼叫 children，避免舊四角疊到新影像上 */}
@@ -295,7 +280,7 @@ export function LabelPage() {
                   ) : !rendered.data ? (
                     <EmptyState>載入中…</EmptyState>
                   ) : view === 'glare' && rendered.data.data?.enabled === false ? (
-                    <EmptyState>光斑步驟未啟用（參數「步驟開關」）。</EmptyState>
+                    <EmptyState>光斑步驟未啟用（左側「營養標示參數 → 步驟開關」）。</EmptyState>
                   ) : rendered.data.image ? (
                     <ImageViewer
                       fill
@@ -313,6 +298,6 @@ export function LabelPage() {
           )
         }}
       </AnalysisFrame>
-    </Workspace>
+    </InspectWorkspace>
   )
 }

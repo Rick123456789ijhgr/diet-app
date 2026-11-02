@@ -1,5 +1,5 @@
-// 模組一：條碼與電子發票 QR。逐步升級：依序嘗試各階影像，第一次成功即停止。
-import { Barcode, Binary, Layers, ListOrdered, QrCode, ScanSearch } from 'lucide-react'
+// 單張檢視的「商品條碼」與「發票 QR」任務。逐步升級：依序嘗試各階影像，第一次成功即停止。
+import { Binary, Layers, ListOrdered, ScanSearch } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import {
@@ -14,17 +14,9 @@ import {
   type RungAttempt,
 } from '@/api/client'
 import { ConfigIO } from '@/components/ConfigIO'
-import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { ImageViewer } from '@/components/ImageViewer'
 import { LadderControls } from '@/components/LadderControls'
-import {
-  EmptyState,
-  MainView,
-  ReadoutBlock,
-  Section,
-  Split,
-  Workspace,
-} from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Section, Split } from '@/components/layout/Workspace'
 import { FOUND, Quad } from '@/components/overlays'
 import { ParamForm } from '@/components/ParamForm'
 import {
@@ -36,22 +28,22 @@ import {
   StatusCard,
   WarningBadges,
 } from '@/components/results'
-import { ToolPanel } from '@/components/ToolPanel'
 import { Badge, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis, usePairedResult } from '@/hooks/useAnalysis'
 import { useConfigClass, useConfigSchemas } from '@/hooks/useConfigSchemas'
-import { syntheticSource, useImagePipeline } from '@/hooks/useImagePipeline'
 import { useRenderView } from '@/hooks/useRenderView'
 import { asciiPreview, fromBase64, hexPreview } from '@/lib/bytes'
 import { rungText } from '@/lib/text'
+
+import { InspectWorkspace, type InspectShared } from './shared'
 
 /** barcode：商品條碼（EAN-13 等）；invoice：電子發票左右兩個 QR */
 type Mode = 'barcode' | 'invoice'
 type ViewKind = 'hits' | 'rung' | 'steps' | 'bytes'
 
-/** 頁面的參數狀態：階梯（LadderConfig）與解碼器（ZxingConfig）兩組覆寫，一起作為查詢鍵 */
-interface LadderBody {
+/** 參數狀態：階梯（LadderConfig）與解碼器（ZxingConfig）兩組覆寫，一起作為查詢鍵；條碼與發票 QR 共用 */
+export interface LadderBody {
   ladder: ConfigOverride
   zxing: ConfigOverride
 }
@@ -77,26 +69,32 @@ async function runLadder(
 }
 
 /**
- * 條碼與電子發票 QR 工具頁。
+ * 商品條碼與電子發票 QR 任務（mode 由單張檢視依網址決定；切換時以 key 重新掛載）。
  *
  * 資料流：
- * 1. `useImagePipeline` 產生合成條碼／發票或上傳照片，再套用模擬退化，得到 `image`。
+ * 1. 單張檢視共用的影像管線（`shared.pipeline`）提供套用模擬退化後、要分析的 `image`。
  * 2. `analysis`：用目前的階梯與解碼器參數跑完整的逐步升級階梯（`runLadder`）。
  * 3. `baseline`：同樣參數但只嘗試 raw（原圖），作為 E1 消融的對照；只在商品條碼模式啟用。
  * 4. `variant`：「各階影像」分頁中，向後端要某一次嘗試實際送進解碼器的影像（ladder_variant 檢視）。
  *
  * 成功與否、命中的階、警告都來自後端；前端只顯示與切換檢視。
  */
-export function BarcodePage() {
+export function BarcodeTask({
+  shared,
+  mode,
+  body,
+  setBody,
+}: {
+  shared: InspectShared
+  mode: Mode
+  /** 放在頁面層，切換任務時保留 */
+  body: LadderBody
+  setBody: (b: LadderBody) => void
+}) {
   const schemas = useConfigSchemas()
   const ladderSchema = useConfigClass('LadderConfig').schema
   const zxingSchema = useConfigClass('ZxingConfig').schema
-  const degradationSchema = useConfigClass('Degradation').schema
-  const [mode, setMode] = useState<Mode>('barcode')
-  // 合成場景隨模式切換；pipeline 的初始場景固定為 ean13（初始模式為 barcode），之後由 switchMode 換
-  const scene = mode === 'barcode' ? 'ean13' : 'invoice'
-  const pipeline = useImagePipeline('ean13')
-  const [body, setBody] = useState<LadderBody>({ ladder: {}, zxing: {} })
+  const { pipeline } = shared
   const { ladder, zxing } = body
   const [view, setView] = useState<ViewKind>('hits')
   // 「各階影像」分頁選的嘗試序號；null 表示跟隨預設（成功的那一次或最後一次）
@@ -105,17 +103,6 @@ export function BarcodePage() {
 
   // 只更新其中一組覆寫（ladder 或 zxing），另一組保留
   const update = (next: Partial<LadderBody>) => setBody({ ...body, ...next })
-
-  // 切換模式：重設選的嘗試；商品條碼沒有「位元組」分頁，需退回偵測結果；
-  // 合成來源要換成對應場景，上傳的照片則保留不動
-  const switchMode = (m: Mode) => {
-    setMode(m)
-    setAttempt(null)
-    if (m === 'barcode' && view === 'bytes') setView('hits')
-    if (pipeline.source.kind === 'synthetic') {
-      pipeline.setSource(syntheticSource(m === 'barcode' ? 'ean13' : 'invoice'))
-    }
-  }
 
   // 查詢鍵名稱用 mode，兩種模式的結果分開快取
   const analysis = useAnalysis({
@@ -167,14 +154,20 @@ export function BarcodePage() {
   // Rung、CodeFormat 等列舉值由參數結構提供，不在前端寫死
   const enums = schemas.data?.enums ?? {}
   const configError = analysis.configError
-  const panel = (
-    <ToolPanel
-      paramsLabel="階梯參數"
-      // 兩組參數的覆寫數合計，顯示在「階梯參數」標籤旁
+  // 「位元組」分頁只在發票模式出現（商品條碼不需要看原始位元組）
+  const views = [
+    { value: 'hits' as const, label: withIcon(ScanSearch, '偵測結果') },
+    { value: 'rung' as const, label: withIcon(Layers, '各階影像') },
+    { value: 'steps' as const, label: withIcon(ListOrdered, '步驟') },
+    ...(mode === 'invoice' ? [{ value: 'bytes' as const, label: withIcon(Binary, '位元組') }] : []),
+  ]
+
+  return (
+    <InspectWorkspace
+      shared={shared}
+      // 兩組參數的覆寫數合計
       changed={Object.keys(ladder).length + Object.keys(zxing).length}
-      image={
-        <ImageSourcePanel pipeline={pipeline} scene={scene} degradationSchema={degradationSchema} />
-      }
+      busy={pipeline.pending || analysis.busy}
       params={
         ladderSchema && zxingSchema ? (
           <div className="space-y-6">
@@ -218,40 +211,6 @@ export function BarcodePage() {
             onImport={(o) => update({ ladder: o })}
           />
         )
-      }
-    />
-  )
-
-  // 「位元組」分頁只在發票模式出現（商品條碼不需要看原始位元組）
-  const views = [
-    { value: 'hits' as const, label: withIcon(ScanSearch, '偵測結果') },
-    { value: 'rung' as const, label: withIcon(Layers, '各階影像') },
-    { value: 'steps' as const, label: withIcon(ListOrdered, '步驟') },
-    ...(mode === 'invoice' ? [{ value: 'bytes' as const, label: withIcon(Binary, '位元組') }] : []),
-  ]
-
-  return (
-    <Workspace
-      panel={panel}
-      title="條碼與發票 QR"
-      description="逐步升級：依序嘗試原圖、灰階、二值化、去雜訊、旋轉校正、多尺度、銳化，第一次成功即停止。適用於相簿匯入、冷啟動上傳等無法重拍的靜態照片；APP 即時掃描不經此流程。"
-      aside={
-        <div className="flex items-center gap-2">
-          {(pipeline.pending || analysis.busy) && (
-            <Badge tone="primary" aria-live="polite">
-              計算中…
-            </Badge>
-          )}
-          <Segmented
-            label="模式"
-            value={mode}
-            onChange={switchMode}
-            options={[
-              { value: 'barcode', label: withIcon(Barcode, '商品條碼') },
-              { value: 'invoice', label: withIcon(QrCode, '電子發票 QR') },
-            ]}
-          />
-        </div>
       }
     >
       {/* ready 額外要求結果屬於目前模式，切換模式後不會用舊模式的結果畫畫面 */}
@@ -311,7 +270,7 @@ export function BarcodePage() {
                         wide
                         label="條碼內容"
                         value={r.data.hits[0]?.text ?? '—'}
-                        help="檢查碼錯誤的 EAN-13 不算成功（可在「階梯參數 → 驗證」關閉）。"
+                        help="檢查碼錯誤的 EAN-13 不算成功（可在左側「商品條碼參數 → 驗證」關閉）。"
                       />
                     </MetricGrid>
                   </ReadoutBlock>
@@ -474,7 +433,7 @@ export function BarcodePage() {
           )
         }}
       </AnalysisFrame>
-    </Workspace>
+    </InspectWorkspace>
   )
 }
 

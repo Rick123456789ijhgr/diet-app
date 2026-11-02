@@ -1,13 +1,12 @@
-// 模組一：品質檢查。疊加模擬退化，觀察模糊、曝光、解析度三項檢查的結果。
+// 單張檢視的「品質檢查」任務：模糊、曝光、解析度三項檢查的結果。
 import { BarChart3, Download, ImageIcon, ListOrdered, ScanLine, SunMoon } from 'lucide-react'
 import { useState } from 'react'
 
 import { api, artifactUrl, overrideBody, unwrap, type ConfigOverride } from '@/api/client'
 import { ConfigIO } from '@/components/ConfigIO'
 import { Histogram } from '@/components/Histogram'
-import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { ImageViewer } from '@/components/ImageViewer'
-import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Split } from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
 import {
   AnalysisFrame,
@@ -19,14 +18,14 @@ import {
   WarningBadges,
 } from '@/components/results'
 import { StepsTable } from '@/components/StepsTable'
-import { ToolPanel } from '@/components/ToolPanel'
-import { Badge, Segmented } from '@/components/ui/primitives'
+import { Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass } from '@/hooks/useConfigSchemas'
-import { useImagePipeline } from '@/hooks/useImagePipeline'
 import { useRenderView } from '@/hooks/useRenderView'
 import { valueOf } from '@/lib/config'
+
+import { InspectWorkspace, type InspectShared } from './shared'
 
 type ViewKind = 'original' | 'laplacian' | 'exposure' | 'histogram' | 'steps'
 
@@ -40,22 +39,28 @@ const VIEWS = [
 ]
 
 /**
- * 品質檢查工具頁（`QualityConfig`）。
+ * 品質檢查任務（`QualityConfig`）。
  *
  * 資料流：
- * 1. `useImagePipeline('label')` 產生或上傳原圖，再套用左側的模擬退化，得到要分析的 `image`。
+ * 1. 單張檢視共用的影像管線（`shared.pipeline`）提供套用模擬退化後、要分析的 `image`。
  * 2. `useAnalysis` 以「影像 id＋參數覆寫（防抖後）」為查詢鍵呼叫 `/dev/quality`；
  *    參數改變時保留上一次結果並淡化，舊請求經 `signal` 取消。
  * 3. 診斷檢視（邊緣響應、曝光遮罩、直方圖）只在該分頁開啟時另外查詢（`useRenderView`）。
  *
  * 通過與否、分數、比例、警告都取自後端回應；前端只把它們與門檻並列顯示。
  */
-export function QualityPage() {
+export function QualityTask({
+  shared,
+  config,
+  setConfig,
+}: {
+  shared: InspectShared
+  /** 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）；放在頁面層，切換任務時保留 */
+  config: ConfigOverride
+  setConfig: (c: ConfigOverride) => void
+}) {
   const quality = useConfigClass('QualityConfig')
-  const degradationSchema = useConfigClass('Degradation').schema
-  const pipeline = useImagePipeline('label')
-  // 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）
-  const [config, setConfig] = useState<ConfigOverride>({})
+  const { pipeline } = shared
   const [view, setView] = useState<ViewKind>('original')
   const image = pipeline.image
 
@@ -90,12 +95,11 @@ export function QualityPage() {
     return f ? (valueOf(f, cfg) as number) : NaN
   }
 
-  const panel = (
-    <ToolPanel
+  return (
+    <InspectWorkspace
+      shared={shared}
       changed={Object.keys(config).length}
-      image={
-        <ImageSourcePanel pipeline={pipeline} scene="label" degradationSchema={degradationSchema} />
-      }
+      busy={pipeline.pending || analysis.busy}
       params={
         quality.schema ? (
           <ParamForm
@@ -117,22 +121,6 @@ export function QualityPage() {
           <ConfigIO schema={quality.schema} overrides={config} onImport={setConfig} />
         )
       }
-    />
-  )
-
-  // 影像管線或分析任一方還在計算（含防抖等待中）就顯示「計算中…」
-  const busy = (pipeline.pending || analysis.busy) && (
-    <Badge tone="primary" aria-live="polite">
-      計算中…
-    </Badge>
-  )
-
-  return (
-    <Workspace
-      panel={panel}
-      title="品質檢查"
-      description="疊加模擬退化，觀察模糊、曝光、解析度三項檢查的結果。"
-      aside={busy}
     >
       {/* AnalysisFrame 只在影像與結果屬於同一張圖時才呼叫 children，避免舊結果配新影像 */}
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!quality.schema}>
@@ -291,6 +279,6 @@ export function QualityPage() {
           )
         }}
       </AnalysisFrame>
-    </Workspace>
+    </InspectWorkspace>
   )
 }

@@ -3,12 +3,14 @@ import { expect, test } from '@playwright/test'
 // 防抖延遲（hooks/useDebounced 的預設值）；量測延遲時扣掉
 const DEBOUNCE_MS = 150
 
-test('品質檢查：合成影像、調整退化、切換檢視', async ({ page }) => {
-  await page.goto('/m1/quality')
+test('單張檢視・品質檢查：合成影像、調整退化、切換檢視', async ({ page }) => {
+  await page.goto('/m1/inspect/quality')
   await expect(page.getByText('通過品質檢查')).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText('模糊分數')).toBeVisible()
 
   // 拖動退化參數到結果更新的延遲（ADR 0003 目標：本機 < 200 ms，不含防抖）
+  await page.getByRole('button', { name: '加入模糊 σ' }).click()
+  await expect(page.getByText('通過品質檢查')).toBeVisible()
   const sigma = page.getByLabel('模糊 σ', { exact: true }).and(page.locator('input'))
   const start = Date.now()
   await sigma.fill('6')
@@ -20,7 +22,7 @@ test('品質檢查：合成影像、調整退化、切換檢視', async ({ page 
   // 參數：提高模糊下限也會失敗；還原後恢復
   await sigma.fill('0')
   await expect(page.getByText('通過品質檢查')).toBeVisible()
-  await page.getByRole('tab', { name: /參數/ }).click()
+  await page.getByRole('button', { name: /品質檢查參數/ }).click()
   const blurMin = page.getByLabel('模糊下限', { exact: true }).and(page.locator('input'))
   await blurMin.fill('100000')
   await expect(page.getByText('未通過')).toBeVisible()
@@ -40,7 +42,7 @@ test('品質檢查：合成影像、調整退化、切換檢視', async ({ page 
 })
 
 test('上傳影像', async ({ page }) => {
-  await page.goto('/m1/quality')
+  await page.goto('/m1/inspect/quality')
   await expect(page.getByText('通過品質檢查')).toBeVisible({ timeout: 30_000 })
   await page.getByRole('radio', { name: /上傳/ }).click()
   await expect(page.getByText('在左側「影像」選擇要上傳的照片。')).toBeVisible()

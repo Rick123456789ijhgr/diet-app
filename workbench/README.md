@@ -78,13 +78,14 @@ src/
   components/
     layout/           外框（AppShell：左側圖示欄＋頂部列）、工具頁卡片版面（Workspace、Split、MainView）
     ui/primitives.tsx 基本元件（shadcn/ui 風格，以 Radix 為底）
-    ToolPanel.tsx     左側控制面板（影像／參數／匯出入分頁）
+    ToolPanel.tsx     左側控制面板（影像／參數／匯出入分頁；參數掃描頁使用）
     ParamForm.tsx     依 Python param() 宣告自動產生的參數表單
     LadderControls    條碼階梯的序列參數（嘗試順序、多尺度倍率、採用格式）
     ImageViewer.tsx   可縮放、拖曳、查座標的影像檢視，幾何結果以 SVG 疊圖
     overlays.tsx      疊圖用的四邊形、矩形、橢圓（找到＝橘、真值＝藍虛線）
     results.tsx       結果區：AnalysisFrame（載入、錯誤、淡化）、狀態（StatusCard）、讀數格（MetricGrid／Metric）、表格
-    ImageSourcePanel  影像來源（合成場景參數／上傳）＋模擬退化
+    ImageSourcePanel  影像來源（合成場景參數／上傳）
+    DegradationPicker 模擬退化：只列已加入的退化，其餘收成「＋」按鈕；常見情境一次套用
     ConfigIO.tsx      匯出 JSON、Python 建構式、匯入
     coldstart/        冷啟動上傳：登入外框（LoginGate）、照片槽、草稿表單、產品摘要
   hooks/
@@ -93,7 +94,7 @@ src/
     useRenderView     診斷檢視（邊緣、遮罩、各階影像等）
     useAuth           登入狀態（GET /auth/me）、登入、登出
   lib/                設定覆寫、合成場景、縮放、位元組與幾何顯示、中文文字對照（純函式，有單元測試）
-  pages/              各頁
+  pages/              各頁；inspect/ 為單張檢視（共用影像與退化，任務：品質、條碼、發票 QR、營養標示、食物）
 scripts/dev.mjs       建置前端並啟動 Python、Go（--dev 另啟動 Vite）；自動安裝缺少的套件、就緒後開瀏覽器
 e2e/                  Playwright 冒煙測試
 ```
@@ -101,7 +102,8 @@ e2e/                  Playwright 冒煙測試
 ## 新增一個頁面
 
 1. 在 `nav.ts` 把該工具的 `ready` 改為 `true`。
-2. 在 `pages/` 新增頁面：`Workspace`（控制面板＋頁首）＋`ToolPanel`，`useImagePipeline` 取影像、`useAnalysis` 呼叫分析、`AnalysisFrame` 處理載入與錯誤，結果用 `Split`（`MainView` 主檢視＋讀數欄），參數用 `ParamForm`，影像用 `ImageViewer fill`（幾何結果用 `overlays.tsx` 疊圖）。可參考 `QualityPage`、`LabelPage`。
+2. 在 `pages/` 新增頁面：`Workspace`（控制面板＋頁首）＋`ToolPanel`，`useImagePipeline` 取影像、`useAnalysis` 呼叫分析、`AnalysisFrame` 處理載入與錯誤，結果用 `Split`（`MainView` 主檢視＋讀數欄），參數用 `ParamForm`，影像用 `ImageViewer fill`（幾何結果用 `overlays.tsx` 疊圖）。
+   針對單張影像的新前處理不另開頁面，而是在單張檢視加一個任務：`pages/inspect/shared.tsx` 的 `TASKS` 登記、新增 `XxxTask.tsx`（以 `InspectWorkspace` 包住，參考 `QualityTask`、`LabelTask`），再在 `InspectPage` 加上參數狀態與分派。
 3. 在 `App.tsx` 註冊路由（`lazy` 載入）。
 4. 補 `src/test/server.ts` 的假回應與頁面測試，並在 `e2e/` 加一個冒煙測試。
 
