@@ -92,6 +92,23 @@ manifest 格式同 E1（`dietai.evaluation.manifest`），`truth` 欄為**真值
 
 Tesseract 的版面分析只讀到左欄的欄位名稱、漏掉右對齊的數值欄；`g` 常被讀成 `9`（`3.2g` → `3.29`）。
 
+同一批 6 張，三個引擎對照（`--engines tesseract:eng,paddle:mobile,paddle`）：
+
+| 方法 | 引擎 | 欄位正確率 | 整張全對 | CER | 每張 OCR 時間 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `l0_raw` | tesseract:eng | 0.0% | 0.0% | 0.799 | 0.2 秒 |
+| `l0_raw` | paddle:mobile | 46.7% | 16.7% | 0.157 | 1.6 秒 |
+| `l0_raw` | paddle（server） | 46.7% | 0.0% | 0.162 | 199 秒 |
+| `l1_rectify` | tesseract:eng | 20.0% | 0.0% | 0.292 | 0.2 秒 |
+| `l1_rectify` | paddle:mobile | 98.3% | 83.3% | 0.001 | 1.1 秒 |
+| `l1_rectify` | paddle（server） | 96.7% | 66.7% | 0.003 | 126 秒 |
+| `l2_default` | tesseract:eng | 18.3% | 0.0% | 0.228 | 0.2 秒 |
+| `l2_default` | paddle:mobile | 96.7% | 66.7% | 0.003 | 1.0 秒 |
+| `l2_default` | paddle（server） | 93.3% | 33.3% | 0.005 | 122 秒 |
+
+PaddleOCR 讀得到右對齊的數值欄；定位＋校正對兩個引擎都是主要的提升。server 模型在本機 CPU 上每張需 2–3 分鐘
+（原因未查），真實照片的階段零須先處理速度（縮圖或只用 mobile）。合成標示是英文、字型單一，不能用來選引擎。
+
 ## 結論
 
 （以真實照片完成階段零與正式實驗後填寫）
