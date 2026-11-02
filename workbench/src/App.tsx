@@ -16,23 +16,20 @@ export const routes = [
     children: [
       { index: true, element: <HomePage /> },
       // 只點模組時導向第一個工具；replace 讓「上一頁」不會回到 /m1 又被導回來
-      { path: 'm1', element: <Navigate to="/m1/quality" replace /> },
+      { path: 'm1', element: <Navigate to="/m1/inspect/quality" replace /> },
+      { path: 'm1/inspect', element: <Navigate to="/m1/inspect/quality" replace /> },
       {
-        path: 'm1/quality',
-        lazy: async () => ({ Component: (await import('@/pages/QualityPage')).QualityPage }),
+        // 單張檢視：品質、條碼、發票 QR、營養標示、食物照片共用一張影像，任務在網址最後一段
+        path: 'm1/inspect/:task',
+        lazy: async () => ({
+          Component: (await import('@/pages/inspect/InspectPage')).InspectPage,
+        }),
       },
-      {
-        path: 'm1/barcode',
-        lazy: async () => ({ Component: (await import('@/pages/BarcodePage')).BarcodePage }),
-      },
-      {
-        path: 'm1/label',
-        lazy: async () => ({ Component: (await import('@/pages/LabelPage')).LabelPage }),
-      },
-      {
-        path: 'm1/food',
-        lazy: async () => ({ Component: (await import('@/pages/FoodPage')).FoodPage }),
-      },
+      // 舊網址（各任務原本是獨立頁面）導向單張檢視的對應任務
+      ...(['quality', 'barcode', 'label', 'food'] as const).map((task) => ({
+        path: `m1/${task}`,
+        element: <Navigate to={`/m1/inspect/${task}`} replace />,
+      })),
       {
         path: 'm1/sweep',
         lazy: async () => ({ Component: (await import('@/pages/SweepPage')).SweepPage }),

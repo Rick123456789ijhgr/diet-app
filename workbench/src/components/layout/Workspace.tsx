@@ -15,7 +15,7 @@ export const PANEL_WIDTH = 312
 export const READOUT_WIDTH = 296
 
 /**
- * 工具頁的外層版面：左側控制面板卡（panel，通常是 ToolPanel）＋右側「標題列＋內容」。
+ * 工具頁的外層版面：左側控制面板卡（panel，例如 ToolPanel 或單張檢視的面板）＋右側「標題列＋內容」。
  * 控制面板自行捲動（overflow-y-auto），內容區撐滿剩餘高度，整頁不捲動。
  * - title／description：頁面大標題與一行說明（過長時截斷，完整內容放在 title 屬性）。
  */

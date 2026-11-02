@@ -1,7 +1,6 @@
 // 模組與頁面註冊表：左側圖示欄＝模組，頂部膠囊＝模組內頁面。新增頁面時加在這裡並在 App.tsx 註冊路由。
 import {
   Activity,
-  Barcode,
   BrainCircuit,
   Database,
   Focus,
@@ -12,11 +11,9 @@ import {
   ListChecks,
   type LucideIcon,
   PackagePlus,
-  ReceiptText,
   ScanSearch,
   ScanText,
   TrendingUp,
-  UtensilsCrossed,
 } from 'lucide-react'
 
 /** 模組內的一個工具頁；slug 為網址的第二段（/模組 id/slug）。 */
@@ -57,37 +54,15 @@ export const MODULES: Module[] = [
     short: '模組一',
     name: '影像前處理',
     icon: Focus,
-    description: '品質檢查、條碼與發票 QR、營養標示、食物照片的前處理，以及 E1 條碼消融。',
+    description:
+      '單張影像的前處理檢視、多張影像的參數掃描與批次，以及 E1 條碼消融與自適應策略的結果。',
     tools: [
       {
-        slug: 'quality',
-        name: '品質檢查',
+        slug: 'inspect',
+        name: '單張檢視',
         icon: ScanSearch,
-        description: '疊加模擬退化，觀察模糊、曝光、解析度三項檢查的結果。',
-        stage: 1,
-        ready: true,
-      },
-      {
-        slug: 'barcode',
-        name: '條碼',
-        icon: Barcode,
-        description: '逐步升級解碼商品條碼與電子發票雙 QR。',
-        stage: 2,
-        ready: true,
-      },
-      {
-        slug: 'label',
-        name: '營養標示',
-        icon: ReceiptText,
-        description: '表格定位、透視校正、光斑與對比。',
-        stage: 2,
-        ready: true,
-      },
-      {
-        slug: 'food',
-        name: '食物照片',
-        icon: UtensilsCrossed,
-        description: '切出各道菜、盤緣橢圓、VLM 輸入大小。',
+        description:
+          '一張影像加上模擬退化，切換品質、條碼、發票 QR、營養標示、食物照片看處理結果。',
         stage: 2,
         ready: true,
       },

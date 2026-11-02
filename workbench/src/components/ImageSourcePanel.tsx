@@ -1,128 +1,90 @@
-// 控制面板的「影像」分頁：選擇來源（合成／上傳），並疊加模擬退化。
+// 影像來源：合成或上傳。模擬退化另由 DegradationPicker 負責。
 import { ImagePlus, RotateCcw, Sparkles, Upload } from 'lucide-react'
 import { useId } from 'react'
 
-import { ApiError, type ConfigClass } from '@/api/client'
-import { ParamForm } from '@/components/ParamForm'
-import { Badge, Button, DraftNumberInput, Hint, Segmented } from '@/components/ui/primitives'
+import { Button, DraftNumberInput, Hint, Segmented } from '@/components/ui/primitives'
 import { syntheticSource, type ImagePipeline } from '@/hooks/useImagePipeline'
-import { degradationCount } from '@/lib/config'
 import { SCENES, type SceneField, type SceneId, type SceneParams } from '@/lib/scenes'
-import { errorText } from '@/lib/text'
 
 /**
- * 控制面板的「影像」分頁。
- * - pipeline：useImagePipeline 的狀態（目前來源、退化覆寫、原圖／退化圖的查詢）。
+ * 影像來源面板。
+ * - pipeline：useImagePipeline 的狀態（目前來源、原圖的查詢）。
  * - scene：切換到「合成」時要產生的場景（由所在頁面決定，例如條碼或發票）。
- * - degradationSchema：退化參數的結構；尚未載入時不顯示「模擬退化」區塊。
  */
 export function ImageSourcePanel({
   pipeline,
   scene,
-  degradationSchema,
 }: {
   pipeline: ImagePipeline
   /** 「合成」來源的場景 */
   scene: SceneId
-  degradationSchema?: ConfigClass
 }) {
   // useId 產生穩定且唯一的 id，讓 <label htmlFor> 對應隱藏的 file input（同頁多個面板也不衝突）
   const fileId = useId()
-  const { source, setSource, degradation, setDegradation } = pipeline
-  // 已覆寫的退化項目數（不含 seed）；徽章的數字與顏色共用
-  const changedDegradations = degradationCount(degradation)
-  // 退化參數不合法時，後端回 INVALID_CONFIG 並指出欄位；交給 ParamForm 把該欄標紅
-  const err = pipeline.degraded.error
-  const invalid = err instanceof ApiError && err.code === 'INVALID_CONFIG' ? err : undefined
+  const { source, setSource } = pipeline
 
   return (
-    <div className="space-y-5">
-      <div className="space-y-3">
-        <Segmented
-          label="影像來源"
-          value={source.kind}
-          // 切到「上傳」時先放一個空檔案（EMPTY），pipeline 以 size === 0 判斷為「尚未選檔」
-          onChange={(kind) =>
-            setSource(
-              kind === 'synthetic' ? syntheticSource(scene) : { kind: 'upload', file: EMPTY },
-            )
-          }
-          options={[
-            {
-              value: 'synthetic',
-              label: (
-                <>
-                  <Sparkles className="size-4" aria-hidden />
-                  合成
-                </>
-              ),
-            },
-            {
-              value: 'upload',
-              label: (
-                <>
-                  <Upload className="size-4" aria-hidden />
-                  上傳
-                </>
-              ),
-            },
-          ]}
-          className="w-full"
+    <div className="space-y-3">
+      <Segmented
+        label="影像來源"
+        value={source.kind}
+        // 切到「上傳」時先放一個空檔案（EMPTY），pipeline 以 size === 0 判斷為「尚未選檔」
+        onChange={(kind) =>
+          setSource(kind === 'synthetic' ? syntheticSource(scene) : { kind: 'upload', file: EMPTY })
+        }
+        options={[
+          {
+            value: 'synthetic',
+            label: (
+              <>
+                <Sparkles className="size-4" aria-hidden />
+                合成
+              </>
+            ),
+          },
+          {
+            value: 'upload',
+            label: (
+              <>
+                <Upload className="size-4" aria-hidden />
+                上傳
+              </>
+            ),
+          },
+        ]}
+        className="w-full"
+      />
+      {source.kind === 'synthetic' ? (
+        <SceneControls
+          scene={source.scene}
+          params={source.params}
+          onChange={(params) => setSource({ ...source, params })}
         />
-        {source.kind === 'synthetic' ? (
-          <SceneControls
-            scene={source.scene}
-            params={source.params}
-            onChange={(params) => setSource({ ...source, params })}
+      ) : (
+        // 整個虛線框是 <label>，點擊任何位置都會開啟檔案選擇；input 以 sr-only 視覺隱藏但仍可用鍵盤聚焦
+        <label
+          htmlFor={fileId}
+          className="border-card-border hover:bg-hover flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center text-sm"
+        >
+          <ImagePlus className="text-muted size-6" aria-hidden />
+          {source.file.size > 0 ? (
+            <span className="font-medium break-all">{source.file.name}</span>
+          ) : (
+            <span>選擇或拖曳 JPG／PNG</span>
+          )}
+          <span className="text-muted text-xs">真實照片請勿使用 test split</span>
+          <input
+            id={fileId}
+            type="file"
+            accept="image/jpeg,image/png,image/bmp,image/webp"
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              // 使用者取消選檔時 files 為空，保留原本的檔案
+              if (file) setSource({ kind: 'upload', file })
+            }}
           />
-        ) : (
-          // 整個虛線框是 <label>，點擊任何位置都會開啟檔案選擇；input 以 sr-only 視覺隱藏但仍可用鍵盤聚焦
-          <label
-            htmlFor={fileId}
-            className="border-card-border hover:bg-hover flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed px-3 py-5 text-center text-sm"
-          >
-            <ImagePlus className="text-muted size-6" aria-hidden />
-            {source.file.size > 0 ? (
-              <span className="font-medium break-all">{source.file.name}</span>
-            ) : (
-              <span>選擇或拖曳 JPG／PNG</span>
-            )}
-            <span className="text-muted text-xs">真實照片請勿使用 test split</span>
-            <input
-              id={fileId}
-              type="file"
-              accept="image/jpeg,image/png,image/bmp,image/webp"
-              className="sr-only"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                // 使用者取消選檔時 files 為空，保留原本的檔案
-                if (file) setSource({ kind: 'upload', file })
-              }}
-            />
-          </label>
-        )}
-      </div>
-
-      {degradationSchema && (
-        <div className="border-card-border border-t pt-4">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold">模擬退化</h3>
-            {/* 已覆寫的退化項目數；seed（亂數種子）本身不是一種退化，不計入數量。
-                顏色與數字用同一個計數，只改 seed 時不會呈強調色卻顯示「0 項」 */}
-            <Badge tone={changedDegradations ? 'accent' : 'muted'}>{changedDegradations} 項</Badge>
-          </div>
-          <p className="text-muted mb-3 text-xs">
-            依序套用：旋轉 → 縮小 → 模糊 → 亮度 → 梯度 → 光斑 →
-            雜訊。旋轉、縮小後合成影像的真值不再適用。
-          </p>
-          <ParamForm
-            schema={degradationSchema}
-            overrides={degradation}
-            onChange={setDegradation}
-            invalidField={invalid?.field}
-            invalidMessage={invalid && errorText(invalid.code) + '：' + invalid.message}
-          />
-        </div>
+        </label>
       )}
     </div>
   )

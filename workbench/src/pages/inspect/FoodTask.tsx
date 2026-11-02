@@ -1,4 +1,4 @@
-// 模組一：食物照片。切出各道菜、偵測盤緣，並把整張與各裁切縮放壓縮成送給 VLM 的大小。
+// 單張檢視的「食物照片」任務：切出各道菜、偵測盤緣，並把整張與各裁切縮放壓縮成送給 VLM 的大小。
 import { useQueries } from '@tanstack/react-query'
 import { Circle, Crop, LayoutGrid, ListOrdered, Minimize2, Shapes } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -14,16 +14,8 @@ import {
   type FoodResult,
 } from '@/api/client'
 import { ConfigIO } from '@/components/ConfigIO'
-import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { ImageViewer } from '@/components/ImageViewer'
-import {
-  EmptyState,
-  MainView,
-  ReadoutBlock,
-  Section,
-  Split,
-  Workspace,
-} from '@/components/layout/Workspace'
+import { EmptyState, MainView, ReadoutBlock, Section, Split } from '@/components/layout/Workspace'
 import { EllipseShape, FOUND, Rect, TRUTH } from '@/components/overlays'
 import { ParamForm } from '@/components/ParamForm'
 import {
@@ -37,15 +29,15 @@ import {
   WarningBadges,
 } from '@/components/results'
 import { StepsTable } from '@/components/StepsTable'
-import { ToolPanel } from '@/components/ToolPanel'
-import { Badge, Segmented } from '@/components/ui/primitives'
+import { Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass } from '@/hooks/useConfigSchemas'
 import { useDebounced } from '@/hooks/useDebounced'
-import { useImagePipeline } from '@/hooks/useImagePipeline'
 import { useRenderView } from '@/hooks/useRenderView'
 import { valueOf } from '@/lib/config'
+
+import { InspectWorkspace, type InspectShared } from './shared'
 
 type ViewKind = 'boxes' | 'mask' | 'plates' | 'crops' | 'vlm' | 'steps'
 
@@ -76,7 +68,7 @@ function runFood(imageId: string, cfg: ConfigOverride, signal: AbortSignal): Pro
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
 
 /**
- * 食物照片工具頁（`FoodConfig`）。
+ * 食物照片任務（`FoodConfig`）；影像來自單張檢視共用的影像管線（`shared.pipeline`）。
  *
  * 一頁內有四組查詢，各自只在需要時送出：
  * 1. `analysis`：主分析（切菜框、盤緣、VLM 輸入、步驟），任何分頁都會跑。
@@ -86,12 +78,18 @@ const kb = (bytes: number) => `${(bytes / 1024).toFixed(0)} KB`
  *
  * 菜數與真值的差、盤緣短長比是前端顯示用的評測／換算；其餘數字都來自後端。
  */
-export function FoodPage() {
+export function FoodTask({
+  shared,
+  config,
+  setConfig,
+}: {
+  shared: InspectShared
+  /** 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）；放在頁面層，切換任務時保留 */
+  config: ConfigOverride
+  setConfig: (c: ConfigOverride) => void
+}) {
   const food = useConfigClass('FoodConfig')
-  const degradationSchema = useConfigClass('Degradation').schema
-  const pipeline = useImagePipeline('food')
-  // 只存與預設值不同的欄位（由 ParamForm／ConfigIO 維護）
-  const [config, setConfig] = useState<ConfigOverride>({})
+  const { pipeline } = shared
   const [view, setView] = useState<ViewKind>('boxes')
   const image = pipeline.image
   // 給 VLM 尺寸試算用的防抖參數（useAnalysis 內部另有自己的防抖）
@@ -142,12 +140,11 @@ export function FoodPage() {
     return f ? valueOf(f, cfg) : undefined
   }
 
-  const panel = (
-    <ToolPanel
+  return (
+    <InspectWorkspace
+      shared={shared}
       changed={Object.keys(config).length}
-      image={
-        <ImageSourcePanel pipeline={pipeline} scene="food" degradationSchema={degradationSchema} />
-      }
+      busy={pipeline.pending || analysis.busy}
       params={
         food.schema ? (
           <ParamForm
@@ -163,21 +160,6 @@ export function FoodPage() {
         )
       }
       io={food.schema && <ConfigIO schema={food.schema} overrides={config} onImport={setConfig} />}
-    />
-  )
-
-  return (
-    <Workspace
-      panel={panel}
-      title="食物照片"
-      description="切出各道菜、偵測盤緣，並把整張與各裁切縮放壓縮成送給 VLM 的大小。"
-      aside={
-        (pipeline.pending || analysis.busy) && (
-          <Badge tone="primary" aria-live="polite">
-            計算中…
-          </Badge>
-        )
-      }
     >
       {/* AnalysisFrame 只在影像與結果屬於同一張圖時才呼叫 children，避免舊框疊到新影像上 */}
       <AnalysisFrame pipeline={pipeline} analysis={analysis} ready={!!food.schema}>
@@ -221,7 +203,7 @@ export function FoodPage() {
                   <Metric
                     label="盤緣"
                     value={r.plates_enabled ? String(r.plates.length) : '未啟用'}
-                    help="在左側「參數 → 步驟開關」開啟盤緣橢圓（選做）。"
+                    help="在左側「食物照片參數 → 步驟開關」開啟盤緣橢圓（選做）。"
                   />
                   <Metric
                     wide
@@ -416,6 +398,6 @@ export function FoodPage() {
           )
         }}
       </AnalysisFrame>
-    </Workspace>
+    </InspectWorkspace>
   )
 }
