@@ -1,4 +1,4 @@
-// 階段 3 的頁面：參數掃描、資料夾批次、E1（後端為 src/test/server.ts 的假實作，批次與 E1 以 SSE 回應）。
+// 階段 3 的頁面：多張測試（參數掃描、資料夾批次）、實驗結果（E1、自適應策略）（後端為 src/test/server.ts 的假實作，批次與 E1 以 SSE 回應）。
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -14,9 +14,9 @@ beforeEach(() => {
 
 const bodies = (path: string) => requests.filter((r) => r.path === path).map((r) => r.body)
 
-describe('參數掃描頁', () => {
+describe('多張測試・參數掃描', () => {
   it('品質檢查：顯示各警告首次觸發的等級與折線圖', async () => {
-    renderAt('/m1/sweep')
+    renderAt('/m1/multi/sweep')
     expect(await screen.findByText('≥ 8', {}, WAIT)).toBeInTheDocument()
     expect(screen.getAllByText('未觸發')).toHaveLength(3)
     expect(screen.getByRole('img', { name: /模糊分數隨高斯模糊 σ變化/ })).toBeInTheDocument()
@@ -27,7 +27,7 @@ describe('參數掃描頁', () => {
 
   it('條碼：比較只用原圖與逐步升級，切換退化種類時套用預設範圍', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/sweep')
+    renderAt('/m1/multi/sweep')
     await screen.findByText('≥ 8', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
     expect(await screen.findAllByText('首次失敗於 45', {}, WAIT)).toHaveLength(2)
@@ -44,12 +44,12 @@ describe('參數掃描頁', () => {
     }
     expect(last.target).toBe('barcode')
     expect(last.params).toMatchObject({ axis: 'rotate_deg', lo: 0, hi: 45, samples: 5 })
-    expect(screen.getByRole('tab', { name: /掃描/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '合成樣本' })).toBeInTheDocument()
   })
 
   it('下限不小於上限時顯示中文錯誤且不送出請求', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/sweep')
+    renderAt('/m1/multi/sweep')
     await screen.findByText('≥ 8', {}, WAIT)
     const before = bodies('/workbench/v1/dev/sweeps').length
     const lo = screen.getByLabelText('範圍下限')
@@ -72,14 +72,14 @@ describe('參數掃描頁', () => {
 
   it('條碼：匯出入同時涵蓋階梯與解碼器設定，成功階依階梯順序堆疊', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/sweep')
+    renderAt('/m1/multi/sweep')
     await screen.findByText('≥ 8', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
     await screen.findAllByText('首次失敗於 45', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /成功階/ }))
     const legend = screen.getByRole('img', { name: /逐步升級讀對於哪一階/ }).nextElementSibling
     expect(legend?.textContent).toMatch(/原圖.*校正/)
-    await user.click(screen.getByRole('tab', { name: /匯出入/ }))
+    await user.click(screen.getByRole('button', { name: /匯入／匯出設定/ }))
     expect(screen.getByText('階梯設定')).toBeInTheDocument()
     expect(screen.getByText('解碼器設定')).toBeInTheDocument()
     await user.type(
@@ -96,18 +96,18 @@ describe('參數掃描頁', () => {
   })
 })
 
-describe('參數掃描頁：條碼的品質門檻對照', () => {
+describe('多張測試・參數掃描：條碼的品質門檻對照', () => {
   it('品質門檻檢視疊出成功率與不通過率，門檻覆寫隨條碼掃描送出；明細顯示真值與誤讀', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/sweep')
+    renderAt('/m1/multi/sweep')
     await screen.findByText('≥ 8', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
     await screen.findAllByText('首次失敗於 45', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /品質門檻/ }))
     expect(screen.getByRole('img', { name: /逐步升級成功率與品質不通過率/ })).toBeInTheDocument()
     expect(screen.getByText('過亮').nextElementSibling).toHaveTextContent('≥ 0')
-    // 條碼模式的參數分頁也有品質門檻，改了會隨條碼掃描送出
-    await user.click(screen.getByRole('tab', { name: /階梯參數/ }))
+    // 條碼模式的參數段也有品質門檻，改了會隨條碼掃描送出
+    await user.click(screen.getByRole('button', { name: /階梯參數/ }))
     expect(screen.getByText('品質門檻（對照用）')).toBeInTheDocument()
     const input = screen.getByLabelText('過亮比例上限', { selector: 'input' })
     await user.clear(input)
@@ -127,10 +127,10 @@ describe('參數掃描頁：條碼的品質門檻對照', () => {
   })
 })
 
-describe('參數掃描頁：營養標示', () => {
+describe('多張測試・參數掃描：營養標示', () => {
   it('預設改用透視強度，送出容許誤差與標示參數；顯示偏移、四角誤差與明細', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/sweep')
+    renderAt('/m1/multi/sweep')
     await screen.findByText('≥ 8', {}, WAIT)
     await user.click(screen.getByRole('radio', { name: /營養標示/ }))
     expect(await screen.findByText('首次失敗於 0.3', {}, WAIT)).toBeInTheDocument()
@@ -151,7 +151,7 @@ describe('參數掃描頁：營養標示', () => {
     await user.clear(tol)
     await user.type(tol, '0.05')
     await user.tab()
-    await user.click(screen.getByRole('tab', { name: /標示參數/ }))
+    await user.click(screen.getByRole('button', { name: /標示參數/ }))
     const glare = screen.getByLabelText('光斑比例上限', { selector: 'input' })
     await user.clear(glare)
     await user.type(glare, '0.2')
@@ -174,10 +174,10 @@ describe('參數掃描頁：營養標示', () => {
   })
 })
 
-describe('資料夾批次頁', () => {
+describe('多張測試・資料夾批次', () => {
   it('逐張顯示結果與彙整，點選列檢視單張', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/batch')
+    renderAt('/m1/multi/folder')
     await user.type(await screen.findByRole('textbox', { name: '資料夾' }), 'D:/photos')
     await user.click(screen.getByRole('button', { name: '執行' }))
     expect(await screen.findByText('50.0%', {}, WAIT)).toBeInTheDocument()
@@ -197,7 +197,7 @@ describe('資料夾批次頁', () => {
 
   it('最多張數可暫時清空，失焦時才夾到範圍內', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/batch')
+    renderAt('/m1/multi/folder')
     const limit = await screen.findByLabelText('最多張數')
     await user.clear(limit)
     // 清空時不會立刻變成 1
@@ -217,17 +217,17 @@ describe('資料夾批次頁', () => {
 
   it('測試集被拒絕時顯示說明', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/batch')
+    renderAt('/m1/multi/folder')
     await user.type(await screen.findByRole('textbox', { name: '資料夾' }), 'D:/data/splits/test')
     await user.click(screen.getByRole('button', { name: '執行' }))
     expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('測試集已鎖定')
   })
 })
 
-describe('E1 頁', () => {
+describe('實驗結果・E1', () => {
   it('顯示整體成功率、誤讀提醒、分組熱度圖與失敗影像', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/e1')
+    renderAt('/m1/results/e1')
     expect(await screen.findByRole('img', { name: /整體成功率長條圖/ }, WAIT)).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('共有 1 次誤讀')
     const summary = screen.getByRole('table', { name: '各實驗組的整體彙整' })
@@ -247,9 +247,9 @@ describe('E1 頁', () => {
 
   it('快速執行回報進度，完成後切換到新的執行；中途失敗時顯示錯誤', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/e1')
+    renderAt('/m1/results/e1')
     await screen.findByRole('img', { name: /整體成功率長條圖/ }, WAIT)
-    await user.click(screen.getByRole('tab', { name: '快速執行' }))
+    await user.click(screen.getByRole('button', { name: /快速執行/ }))
     // 預設選取 a0_raw、a6_full
     expect(screen.getByRole('button', { name: 'a0_raw' })).toHaveAttribute('aria-pressed', 'true')
     await user.click(screen.getByRole('button', { name: '執行' }))
@@ -279,14 +279,14 @@ describe('E1 頁', () => {
   })
 })
 
-describe('E1 頁的邊界情況', () => {
+describe('實驗結果・E1的邊界情況', () => {
   it('剛輸入資料夾就按快速執行時，帶的是輸入框目前的資料夾', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/e1')
+    renderAt('/m1/results/e1')
     await screen.findByRole('img', { name: /整體成功率長條圖/ }, WAIT)
     await user.type(screen.getByLabelText('結果資料夾'), 'D:/new-runs')
     // 不等 400 ms 防抖，立刻切到快速執行並按下
-    await user.click(screen.getByRole('tab', { name: '快速執行' }))
+    await user.click(screen.getByRole('button', { name: /快速執行/ }))
     await user.click(screen.getByRole('button', { name: '執行' }))
     await waitFor(() =>
       expect(bodies('/workbench/v1/dev/e1/runs')).toContainEqual(
@@ -315,9 +315,9 @@ describe('門檻與結果配對', () => {
         return undefined
       }),
     )
-    renderAt('/m1/sweep')
+    renderAt('/m1/multi/sweep')
     await screen.findByText('模糊下限（下限）= 100', {}, WAIT)
-    await user.click(screen.getByRole('tab', { name: /參數/ }))
+    await user.click(screen.getByRole('button', { name: /品質門檻/ }))
     const input = screen.getByLabelText('模糊下限', { selector: 'input' })
     await user.clear(input)
     await user.type(input, '1500')
@@ -328,10 +328,10 @@ describe('門檻與結果配對', () => {
   })
 })
 
-describe('自適應策略頁', () => {
+describe('實驗結果・自適應策略', () => {
   it('顯示與基準的比較、規則、嘗試順序、量測值分組與各影像', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/adaptive')
+    renderAt('/m1/results/adaptive')
     expect(await screen.findByRole('img', { name: /成功率長條圖/ }, WAIT)).toBeInTheDocument()
     // 讀數欄：平均耗時與基準
     expect(screen.getByText('基準 12.5 ms')).toBeInTheDocument()
@@ -364,7 +364,7 @@ describe('自適應策略頁', () => {
 
   it('策略無法計算時顯示原因；沒有量測值時顯示要執行的指令', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/adaptive')
+    renderAt('/m1/results/adaptive')
     await screen.findByRole('img', { name: /成功率長條圖/ }, WAIT)
     await user.selectOptions(screen.getByRole('combobox', { name: '策略' }), 'r9_bad')
     expect(screen.getByRole('alert')).toHaveTextContent('沒有方法 nope 的結果')
@@ -374,5 +374,52 @@ describe('自適應策略頁', () => {
       await screen.findByText(/adaptive\.py D:\/runs\/20261103-methods/, {}, WAIT),
     ).toBeInTheDocument()
     expect(screen.getByText('這次執行還沒有品質量測值，請在專案根目錄執行：')).toBeInTheDocument()
+  })
+})
+
+describe('合併後的頁面：模式切換與共用設定', () => {
+  it('舊網址導向合併後的頁面與模式', async () => {
+    renderAt('/m1/batch')
+    expect(await screen.findByRole('textbox', { name: '資料夾' }, WAIT)).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /資料夾批次/ })).toHaveAttribute('data-state', 'on')
+  })
+
+  it('品質門檻在參數掃描與資料夾批次間共用；切回掃描時保留評估對象', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/multi/sweep')
+    await screen.findByText('≥ 8', {}, WAIT)
+    await user.click(screen.getByRole('radio', { name: /條碼解碼/ }))
+    await screen.findAllByText('首次失敗於 45', {}, WAIT)
+    await user.click(screen.getByRole('button', { name: /階梯參數/ }))
+    const input = screen.getByLabelText('過亮比例上限', { selector: 'input' })
+    await user.clear(input)
+    await user.type(input, '0.9')
+
+    await user.click(screen.getByRole('radio', { name: /資料夾批次/ }))
+    // 資料夾批次的品質門檻段顯示同一組覆寫，執行時隨請求送出
+    expect(
+      await screen.findByRole('button', { name: /品質門檻.*已改 1 項/ }, WAIT),
+    ).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: '資料夾' }), 'D:/photos')
+    await user.click(screen.getByRole('button', { name: '執行' }))
+    await waitFor(() =>
+      expect(bodies('/workbench/v1/dev/batches')).toContainEqual(
+        expect.objectContaining({ folder: 'D:/photos', config: { bright_ratio_max: 0.9 } }),
+      ),
+    )
+
+    // 切回參數掃描：評估對象仍是條碼解碼，結果不必重算
+    await user.click(screen.getByRole('radio', { name: /參數掃描/ }))
+    expect(screen.getByRole('radio', { name: /條碼解碼/ })).toHaveAttribute('data-state', 'on')
+    expect(screen.getAllByText('首次失敗於 45')).toHaveLength(2)
+  })
+
+  it('結果資料夾在 E1 消融與自適應策略間共用', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/results/e1')
+    await screen.findByRole('img', { name: /整體成功率長條圖/ }, WAIT)
+    await user.type(screen.getByLabelText('結果資料夾'), 'D:/runs')
+    await user.click(screen.getByRole('radio', { name: /自適應策略/ }))
+    expect(await screen.findByRole('textbox', { name: '結果資料夾' }, WAIT)).toHaveValue('D:/runs')
   })
 })

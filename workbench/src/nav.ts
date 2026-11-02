@@ -5,7 +5,6 @@ import {
   Database,
   Focus,
   FlaskConical,
-  Gauge,
   Images,
   LayoutDashboard,
   ListChecks,
@@ -13,7 +12,6 @@ import {
   PackagePlus,
   ScanSearch,
   ScanText,
-  TrendingUp,
 } from 'lucide-react'
 
 /** 模組內的一個工具頁；slug 為網址的第二段（/模組 id/slug）。 */
@@ -67,34 +65,19 @@ export const MODULES: Module[] = [
         ready: true,
       },
       {
-        slug: 'sweep',
-        name: '參數掃描',
-        icon: TrendingUp,
-        description: '退化由弱到強，找出越過門檻的位置。',
-        stage: 3,
-        ready: true,
-      },
-      {
-        slug: 'batch',
-        name: '資料夾批次',
+        slug: 'multi',
+        name: '多張測試',
         icon: Images,
-        description: '整個資料夾的通過率與分數分布。',
+        description:
+          '參數掃描（退化由弱到強，找出越過門檻的位置）與資料夾批次（整個資料夾的通過率與分數分布）。',
         stage: 3,
         ready: true,
       },
       {
-        slug: 'e1',
-        name: 'E1 消融',
+        slug: 'results',
+        name: '實驗結果',
         icon: FlaskConical,
-        description: '比較各實驗組的成功率、誤讀與失敗影像。',
-        stage: 3,
-        ready: true,
-      },
-      {
-        slug: 'adaptive',
-        name: '自適應策略',
-        icon: Gauge,
-        description: '依品質量測值選擇處理方式，與貪婪逐步升級比較成功率與耗時。',
+        description: 'E1 條碼消融的成功率與失敗影像，以及自適應策略與貪婪逐步升級的比較。',
         stage: 3,
         ready: true,
       },

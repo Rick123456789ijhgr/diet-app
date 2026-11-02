@@ -3,7 +3,6 @@
 import {
   ArrowLeftRight,
   Barcode,
-  ChevronDown,
   QrCode,
   ReceiptText,
   ScanSearch,
@@ -11,16 +10,16 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from 'lucide-react'
-import { useId, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { ApiError, type ConfigClass } from '@/api/client'
 import { DegradationPicker } from '@/components/DegradationPicker'
 import { ImageSourcePanel } from '@/components/ImageSourcePanel'
+import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
 import { Workspace } from '@/components/layout/Workspace'
 import { Badge, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import type { ImagePipeline } from '@/hooks/useImagePipeline'
-import { cn } from '@/lib/cn'
 import type { SceneId } from '@/lib/scenes'
 import { errorText } from '@/lib/text'
 
@@ -124,7 +123,7 @@ export function InspectWorkspace({
   const [ioOpen, setIoOpen] = useState(false)
 
   const panel = (
-    <div className="divide-card-border divide-y">
+    <PanelStack>
       <PanelSection title="影像">
         <ImageSourcePanel pipeline={pipeline} scene={TASK_BY_ID[task].scene} />
       </PanelSection>
@@ -156,7 +155,7 @@ export function InspectWorkspace({
       >
         {io}
       </Disclosure>
-    </div>
+    </PanelStack>
   )
 
   return (
@@ -182,58 +181,5 @@ export function InspectWorkspace({
     >
       {children}
     </Workspace>
-  )
-}
-
-/** 控制面板的一段（有標題時顯示小標）。 */
-function PanelSection({ title, children }: { title?: string; children: ReactNode }) {
-  return (
-    <section className="space-y-3 px-4 py-4">
-      {title && <h3 className="text-sm font-semibold">{title}</h3>}
-      {children}
-    </section>
-  )
-}
-
-/** 可收合的一段（受控）：標題列是按鈕（aria-expanded）；內容收合時不渲染。 */
-function Disclosure({
-  open,
-  onOpenChange,
-  icon: Icon,
-  title,
-  badge,
-  children,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  icon: LucideIcon
-  title: string
-  badge?: ReactNode
-  children: ReactNode
-}) {
-  const contentId = useId()
-  return (
-    <section>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={contentId}
-        onClick={() => onOpenChange(!open)}
-        className="hover:bg-hover focus-visible:ring-primary/40 flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
-      >
-        <Icon className="text-muted size-4" aria-hidden />
-        <span className="flex-1">{title}</span>
-        {badge}
-        <ChevronDown
-          className={cn('text-muted size-4 transition-transform', open && 'rotate-180')}
-          aria-hidden
-        />
-      </button>
-      {open && (
-        <div id={contentId} className="px-4 pb-4">
-          {children}
-        </div>
-      )}
-    </section>
   )
 }

@@ -5,6 +5,18 @@ import { AppShell } from '@/components/layout/AppShell'
 import { HomePage } from '@/pages/HomePage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
 
+/** 模組一的舊網址 → 合併後的頁面（2026-11 從 8 頁合為單張檢視、多張測試、實驗結果 3 頁）。 */
+const OLD_M1_PATHS: Record<string, string> = {
+  quality: '/m1/inspect/quality',
+  barcode: '/m1/inspect/barcode',
+  label: '/m1/inspect/label',
+  food: '/m1/inspect/food',
+  sweep: '/m1/multi/sweep',
+  batch: '/m1/multi/folder',
+  e1: '/m1/results/e1',
+  adaptive: '/m1/results/adaptive',
+}
+
 // 已完成的頁面在這裡註冊，各頁延遲載入；其餘頁面與模組顯示「尚未完成」（見 nav.ts 的 ready、stage）
 /**
  * 路由表；匯出供頁面測試以 createMemoryRouter 重用。
@@ -25,27 +37,25 @@ export const routes = [
           Component: (await import('@/pages/inspect/InspectPage')).InspectPage,
         }),
       },
-      // 舊網址（各任務原本是獨立頁面）導向單張檢視的對應任務
-      ...(['quality', 'barcode', 'label', 'food'] as const).map((task) => ({
-        path: `m1/${task}`,
-        element: <Navigate to={`/m1/inspect/${task}`} replace />,
+      { path: 'm1/multi', element: <Navigate to="/m1/multi/sweep" replace /> },
+      {
+        // 多張測試：參數掃描與資料夾批次，模式在網址最後一段
+        path: 'm1/multi/:mode',
+        lazy: async () => ({ Component: (await import('@/pages/multi/MultiPage')).MultiPage }),
+      },
+      { path: 'm1/results', element: <Navigate to="/m1/results/e1" replace /> },
+      {
+        // 實驗結果：E1 消融與自適應策略，種類在網址最後一段
+        path: 'm1/results/:kind',
+        lazy: async () => ({
+          Component: (await import('@/pages/results/ResultsPage')).ResultsPage,
+        }),
+      },
+      // 舊網址（原本各自是獨立頁面）導向合併後的頁面
+      ...Object.entries(OLD_M1_PATHS).map(([old, to]) => ({
+        path: `m1/${old}`,
+        element: <Navigate to={to} replace />,
       })),
-      {
-        path: 'm1/sweep',
-        lazy: async () => ({ Component: (await import('@/pages/SweepPage')).SweepPage }),
-      },
-      {
-        path: 'm1/batch',
-        lazy: async () => ({ Component: (await import('@/pages/BatchPage')).BatchPage }),
-      },
-      {
-        path: 'm1/e1',
-        lazy: async () => ({ Component: (await import('@/pages/E1Page')).E1Page }),
-      },
-      {
-        path: 'm1/adaptive',
-        lazy: async () => ({ Component: (await import('@/pages/AdaptivePage')).AdaptivePage }),
-      },
       {
         // 冷啟動上傳：須登入，未登入時顯示登入表單，登入後留在原網址
         path: 'coldstart',

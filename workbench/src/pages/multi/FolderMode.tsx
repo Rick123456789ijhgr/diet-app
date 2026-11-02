@@ -1,25 +1,27 @@
-// 模組一：資料夾批次。對本機資料夾的照片逐張做品質檢查（SSE 逐張回報），
+// 模組一・多張測試：資料夾批次。對本機資料夾的照片逐張做品質檢查（SSE 逐張回報），
 // 看目前門檻下的通過率與分數分布；點選表格列可檢視單張。
-import { BarChart3, Download, FolderOpen, Play, Square, Table, TriangleAlert } from 'lucide-react'
-import { useState } from 'react'
+import {
+  ArrowLeftRight,
+  BarChart3,
+  Download,
+  FolderOpen,
+  Play,
+  SlidersHorizontal,
+  Square,
+  Table,
+  TriangleAlert,
+} from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 
 import { artifactUrl, overrideBody, type ConfigOverride } from '@/api/client'
 import { BarList, ValueHistogram } from '@/components/charts'
 import { ConfigIO } from '@/components/ConfigIO'
 import { ImageViewer } from '@/components/ImageViewer'
+import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
 import { ErrorBox, Metric, MetricGrid } from '@/components/results'
-import {
-  Badge,
-  Button,
-  DraftNumberInput,
-  Segmented,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/primitives'
+import { Badge, Button, DraftNumberInput, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useConfigClass } from '@/hooks/useConfigSchemas'
 import { useLocalImage } from '@/hooks/useLocalImage'
@@ -130,14 +132,26 @@ function toCsv(rows: Row[]): string {
  * 資料夾批次頁：對伺服器本機資料夾內的照片逐張做品質檢查，結果經 SSE 逐張回報。
  * 主檢視有三個分頁：每張結果（可點選檢視單張）、分數分布（附門檻線）、警告次數。
  * 與其他工具頁不同，參數修改後不會自動重算（整批可能數千張），要按「執行」才以新參數重跑。
+ *
+ * 由多張測試頁（MultiPage）掛載：品質門檻（config）與參數掃描共用，放在頁面層。
+ * 切到參數掃描時本元件仍保持掛載，執行中的批次不會中斷。switcher 是標題列右側的模式切換。
  */
-export function BatchPage() {
+export function FolderMode({
+  switcher,
+  config,
+  setConfig,
+}: {
+  switcher: ReactNode
+  /** 目前表單上的品質門檻覆寫 */
+  config: ConfigOverride
+  setConfig: (c: ConfigOverride) => void
+}) {
   const quality = useConfigClass('QualityConfig').schema
   const [folder, setFolder] = useState('')
   const [limit, setLimit] = useState(500)
   const [recursive, setRecursive] = useState(false)
-  // 目前表單上的參數覆寫
-  const [config, setConfig] = useState<ConfigOverride>({})
+  const [paramsOpen, setParamsOpen] = useState(false)
+  const [ioOpen, setIoOpen] = useState(false)
   // 最近一次執行時使用的參數；門檻線與單張診斷檢視用它，才會與表格中的結果一致
   const [ranWith, setRanWith] = useState<ConfigOverride | null>(null)
   const [view, setView] = useState('table')
@@ -168,20 +182,8 @@ export function BatchPage() {
   }
 
   const panel = (
-    <Tabs defaultValue="folder">
-      <div className="bg-card sticky top-0 z-10 p-3 pb-2">
-        <TabsList>
-          <TabsTrigger value="folder">{withIcon(FolderOpen, '資料夾')}</TabsTrigger>
-          <TabsTrigger value="params">
-            參數
-            {Object.keys(config).length > 0 && (
-              <Badge tone="primary">{Object.keys(config).length}</Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="io">匯出入</TabsTrigger>
-        </TabsList>
-      </div>
-      <TabsContent value="folder" className="px-4 pt-2 pb-4">
+    <PanelStack>
+      <PanelSection title="資料夾">
         <form
           className="space-y-3 text-sm"
           // 用 form 讓輸入框按 Enter 也能執行；路徑空白時不送出
@@ -237,14 +239,30 @@ export function BatchPage() {
             </Button>
           )}
         </form>
-      </TabsContent>
-      <TabsContent value="params" className="px-4 pt-2 pb-4">
+      </PanelSection>
+      {/* 品質門檻與參數掃描共用；修改後按「執行」才以新的門檻重算 */}
+      <Disclosure
+        open={paramsOpen}
+        onOpenChange={setParamsOpen}
+        icon={SlidersHorizontal}
+        title="品質門檻"
+        badge={
+          Object.keys(config).length > 0 && (
+            <Badge tone="primary">已改 {Object.keys(config).length} 項</Badge>
+          )
+        }
+      >
         {quality && <ParamForm schema={quality} overrides={config} onChange={setConfig} />}
-      </TabsContent>
-      <TabsContent value="io" className="px-4 pt-2 pb-4">
+      </Disclosure>
+      <Disclosure
+        open={ioOpen}
+        onOpenChange={setIoOpen}
+        icon={ArrowLeftRight}
+        title="匯入／匯出設定"
+      >
         {quality && <ConfigIO schema={quality} overrides={config} onImport={setConfig} />}
-      </TabsContent>
-    </Tabs>
+      </Disclosure>
+    </PanelStack>
   )
 
   const total = start?.type === 'start' ? start.total : 0
@@ -307,16 +325,19 @@ export function BatchPage() {
   return (
     <Workspace
       panel={panel}
-      title="資料夾批次"
-      description="對資料夾內的照片批次執行品質檢查，看目前門檻下的通過率與分數分布；點選表格列可檢視單張。"
+      title="多張測試"
+      description="資料夾批次：對資料夾內的照片批次執行品質檢查，看目前門檻下的通過率與分數分布；點選表格列可檢視單張。"
       aside={
-        running ? (
-          <Badge tone="primary" aria-live="polite">
-            處理中 {rows.length} / {total} 張
-          </Badge>
-        ) : changed ? (
-          <Badge tone="warn">參數已修改，按「執行」以新的參數重新計算。</Badge>
-        ) : undefined
+        <div className="flex items-center gap-2">
+          {running ? (
+            <Badge tone="primary" aria-live="polite">
+              處理中 {rows.length} / {total} 張
+            </Badge>
+          ) : changed ? (
+            <Badge tone="warn">門檻已修改，按「執行」重新計算</Badge>
+          ) : null}
+          {switcher}
+        </div>
       }
     >
       <div className="flex h-full min-h-0 flex-col">
