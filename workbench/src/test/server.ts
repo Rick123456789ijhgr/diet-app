@@ -287,6 +287,95 @@ const batchRow = (
   ...extra,
 })
 
+// 自適應頁：「每個方法都執行」的結果（dietai.devtools.adaptive.adaptive_run_json 的形狀）
+const summary = (arm: string, correct: number, misread: number, extra = {}) => ({
+  arm,
+  n: 4,
+  correct,
+  rate: correct / 4,
+  ci_low: 0.1,
+  ci_high: 0.9,
+  misread,
+  missed: 4 - correct - misread,
+  false_positive: 0,
+  ...extra,
+})
+const adaptivePolicy = (name: string, source: string, threshold: number) => ({
+  name,
+  description: '測試用策略',
+  source,
+  start: ['raw'],
+  fallback: ['multiscale@2'],
+  max_attempts: 3,
+  rules: [
+    {
+      feature: 'contrast',
+      op: '<',
+      threshold,
+      methods: ['clahe', 'pipeline@clahe+binarize'],
+      note: '對比低 → CLAHE',
+      hits: 2,
+      rate: 0.4,
+    },
+  ],
+  overall: [summary('greedy', 3, 0), summary(name, 3, 1, { p_value: 1 })],
+  timing: [
+    { arm: 'greedy', n: 5, mean_ms: 12.5, total_s: 0.06, mean_attempts: 1.8 },
+    { arm: name, n: 5, mean_ms: 15.25, total_s: 0.08, mean_attempts: 2 },
+  ],
+  plans: [
+    { plan: 'raw', count: 3 },
+    { plan: 'raw>clahe>pipeline@clahe+binarize', count: 2 },
+  ],
+  variants: [
+    {
+      id: 'v-low',
+      truth: '4710088410108',
+      outcome: 'misread',
+      success_rung: 'clahe',
+      plan: 'raw>clahe>pipeline@clahe+binarize',
+      rules: '0',
+      attempts: 2,
+      elapsed_ms: 21.5,
+      condition: 'contrast',
+    },
+  ],
+  truncated: false,
+})
+const bin = (i: number, raw: number | null) => ({
+  bin: i,
+  low: i * 10,
+  high: i * 10 + 10,
+  n: 1,
+  raw,
+  clahe: 1,
+  'multiscale@2': 0,
+  'pipeline@clahe+binarize': 1,
+})
+export const adaptiveRun = {
+  mode: 'methods',
+  name: '20261103-methods',
+  path: 'D:/runs/20261103-methods',
+  meta: { items: 5, include_test: false, git: { commit: 'abcdef1234', dirty: false } },
+  features_ready: true,
+  feature_names: ['blur', 'contrast'],
+  tags: ['condition'],
+  command: 'python research/experiments/e1_barcode/adaptive.py D:/runs/20261103-methods',
+  arms: [
+    {
+      arm: 'c0_all_methods',
+      methods: ['raw', 'clahe', 'multiscale@2', 'pipeline@clahe+binarize'],
+      baseline: { name: 'greedy', order: ['raw', 'multiscale@2'] },
+      policies: [
+        adaptivePolicy('r0_default', 'config', 90),
+        adaptivePolicy('r0_default_tuned', 'run', 52),
+        { ...adaptivePolicy('r9_bad', 'config', 1), error: '沒有方法 nope 的結果' },
+      ],
+      bins: { blur: [bin(0, 0), bin(1, 1)], contrast: [bin(0, 0), bin(1, 0.5)] },
+    },
+  ],
+}
+
 export const e1Run = {
   name: '20261014-run',
   path: 'D:/runs/20261014-run',
@@ -501,11 +590,26 @@ export const handlers = [
     HttpResponse.json({
       root: 'D:/runs',
       runs: [{ name: '20261014-run', path: 'D:/runs/20261014-run' }],
+      method_runs: [
+        { name: '20261103-methods', path: 'D:/runs/20261103-methods', features: true },
+        { name: '20261102-raw', path: 'D:/runs/20261102-raw', features: false },
+      ],
       arms: ['a0_raw', 'a6_full', 'm1_agree2'],
       default_arms: ['a0_raw', 'a6_full'],
     }),
   ),
-  http.get('*/workbench/v1/dev/e1/runs/:id', () => HttpResponse.json(e1Run)),
+  http.get('*/workbench/v1/dev/e1/runs/:id', ({ params }) =>
+    params.id === '20261103-methods'
+      ? HttpResponse.json(adaptiveRun)
+      : params.id === '20261102-raw'
+        ? HttpResponse.json({
+            ...adaptiveRun,
+            name: '20261102-raw',
+            features_ready: false,
+            arms: [],
+          })
+        : HttpResponse.json(e1Run),
+  ),
   http.post('*/workbench/v1/dev/e1/runs', async ({ request }) => {
     const body = (await json(request)) as { arms: string[] }
     if (body.arms.includes('m1_agree2')) {

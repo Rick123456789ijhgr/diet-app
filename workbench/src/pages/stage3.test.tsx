@@ -327,3 +327,52 @@ describe('門檻與結果配對', () => {
     expect(screen.queryByText('模糊下限（下限）= 1500')).not.toBeInTheDocument()
   })
 })
+
+describe('自適應策略頁', () => {
+  it('顯示與基準的比較、規則、嘗試順序、量測值分組與各影像', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/adaptive')
+    expect(await screen.findByRole('img', { name: /成功率長條圖/ }, WAIT)).toBeInTheDocument()
+    // 讀數欄：平均耗時與基準
+    expect(screen.getByText('基準 12.5 ms')).toBeInTheDocument()
+    expect(screen.getByText(/基準（貪婪）：原圖 → 多尺度 ×2/)).toBeInTheDocument()
+    const timing = screen.getByRole('table', { name: '基準與策略的耗時' })
+    expect(within(timing).getByText('15.3')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /規則/ }))
+    const rules = screen.getByRole('table', { name: '規則與成立比例' })
+    expect(within(rules).getByText('對比 < 90')).toBeInTheDocument()
+    expect(within(rules).getByText('CLAHE → 疊加：CLAHE＋自適應二值化')).toBeInTheDocument()
+
+    // 切換到調整後的策略：門檻改變
+    await user.selectOptions(screen.getByRole('combobox', { name: '策略' }), 'r0_default_tuned')
+    await user.click(screen.getByRole('radio', { name: /規則/ }))
+    expect(screen.getByText('對比 < 52')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /嘗試順序/ }))
+    expect(screen.getByText('原圖 → CLAHE → 疊加：CLAHE＋自適應二值化')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /量測值分組/ }))
+    await user.selectOptions(screen.getByRole('combobox', { name: '量測值' }), 'contrast')
+    expect(screen.getByRole('img', { name: /對比 各組的成功率熱度圖/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: /各影像/ }))
+    const variants = screen.getByRole('table', { name: '各影像在策略下的結果' })
+    expect(within(variants).getByText('v-low')).toBeInTheDocument()
+    expect(within(variants).getByText('誤讀')).toBeInTheDocument()
+  })
+
+  it('策略無法計算時顯示原因；沒有量測值時顯示要執行的指令', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/adaptive')
+    await screen.findByRole('img', { name: /成功率長條圖/ }, WAIT)
+    await user.selectOptions(screen.getByRole('combobox', { name: '策略' }), 'r9_bad')
+    expect(screen.getByRole('alert')).toHaveTextContent('沒有方法 nope 的結果')
+
+    await user.selectOptions(screen.getByRole('combobox', { name: '執行' }), '20261102-raw')
+    expect(
+      await screen.findByText(/adaptive\.py D:\/runs\/20261103-methods/, {}, WAIT),
+    ).toBeInTheDocument()
+    expect(screen.getByText('這次執行還沒有品質量測值，請在專案根目錄執行：')).toBeInTheDocument()
+  })
+})

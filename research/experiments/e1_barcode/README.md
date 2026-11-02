@@ -222,6 +222,10 @@ python adaptive.py runs/<資料夾> --policy configs/adaptive/r1_xxx.json --orde
 | `feature_bins.csv` | 各量測值分組下每個方法的成功率 |
 | `policy_<策略>_tuned.json` | `--tune` 調整後的策略與調整紀錄 |
 
+工作台「模組一 → 自適應策略」（`make workbench`）可檢視同一份結果：列出 `runs/` 中「每個方法都執行」的資料夾，
+對 `configs/adaptive/` 的每個策略與該執行內調整後的策略，顯示與貪婪逐步升級的比較、規則成立比例、嘗試順序分布、
+依量測值分組的各方法成功率與各影像的結果。工作台只讀取，不量測也不調整；還沒有 `features.csv` 時會顯示要執行的指令。
+
 ## 合成資料冒煙結果（不是結論）
 
 2026-10-12，4 個條碼 × 16 種條件＋2 張負樣本，模組寬 3 px：消融組整體成功率由 `a0_raw` 37.5% 逐步升到
