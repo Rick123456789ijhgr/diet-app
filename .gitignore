@@ -9,6 +9,7 @@ api/internal/webui/static/app/
 __pycache__/
 *.pyc
 .venv/
+.venv-paddle/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/

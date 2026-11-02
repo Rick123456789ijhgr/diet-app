@@ -1,0 +1,6 @@
+# PaddleOCR 專用的獨立環境（ai/.venv-paddle）；以 make setup-paddle 安裝。
+# 不裝進 ai/.venv：paddlex 釘死 opencv-contrib-python==4.10.0.84，與 vision 的 OpenCV 4.12 衝突。
+# 前處理仍在 ai/.venv 完成，這裡只做辨識（dietai/adapters/ocr/paddle_worker.py）。
+# 版本鎖定；升級即為不同的引擎（名稱含版本與模型雜湊），須重跑 E2。
+paddlepaddle==3.2.0
+paddleocr==3.7.0

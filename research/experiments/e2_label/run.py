@@ -85,6 +85,11 @@ def main(argv: list[str] | None = None) -> int:
         )
     except (OSError, ValueError) as e:
         p.error(str(e))
+    finally:
+        for eng in engines.values():  # PaddleOCR 的子行程
+            close = getattr(eng.engine, "close", None)
+            if close is not None:
+                close()
     meta, rows = read_label_run(out)
     by = grouping_columns(meta["manifest"]["tag_columns"])
     (out / "summary.md").write_text(label_report_markdown(meta, rows, by), encoding="utf-8")

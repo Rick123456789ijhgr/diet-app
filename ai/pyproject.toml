@@ -16,7 +16,8 @@ dependencies = [
 # 影像處理；preprocess 的單元測試需要，CI 會安裝。版本鎖定，升級須另開 PR 並重跑 E1。
 vision = ["opencv-python-headless==4.12.0.88", "pyzbar==0.1.9", "zxing-cpp==3.1.1"]
 # OCR（營養標示）。Tesseract 另需系統程式與 chi_tra 語言包（見 research/experiments/e2_label）。
-# PaddleOCR 暫不列入：其依賴 paddlex 釘死 opencv-contrib-python==4.10.0.84，會取代 vision 的 OpenCV。
+# PaddleOCR 不列入：其依賴 paddlex 釘死 opencv-contrib-python==4.10.0.84，會取代 vision 的 OpenCV；
+# 改裝在獨立環境 ai/.venv-paddle（requirements-paddle.txt），經子行程呼叫。
 ocr = ["pytesseract==0.3.13"]
 llm = ["litellm"]
 analytics = ["pandas>=2.2", "scipy", "pulp"]
@@ -105,6 +106,11 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # pytesseract 無型別資訊；只在 adapters.ocr.tesseract 使用
 module = ["pytesseract", "pytesseract.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# paddle、paddleocr 只裝在 ai/.venv-paddle；只在 adapters.ocr.paddle_worker 使用
+module = ["paddle", "paddle.*", "paddleocr", "paddleocr.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

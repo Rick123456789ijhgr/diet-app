@@ -15,15 +15,23 @@
 ```bash
 python make_synthetic.py                                    # 合成英文營養標示 → synthetic/（gitignore）
 python run.py --manifest synthetic/manifest.csv             # 預設引擎 tesseract（chi_tra+eng），所有前處理方法
-python run.py --manifest ... --engines tesseract,tesseract:eng --only l0_raw --label stage0   # 階段零
+python run.py --manifest ... --engines tesseract,paddle,paddle:mobile --only l0_raw --label stage0   # 階段零
 ```
+
+引擎描述：`tesseract[:語言[:psm]]`（例如 `tesseract:chi_tra+eng:6`）、`paddle[:server|mobile]`（PP-OCRv5，預設 server）。
 
 ## 環境
 
 | 引擎 | 安裝 | 狀態 |
 | --- | --- | --- |
 | Tesseract 5.4（chi_tra） | `winget install UB-Mannheim.TesseractOCR`；`pip install -e "ai[ocr]"`（pytesseract）；語言包見下 | 可用 |
-| PaddleOCR | 其依賴 paddlex 釘死 `opencv-contrib-python==4.10.0.84`，會取代 `vision` 的 OpenCV 4.12（E1 結果依賴它） | **待決定安裝方式** |
+| PaddleOCR 3.7（PP-OCRv5） | `make setup-paddle`（獨立環境 `ai/.venv-paddle`，版本見 `ai/requirements-paddle.txt`）；首次執行自動下載模型到 `~/.paddlex/official_models` | 可用 |
+
+PaddleOCR 的依賴 paddlex 釘死 `opencv-contrib-python==4.10.0.84`，會取代 `vision` 的 OpenCV 4.12（E1 結果依賴它），
+因此裝在獨立環境。`run.py` 仍在 `ai/.venv` 執行：前處理用專案的 OpenCV 完成，影像以無損 PNG 傳給
+`ai/.venv-paddle` 中的工作行程（`dietai/adapters/ocr/paddle_worker.py`）只做偵測與辨識，結果照常經快取。
+另一個位置的 python 可用環境變數 `DIETAI_PADDLE_PYTHON` 指定。引擎名稱含 paddleocr、paddle、OpenCV 版本與
+偵測、辨識模型檔的 sha256，換了任何一項就是不同的引擎。PaddleOCR 自己的方向分類與彎曲校正關閉，由本專案前處理負責。
 
 Tesseract 語言包不進 git。放在不含空白的資料夾（例如 `%LOCALAPPDATA%\dietai\tessdata`），以 `--tessdata` 或環境變數
 `DIETAI_TESSDATA` 指定。目前使用 `tessdata_best` 4.1.0 的 `chi_tra.traineddata`
