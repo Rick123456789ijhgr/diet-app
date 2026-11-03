@@ -40,6 +40,8 @@ interface RunList {
   runs: { name: string; path: string }[]
   arms: string[]
   default_arms: string[]
+  /** 實驗組 → 設定檔的 description（舊版後端沒有此欄位） */
+  arm_descriptions?: Record<string, string>
 }
 
 /**
@@ -252,29 +254,53 @@ export function E1Results({
             合成資料只供驗證流程與觀察趨勢，不可作為結論。
           </p>
           <fieldset>
-            <legend className="text-muted mb-1 text-xs">實驗組</legend>
-            <div className="flex flex-wrap gap-1.5">
-              {/* 膠囊切換按鈕；第一次點選時由 default_arms 複製出 picked，之後就以 picked 為準 */}
+            <legend className="text-muted mb-1 text-xs">實驗組（已選 {arms.length} 個）</legend>
+            <ul className="space-y-1.5">
+              {/* 一行一個實驗組：勾選框＋名稱＋設定檔的說明。
+                  第一次勾選時由 default_arms 複製出 picked，之後就以 picked 為準 */}
               {(list.data?.arms ?? []).map((a) => {
                 const on = arms.includes(a)
+                const desc = list.data?.arm_descriptions?.[a]
                 return (
-                  <button
-                    key={a}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => setPicked(on ? arms.filter((x) => x !== a) : [...arms, a])}
-                    className={cn(
-                      'readout rounded-lg border px-2 py-0.5 text-xs',
-                      on
-                        ? 'border-primary bg-primary-soft text-primary-ink'
-                        : 'border-card-border text-muted hover:bg-hover',
-                    )}
-                  >
-                    {a}
-                  </button>
+                  <li key={a}>
+                    <label
+                      className={cn(
+                        'flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2',
+                        on ? 'border-primary bg-primary-soft' : 'border-card-border hover:bg-hover',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => setPicked(on ? arms.filter((x) => x !== a) : [...arms, a])}
+                        aria-labelledby={`arm-${a}`}
+                        aria-describedby={desc ? `arm-${a}-desc` : undefined}
+                        className="accent-primary mt-0.5 shrink-0"
+                      />
+                      <span className="min-w-0">
+                        <span
+                          id={`arm-${a}`}
+                          className={cn(
+                            'readout block text-xs font-medium',
+                            on && 'text-primary-ink',
+                          )}
+                        >
+                          {a}
+                        </span>
+                        {desc && (
+                          <span
+                            id={`arm-${a}-desc`}
+                            className="text-muted block text-xs leading-snug"
+                          >
+                            {desc}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  </li>
                 )
               })}
-            </div>
+            </ul>
           </fieldset>
           <label className="flex items-center gap-2 text-xs">
             <span className="text-muted">條碼數</span>

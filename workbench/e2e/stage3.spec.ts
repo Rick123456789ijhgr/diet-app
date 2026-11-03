@@ -62,8 +62,7 @@ test('實驗結果・E1：快速執行後顯示整體成功率與信賴區間', 
   await page.getByRole('button', { name: /快速執行/ }).click()
   // 只跑最小的一組，加快速度
   for (const arm of ['a6_full']) {
-    const btn = page.getByRole('button', { name: arm, exact: true })
-    if ((await btn.getAttribute('aria-pressed')) === 'true') await btn.click()
+    await page.getByRole('checkbox', { name: arm, exact: true }).uncheck()
   }
   await page.getByRole('spinbutton', { name: '條碼數' }).fill('1')
   await page.getByRole('button', { name: '執行', exact: true }).click()

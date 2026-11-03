@@ -251,7 +251,11 @@ describe('實驗結果・E1', () => {
     await screen.findByRole('img', { name: /整體成功率長條圖/ }, WAIT)
     await user.click(screen.getByRole('button', { name: /快速執行/ }))
     // 預設選取 a0_raw、a6_full
-    expect(screen.getByRole('button', { name: 'a0_raw' })).toHaveAttribute('aria-pressed', 'true')
+    const a0 = screen.getByRole('checkbox', { name: 'a0_raw' })
+    expect(a0).toBeChecked()
+    // 每個實驗組附上設定檔的說明
+    expect(a0).toHaveAccessibleDescription('消融：原圖')
+    expect(screen.getByRole('checkbox', { name: 'm1_agree2' })).not.toBeChecked()
     await user.click(screen.getByRole('button', { name: '執行' }))
     expect(await screen.findByText('完成，已切換到新的執行結果。', {}, WAIT)).toBeInTheDocument()
     expect(bodies('/workbench/v1/dev/e1/runs')).toContainEqual({
@@ -259,7 +263,7 @@ describe('實驗結果・E1', () => {
       n_codes: 2,
     })
 
-    await user.click(screen.getByRole('button', { name: 'm1_agree2' }))
+    await user.click(screen.getByRole('checkbox', { name: 'm1_agree2' }))
     await user.click(screen.getByRole('button', { name: '執行' }))
     // 條碼數可暫時清空（不會立刻變成 1），失焦後恢復成目前值
     const nCodes = screen.getByLabelText('條碼數')

@@ -67,9 +67,10 @@ def list_runs_json(root: str) -> dict[str, Any]:
     folder = resolve_root(root)
     # 實驗組設定讀不到或格式錯時仍列出既有結果，只是不能快速執行
     try:
-        arms = [a.name for a in load_arms(E1_DIR / "configs")]
+        loaded = load_arms(E1_DIR / "configs")
     except (OSError, ValueError):
-        arms = []
+        loaded = []
+    arms = [a.name for a in loaded]
     return {
         "root": str(folder),
         "runs": [{"name": p.name, "path": str(p)} for p in list_runs(folder)],
@@ -80,6 +81,8 @@ def list_runs_json(root: str) -> dict[str, Any]:
         ],
         "arms": arms,
         "default_arms": [a for a in ("a0_raw", "a6_full") if a in arms],
+        # 各實驗組設定檔的 description，快速執行的勾選清單逐一顯示
+        "arm_descriptions": {a.name: a.description for a in loaded},
     }
 
 
