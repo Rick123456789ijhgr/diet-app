@@ -148,7 +148,7 @@ describe('外框', () => {
   it('總覽列出各模組的工具', () => {
     renderAt('/')
     expect(screen.getByText('影像前處理')).toBeInTheDocument()
-    // 模組一的五個工具（單張檢視、參數掃描、資料夾批次、E1 消融、自適應策略），另有冷啟動的上傳清單
-    expect(screen.getAllByText('可用')).toHaveLength(6)
+    // 模組一的三個工具（單張檢視、多張測試、實驗結果），另有冷啟動的上傳清單
+    expect(screen.getAllByText('可用')).toHaveLength(4)
   })
 })

@@ -10,8 +10,8 @@ const PNG = Buffer.from(
   'base64',
 )
 
-test('參數掃描：品質檢查的觸發等級與條碼成功率', async ({ page }) => {
-  await page.goto('/m1/sweep')
+test('多張測試・參數掃描：品質檢查的觸發等級與條碼成功率', async ({ page }) => {
+  await page.goto('/m1/multi/sweep')
   await expect(page.getByRole('img', { name: /模糊分數隨高斯模糊 σ變化/ })).toBeVisible({
     timeout: 30_000,
   })
@@ -36,11 +36,11 @@ test('參數掃描：品質檢查的觸發等級與條碼成功率', async ({ pa
   await expect(page.getByRole('img', { name: /四角誤差中位數/ })).toBeVisible()
 })
 
-test('資料夾批次：逐張結果、單張檢視，測試集被拒絕', async ({ page }) => {
+test('多張測試・資料夾批次：逐張結果、單張檢視，測試集被拒絕', async ({ page }) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'wb-batch-'))
   for (const name of ['a.png', 'b.png', 'c.png']) writeFileSync(path.join(dir, name), PNG)
 
-  await page.goto('/m1/batch')
+  await page.goto('/m1/multi/folder')
   await page.getByRole('textbox', { name: '資料夾' }).fill(dir)
   await page.getByRole('button', { name: '執行' }).click()
   const table = page.getByRole('table', { name: '每張影像的品質檢查結果' })
@@ -56,17 +56,16 @@ test('資料夾批次：逐張結果、單張檢視，測試集被拒絕', async
   await expect(page.getByRole('alert')).toContainText('測試集已鎖定')
 })
 
-test('E1：快速執行後顯示整體成功率與信賴區間', async ({ page }) => {
+test('實驗結果・E1：快速執行後顯示整體成功率與信賴區間', async ({ page }) => {
   test.setTimeout(180_000)
-  await page.goto('/m1/e1')
-  await page.getByRole('tab', { name: '快速執行' }).click()
+  await page.goto('/m1/results/e1')
+  await page.getByRole('button', { name: /快速執行/ }).click()
   // 只跑最小的一組，加快速度
   for (const arm of ['a6_full']) {
-    const btn = page.getByRole('button', { name: arm, exact: true })
-    if ((await btn.getAttribute('aria-pressed')) === 'true') await btn.click()
+    await page.getByRole('checkbox', { name: arm, exact: true }).uncheck()
   }
   await page.getByRole('spinbutton', { name: '條碼數' }).fill('1')
-  await page.getByRole('button', { name: '執行' }).click()
+  await page.getByRole('button', { name: '執行', exact: true }).click()
   await expect(page.getByText('完成，已切換到新的執行結果。')).toBeVisible({ timeout: 150_000 })
   await expect(page.getByRole('img', { name: /整體成功率長條圖/ })).toBeVisible()
   await expect(page.getByRole('table', { name: '各實驗組的整體彙整' })).toContainText('a0_raw')

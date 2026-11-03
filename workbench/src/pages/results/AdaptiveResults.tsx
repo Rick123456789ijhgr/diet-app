@@ -1,18 +1,20 @@
-// 模組一：E1 規則式自適應策略（ADR 0005 後續 6）。依品質量測值排出嘗試順序的策略，與貪婪選出的
+// 模組一・實驗結果：E1 規則式自適應策略（ADR 0005 後續 6）。依品質量測值排出嘗試順序的策略，與貪婪選出的
 // 逐步升級比較成功率與耗時。資料來自「每個方法都執行」的結果（run_methods.py）與 features.csv
 // （adaptive.py）；模擬與統計一律由後端（dietai.evaluation）計算，前端不重算。
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, Gauge, ListOrdered, Rows3, SlidersHorizontal, Terminal } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { api, unwrap } from '@/api/client'
 import { BarList, Heatmap } from '@/components/charts'
+import { PanelSection } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
 import { Badge, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
-import { useDebounced } from '@/hooks/useDebounced'
 import { featureText, methodText, outcomeText } from '@/lib/text'
+
+import { RootInput, Select } from './shared'
 
 // 以下型別是本頁自行宣告的後端回應形狀（E1 路由的回應在規格中是自由 JSON：FreeJson），
 // 由 dietai.devtools.e1.list_runs_json 與 dietai.devtools.adaptive.adaptive_run_json 產生。
@@ -107,12 +109,21 @@ const num = (v: number) => String(Number(v.toPrecision(4)))
 const planText = (plan: string) => plan.split('>').map(methodText).join(' → ')
 
 /**
- * 自適應策略頁。左側選資料夾、執行、實驗組與策略；右側讀數欄為與基準的比較，
+ * 自適應策略（實驗結果頁的一種模式）。左側選資料夾、執行、實驗組與策略；右側讀數欄為與基準的比較，
  * 主檢視分「比較、規則、嘗試順序、量測值分組、各影像」五個分頁。
  */
-export function AdaptivePage() {
-  const [root, setRoot] = useState('')
-  const debouncedRoot = useDebounced(root, 400)
+export function AdaptiveResults({
+  switcher,
+  root,
+  setRoot,
+  debouncedRoot,
+}: {
+  switcher: ReactNode
+  /** 結果資料夾；與 E1 消融共用（見 E1Results） */
+  root: string
+  setRoot: (v: string) => void
+  debouncedRoot: string
+}) {
   const [runName, setRunName] = useState<string | null>(null)
   const [armName, setArmName] = useState<string | null>(null)
   const [policyName, setPolicyName] = useState<string | null>(null)
@@ -151,17 +162,8 @@ export function AdaptivePage() {
   const policy = arm?.policies.find((p) => p.name === policyName) ?? arm?.policies[0]
 
   const panel = (
-    <div className="space-y-3 px-4 pt-3 pb-4 text-sm">
-      <label className="flex flex-col gap-1">
-        <span className="text-muted text-xs">結果資料夾（空白為預設）</span>
-        <input
-          aria-label="結果資料夾"
-          value={root}
-          onChange={(e) => setRoot(e.target.value)}
-          placeholder={list.data?.root ?? 'research/experiments/e1_barcode/runs'}
-          className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
-        />
-      </label>
+    <PanelSection title="執行結果">
+      <RootInput value={root} onChange={setRoot} placeholder={list.data?.root} />
       <Select
         label="執行"
         value={current ?? ''}
@@ -199,14 +201,15 @@ export function AdaptivePage() {
         先試原圖，失敗才量測品質，依規則決定接下來嘗試的方法與順序。門檻只能在 dev 上以 adaptive.py
         --tune 調整；這裡只檢視結果。
       </p>
-    </div>
+    </PanelSection>
   )
 
   return (
     <Workspace
       panel={panel}
-      title="自適應策略"
-      description="依品質量測值選擇處理方式，與貪婪選出的逐步升級比較成功率與耗時（research/experiments/e1_barcode/adaptive.py）。"
+      title="實驗結果"
+      description="自適應策略：依品質量測值選擇處理方式，與貪婪選出的逐步升級比較成功率與耗時（research/experiments/e1_barcode/adaptive.py）。"
+      aside={switcher}
     >
       {list.error ? (
         <div className="p-4">
@@ -248,43 +251,6 @@ export function AdaptivePage() {
         />
       )}
     </Workspace>
-  )
-}
-
-/** 本頁用的精簡下拉選單（同 E1 頁）。 */
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-  empty,
-  help,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-  empty?: string
-  help?: string
-}) {
-  return (
-    <label className="flex flex-col gap-1" title={help}>
-      <span className="text-muted text-xs">{label}</span>
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={options.length === 0}
-        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
-      >
-        {options.length === 0 && <option>{empty}</option>}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
   )
 }
 

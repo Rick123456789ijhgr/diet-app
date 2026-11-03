@@ -199,6 +199,7 @@ def test_e1_quick_run_and_summary(e1_dir):
     assert listed["runs"][0]["name"] == done["name"]
     assert "a6_full" in listed["arms"]
     assert listed["default_arms"] == ["a0_raw", "a6_full"]
+    assert set(listed["arm_descriptions"]) == set(listed["arms"])
 
     run = e1.run_json(done["name"])  # 只給名稱時視為預設結果資料夾下的那一次
     assert run["arms"] == ["a0_raw", "a6_full"]

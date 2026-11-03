@@ -648,6 +648,11 @@ export const handlers = [
       ],
       arms: ['a0_raw', 'a6_full', 'm1_agree2'],
       default_arms: ['a0_raw', 'a6_full'],
+      arm_descriptions: {
+        a0_raw: '消融：原圖',
+        a6_full: '消融：完整階梯',
+        m1_agree2: '誤讀對策：兩次嘗試一致才採用',
+      },
     }),
   ),
   http.get('*/workbench/v1/dev/e1/runs/:id', ({ params }) =>

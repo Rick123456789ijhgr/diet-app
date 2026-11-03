@@ -1,27 +1,26 @@
-// 模組一：參數掃描。一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；
+// 模組一・多張測試：參數掃描。一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；
 // 條碼與營養標示以合成樣本對真值評分（條碼號碼、標示四角），並對照品質門檻。
 import {
-  Barcode,
+  ArrowLeftRight,
   ChartLine,
   Crosshair,
   Gauge,
   Layers,
-  ReceiptText,
-  ScanSearch,
+  SlidersHorizontal,
   Table,
   TrendingUp,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 
 import { api, artifactUrl, overrideBody, unwrap, type ConfigOverride } from '@/api/client'
 import { LineChart, PALETTE, StackedBars } from '@/components/charts'
 import { ConfigIO } from '@/components/ConfigIO'
 import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { LadderControls } from '@/components/LadderControls'
+import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
-import { ToolPanel } from '@/components/ToolPanel'
 import { Badge, DraftNumberInput, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
@@ -176,6 +175,12 @@ const LOCATE_TEXT: Record<LocateOutcome, string> = {
 const TOL = { default: 0.03, lo: 0.005, hi: 0.2 }
 /** 適用範圍（ADR 0004）：伺服器端的逐步升級只服務無法重拍的靜態照片。 */
 const SCOPE_NOTE = '適用：相簿匯入、冷啟動上傳等無法重拍的靜態照片；APP 即時掃描不經此流程。'
+/** 評估對象的一句說明（左欄「評估對象」下方）。 */
+const TARGET_TEXT: Record<Target, string> = {
+  quality: '對基準影像逐級退化，看品質指標在哪個等級首次觸發警告。',
+  barcode: '對合成 EAN-13 逐級退化並解碼，比較只用原圖與逐步升級的成功率、誤讀率。',
+  label: '對合成營養標示逐級退化並找四角，對照真實四角評分。',
+}
 /** 比例轉整數百分比（圖表軸與讀數用）。 */
 const pct = (v: number) => `${Math.round(v * 100)}%`
 
@@ -187,8 +192,21 @@ const pct = (v: number) => `${Math.round(v * 100)}%`
  * - 營養標示：對合成標示退化後做營養標示前處理，找到的四角對照真實四角；同樣對照品質門檻。
  *   左側可調 LabelConfig／QualityConfig 與容許誤差。
  * 請求經 useAnalysis（防抖、取消舊請求、保留上一次結果並淡化）。
+ *
+ * 由多張測試頁（MultiPage）掛載：品質門檻（config）與資料夾批次共用，放在頁面層；
+ * 不在前景時（active 為 false）不送出新請求。switcher 是標題列右側的模式切換。
  */
-export function SweepPage() {
+export function SweepMode({
+  active,
+  switcher,
+  config,
+  setConfig,
+}: {
+  active: boolean
+  switcher: ReactNode
+  config: ConfigOverride
+  setConfig: (c: ConfigOverride) => void
+}) {
   const schemas = useConfigSchemas()
   // 各設定類別的結構（自動產生 ParamForm 用）；載入前為 undefined，相關表單先不顯示
   const quality = useConfigClass('QualityConfig').schema
@@ -208,14 +226,16 @@ export function SweepPage() {
   const [samples, setSamples] = useState({ samples: 5, module_px: 4, seed: 0 })
   // 營養標示定位的容許誤差（比例）
   const [tol, setTol] = useState(TOL.default)
-  // 三組設定覆寫（只帶與預設值不同的欄位）
-  const [config, setConfig] = useState<ConfigOverride>({})
+  // 設定覆寫（只帶與預設值不同的欄位）；品質門檻 config 由頁面層傳入
   const [ladder, setLadder] = useState<ConfigOverride>({})
   const [zxing, setZxing] = useState<ConfigOverride>({})
   const [labelCfg, setLabelCfg] = useState<ConfigOverride>({})
   // 品質曲線要畫的指標；view 為主檢視分頁（兩種對象共用，切換對象時重設為 chart）
   const [metric, setMetric] = useState<MetricKey>('blur_score')
   const [view, setView] = useState('chart')
+  // 左欄參數與匯入／匯出兩段是否展開
+  const [paramsOpen, setParamsOpen] = useState(false)
+  const [ioOpen, setIoOpen] = useState(false)
   const image = pipeline.image
 
   // 送給後端的掃描參數。用 useMemo 讓物件在輸入不變時保持同一參照：
@@ -249,7 +269,7 @@ export function SweepPage() {
   const rangeError = range[0] < range[1] ? undefined : '下限必須小於上限'
   // 查詢鍵為 [`sweep-${target}`, imageId, 防抖後的 params]，兩種對象的結果各自快取
   const analysis = useAnalysis({
-    enabled: !rangeError,
+    enabled: !rangeError && active,
     name: `sweep-${target}`,
     // 條碼與營養標示掃描用後端產生的合成樣本，不需要影像
     imageId: target === 'quality' ? image?.image_id : `synthetic-${target}`,
@@ -337,68 +357,67 @@ export function SweepPage() {
       <p className="text-muted text-xs">
         可用範圍 {axis.lo}–{axis.hi}；在範圍內等距取點。
       </p>
-      {target !== 'quality' && (
-        <div className="border-card-border space-y-2 border-t pt-3">
-          {target === 'barcode' ? (
-            <p className="text-muted text-xs">
-              樣本為合成
-              EAN-13，內容各不相同；成功率為讀對的樣本數除以樣本數，讀成別的號碼另計為誤讀。
-            </p>
-          ) : (
-            <p className="text-muted text-xs">
-              樣本為合成營養標示（各自隨機透視），已知真實四角；四角中最大的誤差不超過「真值平均邊長
-              × 容許誤差」才算正確，找到但超過算偏移。
-            </p>
-          )}
-          <p className="text-muted text-xs">{SCOPE_NOTE}</p>
-          <div className="flex items-end gap-2">
-            {/* [欄位, 標籤, 最小值, 最大值]；輸入四捨五入成整數並限制在範圍內；模組寬只用於條碼 */}
-            {(
-              [
-                ['samples', '樣本數', 1, 30],
-                ['module_px', '模組寬', 1, 12],
-                ['seed', '種子', 0, 10000],
-              ] as const
-            )
-              .filter(([key]) => target === 'barcode' || key !== 'module_px')
-              .map(([key, label, lo, hi]) => (
-                <div key={key} className="flex flex-col gap-1 text-xs">
-                  <span className="text-muted">{label}</span>
-                  <DraftNumberInput
-                    aria-label={label}
-                    value={samples[key]}
-                    parse={(t) => {
-                      const v = Math.round(Number(t))
-                      return v >= lo && v <= hi ? v : undefined
-                    }}
-                    onCommit={(v) => setSamples({ ...samples, [key]: v })}
-                  />
-                </div>
-              ))}
-            {target === 'label' && (
-              <div className="flex flex-col gap-1 text-xs">
-                <span className="text-muted">容許誤差</span>
-                <DraftNumberInput
-                  aria-label="容許誤差"
-                  step={0.005}
-                  value={tol}
-                  parse={(t) => {
-                    const v = Number(t)
-                    return v >= TOL.lo && v <= TOL.hi ? v : undefined
-                  }}
-                  onCommit={setTol}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 
-  // 左側面板依評估對象切換：品質＝掃描設定＋基準影像／QualityConfig；
-  // 條碼＝掃描設定／階梯參數（LadderConfig＋ZxingConfig）＋品質門檻（QualityConfig，對照用）；
-  // 營養標示＝掃描設定／標示參數（LabelConfig）＋品質門檻
+  // 合成樣本設定（條碼與營養標示）：樣本數、模組寬（只用於條碼）、種子、容許誤差（只用於標示）
+  const sampleControls = (
+    <div className="space-y-2">
+      {target === 'barcode' ? (
+        <p className="text-muted text-xs">
+          樣本為合成 EAN-13，內容各不相同；成功率為讀對的樣本數除以樣本數，讀成別的號碼另計為誤讀。
+        </p>
+      ) : (
+        <p className="text-muted text-xs">
+          樣本為合成營養標示（各自隨機透視），已知真實四角；四角中最大的誤差不超過「真值平均邊長 ×
+          容許誤差」才算正確，找到但超過算偏移。
+        </p>
+      )}
+      <p className="text-muted text-xs">{SCOPE_NOTE}</p>
+      <div className="flex items-end gap-2">
+        {/* [欄位, 標籤, 最小值, 最大值]；輸入四捨五入成整數並限制在範圍內；模組寬只用於條碼 */}
+        {(
+          [
+            ['samples', '樣本數', 1, 30],
+            ['module_px', '模組寬', 1, 12],
+            ['seed', '種子', 0, 10000],
+          ] as const
+        )
+          .filter(([key]) => target === 'barcode' || key !== 'module_px')
+          .map(([key, label, lo, hi]) => (
+            <div key={key} className="flex flex-col gap-1 text-xs">
+              <span className="text-muted">{label}</span>
+              <DraftNumberInput
+                aria-label={label}
+                value={samples[key]}
+                parse={(t) => {
+                  const v = Math.round(Number(t))
+                  return v >= lo && v <= hi ? v : undefined
+                }}
+                onCommit={(v) => setSamples({ ...samples, [key]: v })}
+              />
+            </div>
+          ))}
+        {target === 'label' && (
+          <div className="flex flex-col gap-1 text-xs">
+            <span className="text-muted">容許誤差</span>
+            <DraftNumberInput
+              aria-label="容許誤差"
+              step={0.005}
+              value={tol}
+              parse={(t) => {
+                const v = Number(t)
+                return v >= TOL.lo && v <= TOL.hi ? v : undefined
+              }}
+              onCommit={setTol}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  // 品質門檻：條碼與營養標示只用來對照「該不該請使用者重拍」（結果的品質門檻檢視），不影響解碼與定位
   const qualityForm = quality && (
     <div className="border-card-border space-y-2 border-t pt-4">
       <h3 className="text-sm font-semibold">品質門檻（對照用）</h3>
@@ -411,18 +430,32 @@ export function SweepPage() {
       />
     </div>
   )
-  const panel =
-    target === 'label' ? (
-      <ToolPanel
-        imageLabel="掃描"
-        paramsLabel="標示參數"
-        changed={Object.keys(labelCfg).length + Object.keys(config).length}
-        image={sweepControls}
-        params={
-          labelSchema &&
+
+  // 參數段依評估對象而定：品質＝QualityConfig；條碼＝LadderConfig＋ZxingConfig＋品質門檻；
+  // 營養標示＝LabelConfig＋品質門檻。後端回 INVALID_CONFIG 時各表單都傳入，只有含該欄位的會標紅
+  const paramsTitle = { quality: '品質門檻', barcode: '階梯參數', label: '標示參數' }[target]
+  const changed =
+    Object.keys(config).length +
+    (target === 'barcode'
+      ? Object.keys(ladder).length + Object.keys(zxing).length
+      : target === 'label'
+        ? Object.keys(labelCfg).length
+        : 0)
+  const paramsForm =
+    target === 'quality'
+      ? quality && (
+          <ParamForm
+            schema={quality}
+            overrides={config}
+            onChange={setConfig}
+            invalidField={analysis.configError?.field}
+            invalidMessage={analysis.configError?.message}
+          />
+        )
+      : target === 'label'
+        ? labelSchema &&
           quality && (
             <div className="space-y-6">
-              {/* 後端回 INVALID_CONFIG 時兩個表單都傳入；只有含該欄位的表單會標紅 */}
               <ParamForm
                 schema={labelSchema}
                 overrides={labelCfg}
@@ -433,57 +466,7 @@ export function SweepPage() {
               {qualityForm}
             </div>
           )
-        }
-        io={
-          labelSchema &&
-          quality && (
-            <div className="space-y-8">
-              <ConfigIO
-                title="標示設定"
-                schema={labelSchema}
-                overrides={labelCfg}
-                onImport={setLabelCfg}
-              />
-              <ConfigIO title="品質門檻" schema={quality} overrides={config} onImport={setConfig} />
-            </div>
-          )
-        }
-      />
-    ) : target === 'quality' ? (
-      <ToolPanel
-        changed={Object.keys(config).length}
-        image={
-          <div className="space-y-5">
-            {sweepControls}
-            <div className="border-card-border border-t pt-4">
-              <h3 className="mb-2 text-sm font-semibold">基準影像</h3>
-              <ImageSourcePanel pipeline={pipeline} scene="label" />
-            </div>
-          </div>
-        }
-        params={
-          quality && (
-            <ParamForm
-              schema={quality}
-              overrides={config}
-              onChange={setConfig}
-              invalidField={analysis.configError?.field}
-              invalidMessage={analysis.configError?.message}
-            />
-          )
-        }
-        io={quality && <ConfigIO schema={quality} overrides={config} onImport={setConfig} />}
-      />
-    ) : (
-      <ToolPanel
-        imageLabel="掃描"
-        paramsLabel="階梯參數"
-        changed={
-          Object.keys(ladder).length + Object.keys(zxing).length + Object.keys(config).length
-        }
-        image={sweepControls}
-        params={
-          ladderSchema &&
+        : ladderSchema &&
           zxingSchema &&
           quality && (
             <div className="space-y-6">
@@ -496,8 +479,8 @@ export function SweepPage() {
                 showFormats
               />
               {/* LadderConfig 的序列欄位（陣列值，例如階梯順序、格式）由上方 LadderControls 編輯，
-                  其餘純量欄位由 ParamForm 編輯：傳入時濾掉陣列欄位，回寫時再把陣列欄位合併回去，
-                  兩個元件才不會互相覆蓋對方的設定 */}
+              其餘純量欄位由 ParamForm 編輯：傳入時濾掉陣列欄位，回寫時再把陣列欄位合併回去，
+              兩個元件才不會互相覆蓋對方的設定 */}
               <ParamForm
                 schema={ladderSchema}
                 overrides={Object.fromEntries(
@@ -514,7 +497,6 @@ export function SweepPage() {
                 invalidField={analysis.configError?.field}
                 invalidMessage={analysis.configError?.message}
               />
-              {/* 後端回 INVALID_CONFIG 時各表單都傳入；只有含該欄位的表單會標紅 */}
               <ParamForm
                 schema={zxingSchema}
                 overrides={zxing}
@@ -522,35 +504,89 @@ export function SweepPage() {
                 invalidField={analysis.configError?.field}
                 invalidMessage={analysis.configError?.message}
               />
-              {/* 品質門檻不影響解碼，只用來對照「該不該請使用者重拍」（結果的品質門檻檢視） */}
               {qualityForm}
             </div>
           )
-        }
-        // 匯出入涵蓋 LadderConfig、ZxingConfig 與 QualityConfig 三組設定，各自匯出、匯入
-        io={
-          ladderSchema &&
-          zxingSchema &&
-          quality && (
-            <div className="space-y-8">
-              <ConfigIO
-                title="階梯設定"
-                schema={ladderSchema}
-                overrides={ladder}
-                onImport={setLadder}
-              />
-              <ConfigIO
-                title="解碼器設定"
-                schema={zxingSchema}
-                overrides={zxing}
-                onImport={setZxing}
-              />
-              <ConfigIO title="品質門檻" schema={quality} overrides={config} onImport={setConfig} />
-            </div>
-          )
-        }
-      />
-    )
+  // 匯入／匯出涵蓋此對象用到的每一組設定，各自匯出、匯入
+  const ioForms =
+    target === 'quality'
+      ? quality && <ConfigIO schema={quality} overrides={config} onImport={setConfig} />
+      : quality && (
+          <div className="space-y-8">
+            {target === 'label'
+              ? labelSchema && (
+                  <ConfigIO
+                    title="標示設定"
+                    schema={labelSchema}
+                    overrides={labelCfg}
+                    onImport={setLabelCfg}
+                  />
+                )
+              : ladderSchema &&
+                zxingSchema && (
+                  <>
+                    <ConfigIO
+                      title="階梯設定"
+                      schema={ladderSchema}
+                      overrides={ladder}
+                      onImport={setLadder}
+                    />
+                    <ConfigIO
+                      title="解碼器設定"
+                      schema={zxingSchema}
+                      overrides={zxing}
+                      onImport={setZxing}
+                    />
+                  </>
+                )}
+            <ConfigIO title="品質門檻" schema={quality} overrides={config} onImport={setConfig} />
+          </div>
+        )
+
+  // 左側面板由上而下：評估對象 → 掃描範圍 → 基準影像（品質）或合成樣本（條碼、標示）→ 參數 → 匯入／匯出
+  const panel = (
+    <PanelStack>
+      <PanelSection title="評估對象">
+        <Segmented
+          label="評估對象"
+          value={target}
+          onChange={switchTarget}
+          className="flex w-full"
+          options={[
+            { value: 'quality', label: '品質檢查' },
+            { value: 'barcode', label: '條碼解碼' },
+            { value: 'label', label: '營養標示' },
+          ]}
+        />
+        <p className="text-muted text-xs">{TARGET_TEXT[target]}</p>
+      </PanelSection>
+      <PanelSection title="掃描範圍">{sweepControls}</PanelSection>
+      {target === 'quality' ? (
+        <PanelSection title="基準影像">
+          <ImageSourcePanel pipeline={pipeline} scene="label" />
+        </PanelSection>
+      ) : (
+        <PanelSection title="合成樣本">{sampleControls}</PanelSection>
+      )}
+      <Disclosure
+        open={paramsOpen}
+        onOpenChange={setParamsOpen}
+        icon={SlidersHorizontal}
+        title={paramsTitle}
+        badge={changed > 0 && <Badge tone="primary">已改 {changed} 項</Badge>}
+      >
+        {paramsForm}
+      </Disclosure>
+      <Disclosure
+        open={ioOpen}
+        onOpenChange={setIoOpen}
+        icon={ArrowLeftRight}
+        title="匯入／匯出設定"
+      >
+        {ioForms}
+      </Disclosure>
+    </PanelStack>
+  )
 
   // 依目前對象與結果的特徵欄位決定要顯示哪一種；切換對象後、新結果回來前兩者皆為 undefined，
   // 不會把另一種對象的舊結果套上錯誤的檢視
@@ -568,8 +604,8 @@ export function SweepPage() {
   return (
     <Workspace
       panel={panel}
-      title="參數掃描"
-      description="一種退化由弱到強：品質檢查看指標在哪個等級越過門檻；條碼與營養標示對真值評分（號碼、四角），並對照品質門檻。"
+      title="多張測試"
+      description="參數掃描：一種退化由弱到強，看品質指標在哪個等級越過門檻；條碼與營養標示對真值評分（號碼、四角）。"
       aside={
         <div className="flex items-center gap-2">
           {(pipeline.pending || analysis.busy) && (
@@ -577,16 +613,7 @@ export function SweepPage() {
               計算中…
             </Badge>
           )}
-          <Segmented
-            label="評估對象"
-            value={target}
-            onChange={switchTarget}
-            options={[
-              { value: 'quality', label: withIcon(ScanSearch, '品質檢查') },
-              { value: 'barcode', label: withIcon(Barcode, '條碼解碼') },
-              { value: 'label', label: withIcon(ReceiptText, '營養標示') },
-            ]}
-          />
+          {switcher}
         </div>
       }
     >

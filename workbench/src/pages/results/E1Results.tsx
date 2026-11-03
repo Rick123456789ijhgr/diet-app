@@ -1,4 +1,4 @@
-// 模組一：E1 條碼消融。各實驗組的成功率與信賴區間、依拍攝條件分組、成功階、失敗影像
+// 模組一・實驗結果：E1 條碼消融。各實驗組的成功率與信賴區間、依拍攝條件分組、成功階、失敗影像
 // （research/experiments/e1_barcode）。統計一律由後端（dietai.evaluation）計算。
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -10,32 +10,26 @@ import {
   Lock,
   Play,
   Square,
+  Zap,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import { api, artifactUrl, unwrap } from '@/api/client'
 import { BarList, Heatmap, StackedBars } from '@/components/charts'
 import { ImageViewer } from '@/components/ImageViewer'
+import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
-import {
-  Badge,
-  Button,
-  DraftNumberInput,
-  Segmented,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/primitives'
+import { Badge, Button, DraftNumberInput, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
-import { useDebounced } from '@/hooks/useDebounced'
 import { useLocalImage } from '@/hooks/useLocalImage'
 import { useStream } from '@/hooks/useStream'
 import { cn } from '@/lib/cn'
 import { parseClampedInt, progressPercent } from '@/lib/number'
 import { naturalSort, orderRungs } from '@/lib/ordering'
 import { outcomeText, rungText } from '@/lib/text'
+
+import { RootInput, Select } from './shared'
 
 // 以下型別是本頁自行宣告的後端回應形狀（E1 路由的回應在規格中是自由 JSON：FreeJson），
 // 取得時以 `as Promise<unknown> as Promise<…>` 轉型；欄位改名時這裡不會有型別錯誤提醒。
@@ -46,6 +40,8 @@ interface RunList {
   runs: { name: string; path: string }[]
   arms: string[]
   default_arms: string[]
+  /** 實驗組 → 設定檔的 description（舊版後端沒有此欄位） */
+  arm_descriptions?: Record<string, string>
 }
 
 /**
@@ -122,15 +118,24 @@ type E1Event =
 const FAILURE_KINDS = ['misread', 'missed', 'false_positive', 'error']
 
 /**
- * E1 條碼消融頁。左側面板分兩頁：「執行結果」選資料夾／執行／基準組／分組條件；
- * 「快速執行」以合成條碼經 SSE 跑一次實驗。右側由 RunView 顯示選定執行的結果。
+ * E1 條碼消融（實驗結果頁的一種模式）。左側面板：「執行結果」選資料夾／執行／基準組／分組條件；
+ * 可收合的「快速執行」以合成條碼經 SSE 跑一次實驗。右側由 RunView 顯示選定執行的結果。
  * 本頁只顯示後端算好的統計（成功率、Wilson 信賴區間、McNemar p 值），不在前端重算。
  */
-export function E1Page() {
+export function E1Results({
+  switcher,
+  root,
+  setRoot,
+  debouncedRoot,
+}: {
+  switcher: ReactNode
+  /** 結果資料夾（輸入框目前的值；空字串為後端預設）；與自適應策略共用，放在頁面層 */
+  root: string
+  setRoot: (v: string) => void
+  /** 防抖 400 ms 後的資料夾，避免每打一個字就重新列出資料夾 */
+  debouncedRoot: string
+}) {
   const qc = useQueryClient()
-  // 結果資料夾：空字串代表用後端預設路徑。打字時以 400 ms 防抖，避免每個字元都重新列出資料夾
-  const [root, setRoot] = useState('')
-  const debouncedRoot = useDebounced(root, 400)
   // 使用者選的執行；可能不在目前清單中（換資料夾後），實際使用的是下方的 current
   const [runName, setRunName] = useState<string | null>(null)
   // 使用者選的基準組；同理可能不在新執行的實驗組中，實際使用的是下方的 base
@@ -140,6 +145,7 @@ export function E1Page() {
   // 快速執行勾選的實驗組；null 代表使用者還沒動過，沿用後端的 default_arms
   const [picked, setPicked] = useState<string[] | null>(null)
   const [nCodes, setNCodes] = useState(2)
+  const [quickOpen, setQuickOpen] = useState(false)
   // 快速執行走 SSE（POST 同一路徑）；離開頁面時 useStream 會自動取消，後端隨之停止
   const stream = useStream<E1Event>('/workbench/v1/dev/e1/runs')
 
@@ -200,26 +206,11 @@ export function E1Page() {
     progress?.type === 'progress' ? progressPercent(progress.done, progress.total) : 5
 
   // 左側控制面板
+  // 左側控制面板：執行結果（資料夾、執行、基準組、分組條件）→ 快速執行（預設收合；執行中保持展開）
   const panel = (
-    <Tabs defaultValue="runs">
-      <div className="bg-card sticky top-0 z-10 p-3 pb-2">
-        <TabsList>
-          <TabsTrigger value="runs">執行結果</TabsTrigger>
-          <TabsTrigger value="quick">快速執行</TabsTrigger>
-        </TabsList>
-      </div>
-      {/* 「執行結果」：選資料夾、執行、基準組、分組條件 */}
-      <TabsContent value="runs" className="space-y-3 px-4 pt-2 pb-4 text-sm">
-        <label className="flex flex-col gap-1">
-          <span className="text-muted text-xs">結果資料夾（空白為預設）</span>
-          <input
-            aria-label="結果資料夾"
-            value={root}
-            onChange={(e) => setRoot(e.target.value)}
-            placeholder={list.data?.root ?? 'research/experiments/e1_barcode/runs'}
-            className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
-          />
-        </label>
+    <PanelStack>
+      <PanelSection title="執行結果">
+        <RootInput value={root} onChange={setRoot} placeholder={list.data?.root} />
         <Select
           label="執行"
           value={current ?? ''}
@@ -248,106 +239,140 @@ export function E1Page() {
             />
           </>
         )}
-      </TabsContent>
-      {/* 「快速執行」：以合成條碼跑選取的實驗組（SSE 回報進度） */}
-      <TabsContent value="quick" className="space-y-3 px-4 pt-2 pb-4 text-sm">
-        <p className="text-muted text-xs">
-          以合成條碼產生資料（寫到
-          e1_barcode/synthetic/）並執行選取的實驗組，結果存到「執行結果」的資料夾。
-          合成資料只供驗證流程與觀察趨勢，不可作為結論。
-        </p>
-        <fieldset>
-          <legend className="text-muted mb-1 text-xs">實驗組</legend>
-          <div className="flex flex-wrap gap-1.5">
-            {/* 膠囊切換按鈕；第一次點選時由 default_arms 複製出 picked，之後就以 picked 為準 */}
-            {(list.data?.arms ?? []).map((a) => {
-              const on = arms.includes(a)
-              return (
-                <button
-                  key={a}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setPicked(on ? arms.filter((x) => x !== a) : [...arms, a])}
-                  className={cn(
-                    'readout rounded-lg border px-2 py-0.5 text-xs',
-                    on
-                      ? 'border-primary bg-primary-soft text-primary-ink'
-                      : 'border-card-border text-muted hover:bg-hover',
-                  )}
-                >
-                  {a}
-                </button>
-              )
-            })}
-          </div>
-        </fieldset>
-        <label className="flex items-center gap-2 text-xs">
-          <span className="text-muted">條碼數</span>
-          {/* 限制在 1–20；可暫時清空，失焦時才顯示夾過的值（見 parseClampedInt） */}
-          <DraftNumberInput
-            aria-label="條碼數"
-            min={1}
-            max={20}
-            value={nCodes}
-            parse={(t) => parseClampedInt(t, 1, 20)}
-            onCommit={setNCodes}
-          />
-        </label>
-        {/* 執行中顯示停止鈕與進度條；還沒收到 progress（後端仍在產生合成資料）時，進度條先顯示 5% */}
-        {stream.status === 'running' ? (
-          <>
-            <Button className="w-full" onClick={stream.cancel}>
-              <Square className="size-4" aria-hidden />
-              停止
-            </Button>
-            <div
-              role="progressbar"
-              aria-valuenow={progress?.type === 'progress' ? progress.done : 0}
-              aria-valuemax={progress?.type === 'progress' ? progress.total : undefined}
+      </PanelSection>
+      {/* 快速執行：以合成條碼跑選取的實驗組（SSE 回報進度） */}
+      <Disclosure
+        open={quickOpen || stream.status === 'running'}
+        onOpenChange={setQuickOpen}
+        icon={Zap}
+        title="快速執行"
+      >
+        <div className="space-y-3 text-sm">
+          <p className="text-muted text-xs">
+            以合成條碼產生資料（寫到
+            e1_barcode/synthetic/）並執行選取的實驗組，結果存到「執行結果」的資料夾。
+            合成資料只供驗證流程與觀察趨勢，不可作為結論。
+          </p>
+          <fieldset>
+            <legend className="text-muted mb-1 text-xs">實驗組（已選 {arms.length} 個）</legend>
+            <ul className="space-y-1.5">
+              {/* 一行一個實驗組：勾選框＋名稱＋設定檔的說明。
+                  第一次勾選時由 default_arms 複製出 picked，之後就以 picked 為準 */}
+              {(list.data?.arms ?? []).map((a) => {
+                const on = arms.includes(a)
+                const desc = list.data?.arm_descriptions?.[a]
+                return (
+                  <li key={a}>
+                    <label
+                      className={cn(
+                        'flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2',
+                        on ? 'border-primary bg-primary-soft' : 'border-card-border hover:bg-hover',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => setPicked(on ? arms.filter((x) => x !== a) : [...arms, a])}
+                        aria-labelledby={`arm-${a}`}
+                        aria-describedby={desc ? `arm-${a}-desc` : undefined}
+                        className="accent-primary mt-0.5 shrink-0"
+                      />
+                      <span className="min-w-0">
+                        <span
+                          id={`arm-${a}`}
+                          className={cn(
+                            'readout block text-xs font-medium',
+                            on && 'text-primary-ink',
+                          )}
+                        >
+                          {a}
+                        </span>
+                        {desc && (
+                          <span
+                            id={`arm-${a}-desc`}
+                            className="text-muted block text-xs leading-snug"
+                          >
+                            {desc}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  </li>
+                )
+              })}
+            </ul>
+          </fieldset>
+          <label className="flex items-center gap-2 text-xs">
+            <span className="text-muted">條碼數</span>
+            {/* 限制在 1–20；可暫時清空，失焦時才顯示夾過的值（見 parseClampedInt） */}
+            <DraftNumberInput
+              aria-label="條碼數"
+              min={1}
+              max={20}
+              value={nCodes}
+              parse={(t) => parseClampedInt(t, 1, 20)}
+              onCommit={setNCodes}
+            />
+          </label>
+          {/* 執行中顯示停止鈕與進度條；還沒收到 progress（後端仍在產生合成資料）時，進度條先顯示 5% */}
+          {stream.status === 'running' ? (
+            <>
+              <Button className="w-full" onClick={stream.cancel}>
+                <Square className="size-4" aria-hidden />
+                停止
+              </Button>
+              <div
+                role="progressbar"
+                aria-valuenow={progress?.type === 'progress' ? progress.done : 0}
+                aria-valuemax={progress?.type === 'progress' ? progress.total : undefined}
+              >
+                <div className="text-muted mb-1 text-xs">
+                  {progress?.type === 'progress'
+                    ? `執行中 ${progress.done} / ${progress.total}`
+                    : '產生合成資料中…'}
+                </div>
+                <div className="bg-hover h-1.5 overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full transition-all"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <Button
+              variant="primary"
+              className="w-full"
+              disabled={arms.length === 0}
+              onClick={quickRun}
             >
-              <div className="text-muted mb-1 text-xs">
-                {progress?.type === 'progress'
-                  ? `執行中 ${progress.done} / ${progress.total}`
-                  : '產生合成資料中…'}
-              </div>
-              <div className="bg-hover h-1.5 overflow-hidden rounded-full">
-                <div
-                  className="bg-primary h-full transition-all"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-            </div>
-          </>
-        ) : (
-          <Button
-            variant="primary"
-            className="w-full"
-            disabled={arms.length === 0}
-            onClick={quickRun}
-          >
-            <Play className="size-4" aria-hidden />
-            執行
-          </Button>
-        )}
-        {stream.status === 'done' && (
-          <p className="text-ok text-xs">完成，已切換到新的執行結果。</p>
-        )}
-        {stream.error ? <ErrorBox error={stream.error} /> : null}
-      </TabsContent>
-    </Tabs>
+              <Play className="size-4" aria-hidden />
+              執行
+            </Button>
+          )}
+          {stream.status === 'done' && (
+            <p className="text-ok text-xs">完成，已切換到新的執行結果。</p>
+          )}
+          {stream.error ? <ErrorBox error={stream.error} /> : null}
+        </div>
+      </Disclosure>
+    </PanelStack>
   )
 
   return (
     <Workspace
       panel={panel}
-      title="E1 條碼消融"
-      description="各實驗組的成功率與信賴區間、依拍攝條件分組、成功階與失敗影像（research/experiments/e1_barcode）。"
+      title="實驗結果"
+      description="E1 條碼消融：各實驗組的成功率與信賴區間、依拍攝條件分組、成功階與失敗影像（research/experiments/e1_barcode）。"
       aside={
-        stream.status === 'running' && (
-          <Badge tone="primary" aria-live="polite">
-            快速執行中…
-          </Badge>
-        )
+        <div className="flex items-center gap-2">
+          {stream.status === 'running' && (
+            <Badge tone="primary" aria-live="polite">
+              快速執行中…
+            </Badge>
+          )}
+          {switcher}
+        </div>
       }
     >
       {/* 主區依序判斷：清單錯誤 → 沒有任何執行 → 執行載入錯誤 → 載入中 → 顯示結果 */}
@@ -375,47 +400,6 @@ export function E1Page() {
         <RunView key={data.name} data={data} base={base} group={group} />
       )}
     </Workspace>
-  )
-}
-
-/**
- * 本頁用的精簡下拉選單（原生 select）。
- * - options 為空時停用，並顯示 empty 作為唯一的佔位選項。
- * - help 以 title 屬性顯示為滑鼠停留提示。
- */
-function Select({
-  label,
-  value,
-  onChange,
-  options,
-  empty,
-  help,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-  empty?: string
-  help?: string
-}) {
-  return (
-    <label className="flex flex-col gap-1" title={help}>
-      <span className="text-muted text-xs">{label}</span>
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={options.length === 0}
-        className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
-      >
-        {options.length === 0 && <option>{empty}</option>}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
   )
 }
 
