@@ -41,6 +41,17 @@ from dietai.evaluation.barcode import (
     summarize,
 )
 
+# 混合效果邏輯迴歸（原始樣本為隨機截距；設計 9.1 節輔助方法）
+from dietai.evaluation.glmm import (
+    INTERCEPT,
+    Coefficient,
+    MixedLogitResult,
+    design_matrix,
+    fit_mixed_logit,
+    mixed_logit_from_rows,
+    mixed_logit_table,
+)
+
 # 營養標示：真值格式、欄位完全正確率、定位誤差、CER（ADR 0005 第 8 點）
 from dietai.evaluation.label import (
     DEFAULT_QUAD_TOL,
@@ -108,15 +119,18 @@ from dietai.evaluation.stats import (
 __all__ = [
     "Arm",
     "ClusterComparison",
+    "Coefficient",
     "DEFAULT_QUAD_TOL",
     "FEATURES_FILE",
     "FieldScore",
     "GreedyCriteria",
     "GreedyResult",
     "GreedyStep",
+    "INTERCEPT",
     "LabelTruth",
     "Manifest",
     "ManifestItem",
+    "MixedLogitResult",
     "Outcome",
     "PolicyScore",
     "RunSummary",
@@ -127,9 +141,11 @@ __all__ = [
     "cer",
     "cluster_bootstrap_diff",
     "compare_by_source",
+    "design_matrix",
     "evaluate",
     "feature_bins",
     "first_rung",
+    "fit_mixed_logit",
     "gate_confusion",
     "greedy_ladder",
     "grouping_columns",
@@ -152,6 +168,8 @@ __all__ = [
     "method_id",
     "methods_in",
     "methods_report_markdown",
+    "mixed_logit_from_rows",
+    "mixed_logit_table",
     "new_run_dir",
     "paired_counts",
     "pipeline_vs_parts",
