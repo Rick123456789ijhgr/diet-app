@@ -1,0 +1,5 @@
+{
+  "name": "l8_c06",
+  "description": "疊加 C-06：定位＋透視校正 → CLAHE → 自適應二值化",
+  "label": {"enable_rectify": true, "enable_glare": false, "enable_denoise": false, "enable_contrast": true, "enable_binarize": true}
+}

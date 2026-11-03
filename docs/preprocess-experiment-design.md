@@ -540,7 +540,7 @@
 | 執行紀錄（`run.json`、明細、彙整） | 已有（ADR 0002） |
 | 條碼逐步升級與每一步紀錄 | 已有：`dietai.preprocess.barcode`、`attempts.csv`（第一次有結果即停止；不停止的版本見下方結果表） |
 | 電子發票雙 QR 定位 | 已有：`dietai.preprocess.invoice_qr` |
-| 營養標示定位、透視校正、光斑、CLAHE | 已有：`dietai.preprocess.label` |
+| 營養標示定位、透視校正、光斑、去噪、CLAHE、二值化；C-06、C-07 | 已有：`dietai.preprocess.label`（各段由 `LabelConfig.enable_*` 開關，去噪與二值化預設關閉）；`e2_label/configs` 的 `l1`～`l9` |
 | 品質量測：模糊、曝光、解析度、傾斜 | 已有：`dietai.preprocess.quality`、`ops.estimate_skew` |
 | 劣化：旋轉、縮小、模糊、亮度、漸層、光斑、雜訊、透視 | 已有：`dietai.devtools.degradations`（含透視強度） |
 | 營養標示定位對真實四角的評分（合成場景） | 已有：`dietai.devtools.label_eval` |

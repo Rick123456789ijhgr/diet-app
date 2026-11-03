@@ -32,7 +32,7 @@ def test_run_rejects_unknown_engine_and_method(tmp_path):
     manifest = str(tmp_path / "d" / "manifest.csv")
     bad = _run("run.py", "--manifest", manifest, "--engines", "nope", "--out", str(tmp_path / "r"))
     assert bad.returncode == 2 and "未知的 OCR 引擎" in bad.stderr
-    bad = _run("run.py", "--manifest", manifest, "--only", "l9", "--out", str(tmp_path / "r"))
+    bad = _run("run.py", "--manifest", manifest, "--only", "nope", "--out", str(tmp_path / "r"))
     assert bad.returncode == 2 and "找不到前處理方法" in bad.stderr
 
 
@@ -57,9 +57,10 @@ def test_run_end_to_end_with_tesseract(tmp_path):
     assert proc.returncode == 0, proc.stderr
     (run_dir,) = (tmp_path / "r").iterdir()
     meta = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
-    assert list(meta["methods"]) == ["l0_raw", "l1_rectify", "l2_default"]
+    methods = sorted(p.stem for p in (E2 / "configs").glob("*.json"))
+    assert list(meta["methods"]) == methods
     assert meta["engines"]["tesseract:eng"].startswith("tesseract ")
     assert "## 整體 · Overall" in (run_dir / "summary.md").read_text(encoding="utf-8")
     # 第二次執行全部命中快取
     again = _run("run.py", *args[:-1], str(tmp_path / "r2"))
-    assert "快取命中 3 次" in again.stdout
+    assert f"快取命中 {len(methods)} 次" in again.stdout
