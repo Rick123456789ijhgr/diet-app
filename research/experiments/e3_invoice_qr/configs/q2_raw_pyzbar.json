@@ -1,0 +1,6 @@
+{
+  "name": "q2_raw_pyzbar",
+  "description": "階段零對照：pyzbar（ZBar）只用原圖",
+  "decoder": "pyzbar",
+  "ladder": {"rungs": ["raw"]}
+}
