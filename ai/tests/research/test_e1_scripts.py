@@ -152,8 +152,12 @@ def test_e1_methods_end_to_end(tmp_path):
         "1",
         "--order",
         "short=raw,gray",
+        "--glmm",
+        "condition",
     )
     assert "## a6_full：貪婪選擇" in report and "- short：raw > gray" in report
+    # 混合效果邏輯迴歸：每個實驗組一節（資料太少時寫出無法擬合的原因，不中斷）
+    assert "## 混合效果邏輯迴歸" in report and "### p1_full_pyzbar" in report
     for name in ("methods_a6_full.csv", "greedy_a6_full.csv", "greedy_p1_full_pyzbar.csv"):
         assert (run_dir / name).is_file(), name
 

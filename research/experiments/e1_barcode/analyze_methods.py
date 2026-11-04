@@ -3,6 +3,7 @@
     python analyze_methods.py                                   # 最新一次 run_methods.py 的結果
     python analyze_methods.py runs/<資料夾> --by condition --min-gain 2 --max-new-wrong 0
     python analyze_methods.py runs/<資料夾> --order frozen=raw,sharpen,multiscale@2   # 評估指定順序
+    python analyze_methods.py runs/<資料夾> --glmm condition    # 加上混合效果邏輯迴歸
 
 寫出 summary.md、methods_<實驗組>.csv（單一方法比較）與 greedy_<實驗組>.csv（貪婪選擇各步），
 並印出 Markdown。
@@ -29,6 +30,8 @@ from dietai.evaluation import (
     method_arms,
     methods_in,
     methods_report_markdown,
+    mixed_logit_from_rows,
+    mixed_logit_table,
     read_methods,
     summarize,
 )
@@ -72,6 +75,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--order", action="append", default=[], help="另外評估的順序：名稱=方法,方法,…（可重複）"
     )
+    p.add_argument(
+        "--glmm",
+        default=None,
+        help="加上混合效果邏輯迴歸：固定效果為方法與這些標籤欄（逗號分隔，可為空字串），"
+        "原始樣本為隨機截距；方法以 raw、標籤以第一個值（condition 為 clean）為基準",
+    )
     args = p.parse_args(argv)
 
     run_dir = args.run_dir
@@ -104,6 +113,10 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [b for b in by if b not in tags]
     if unknown:
         p.error(f"沒有這些標籤欄：{unknown}；可用：{tags}")
+    glmm = None if args.glmm is None else [s.strip() for s in args.glmm.split(",") if s.strip()]
+    unknown = [b for b in glmm or [] if b not in tags]
+    if unknown:
+        p.error(f"--glmm 沒有這些標籤欄：{unknown}；可用：{tags}")
 
     try:
         report = methods_report_markdown(meta, rows, by, criteria, orders)
@@ -119,9 +132,30 @@ def main(argv: list[str] | None = None) -> int:
             greedy = greedy_ladder(sub, criteria, min_agree=min_agree.get(arm, 1))
             steps = [{**asdict(s), "rate": s.rate} for s in greedy.steps]
             _write_csv(run_dir / f"greedy_{arm}.csv", steps)
+    if glmm is not None:
+        report += _glmm_section(rows, glmm)
     (run_dir / "summary.md").write_text(report, encoding="utf-8")
     print(report)
     return 0
+
+
+def _glmm_section(rows: Sequence[Mapping[str, str]], factors: Sequence[str]) -> str:
+    """每個實驗組一張混合效果邏輯迴歸表（固定效果：方法＋``factors``；隨機截距：原始樣本）。"""
+    lines = ["", "## 混合效果邏輯迴歸 · Mixed-effects logistic regression", ""]
+    lines.append("> 輔助方法（設計 9.1 節）；以勝算比表示，相對於基準方法與基準水準。")
+    for arm in dict.fromkeys(r["arm"] for r in rows):
+        sub = [r for r in rows if r["arm"] == arm]
+        reference = {"method": "raw"} if "raw" in methods_in(sub) else {}
+        if "condition" in factors and any(r.get("condition") == "clean" for r in sub):
+            reference["condition"] = "clean"
+        lines += ["", f"### {arm}", ""]
+        try:
+            result = mixed_logit_from_rows(sub, ["method", *factors], reference=reference)
+        except ValueError as e:  # 例如只有一個原始樣本、設計矩陣不滿秩
+            lines.append(f"無法擬合：{e}")
+            continue
+        lines.append(mixed_logit_table(result))
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":

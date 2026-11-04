@@ -140,6 +140,7 @@ python run_methods.py --manifest ... --only a6_full,p1_full_pyzbar --label stage
 python analyze_methods.py                                                   # 最新一次結果，預設準則
 python analyze_methods.py runs/<資料夾> --min-gain 2 --max-new-wrong 0 --max-mean-ms 20
 python analyze_methods.py runs/<資料夾> --order frozen=raw,multiscale@2,deskew   # 評估指定順序
+python analyze_methods.py runs/<資料夾> --glmm condition                          # 加上混合效果邏輯迴歸
 ```
 
 - 方法代碼為階的代碼；多尺度的每個倍率各算一個方法（`multiscale@2`、`multiscale@0.5`），每條疊加流程也各算一個方法（`pipeline@denoise+binarize`）。
@@ -148,6 +149,10 @@ python analyze_methods.py runs/<資料夾> --order frozen=raw,multiscale@2,deske
   耗時為已嘗試方法的總和，每個方法都含轉灰階，因此比上線時略高。
 - 單一方法的判定同 `run.py`；略過的方法（`deskew` 角度小於門檻）不送解碼、判為未讀到，單獨的成功率應以逐步升級解讀。
 - 結果放在同一個 `runs/` 下（只有 `methods.csv`，沒有 `results.csv`）；`analyze.py` 與工作台的 E1 頁不會列出這種執行。
+- `--glmm 標籤欄,…`：每個實驗組加一張混合效果邏輯迴歸表（設計 9.1 節輔助方法；`dietai.evaluation.glmm`）。
+  固定效果為方法（基準 `raw`）與指定的標籤欄（`condition` 以 `clean` 為基準），原始樣本 `source_id` 為隨機截距；
+  以自適應 Gauss–Hermite 最大概似估計（同 R `glmer` 的 `nAGQ > 1`），報告勝算比、95% 信賴區間與 Wald p 值。
+  某分組全對或全錯（完全分離）時係數不可信，表後會標出；只有一個原始樣本時無法擬合。
 
 | 檔案 | 內容 |
 | --- | --- |
