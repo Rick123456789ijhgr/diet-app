@@ -36,14 +36,19 @@ async function createBase(s: Source, signal: AbortSignal): Promise<ImageRef> {
       }),
     )
   }
+  return uploadImage(s.file, signal)
+}
+
+/** 上傳一個影像檔到後端暫存區（multipart），回傳 image_id 等資訊。 */
+export function uploadImage(file: File, signal?: AbortSignal): Promise<ImageRef> {
   return unwrap(
     api.POST('/workbench/v1/dev/images', {
       // body 只為滿足產生的型別；實際送出的內容由 bodySerializer 改成 FormData（瀏覽器自動帶 boundary）
-      body: { file: '', name: s.file.name },
+      body: { file: '', name: file.name },
       bodySerializer: () => {
         const form = new FormData()
-        form.append('file', s.file)
-        form.append('name', s.file.name)
+        form.append('file', file)
+        form.append('name', file.name)
         return form
       },
       signal,

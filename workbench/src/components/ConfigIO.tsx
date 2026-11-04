@@ -91,7 +91,7 @@ export function ConfigIO({
 }
 
 /** 唯讀程式碼區塊＋右上角複製按鈕；複製成功後圖示短暫（1.2 秒）變成打勾。 */
-function CodeBlock({ text }: { text: string }) {
+export function CodeBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   // 「已複製」計時器；卸載時清除，避免對已卸載的元件更新狀態
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
