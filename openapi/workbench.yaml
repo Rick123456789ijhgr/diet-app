@@ -1539,8 +1539,7 @@ components:
           # Go 須保留 null（取消人工確認）與空字串（沒有條碼）的差別
           x-go-type: map[string]*string
           additionalProperties:
-            type: string
-            nullable: true
+            type: [string, "null"]
 
     # ── 冷啟動上傳（任務書 2.6 節） ──
     SubmissionStatus:
