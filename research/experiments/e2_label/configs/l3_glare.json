@@ -1,0 +1,5 @@
+{
+  "name": "l3_glare",
+  "description": "單一方法：只做光斑偵測與修補（整張原圖，不定位）",
+  "label": {"enable_rectify": false, "enable_glare": true, "enable_denoise": false, "enable_contrast": false, "enable_binarize": false}
+}

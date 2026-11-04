@@ -12,7 +12,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from dietai.evaluation.manifest import SOURCE_COLUMN, write_image, write_manifest
+from dietai.evaluation.invoice import format_invoice_truth
+from dietai.evaluation.manifest import SOURCE_COLUMN, read_manifest, write_image, write_manifest
 from dietai.preprocess.types import Image
 from dietai.synthetic.degrade import (
     brightness_gradient,
@@ -26,9 +27,12 @@ from dietai.synthetic.scenes import (
     _LABEL_ROWS,
     ean13_codes,
     ean13_scene,
+    invoice_qr_scene,
     label_perspective_scene,
     label_scene,
+    nutrition_label,
 )
+from dietai.synthetic.variants import write_variant_dataset
 
 # 條件 → 退化函式與等級。等級以模組寬 3 px 的 EAN-13 試出：涵蓋「只用原圖就成功」、
 # 「只用原圖失敗、逐步升級救回」與「兩者都失敗」三種情形，讓消融結果有差異可看。
@@ -195,3 +199,65 @@ def write_label_dataset(
         json.dumps(params, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return manifest
+
+
+# 合成發票預設的劣化條件（VARIANT_CONDITIONS 的子集）：發票是平面感熱紙，曲面、對比等略過
+INVOICE_CONDITIONS = ("blur", "motion", "downscale", "dark", "glare", "rotate", "jpeg")
+# 右側 QR 的品項名稱（Big5 編碼，模擬真實發票右碼中的中文）
+_ITEMS = ("茶葉蛋", "鮮奶", "御飯糰", "無糖綠茶", "香蕉")
+
+
+def invoice_contents(n: int, seed: int = 0) -> list[tuple[bytes, bytes]]:
+    """``n`` 組互不相同的（左, 右）QR 內容：左為 ASCII（發票號碼、日期、隨機碼、加密欄位），
+    右以 ``**`` 開頭、含 Big5 中文品項。只模擬位元組的組成，不符合財政部的實際欄位格式。"""
+    rng = np.random.default_rng(seed)
+    alnum = np.frombuffer(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", dtype=np.uint8)
+    out: list[tuple[bytes, bytes]] = []
+    for i in range(n):
+        number = bytes(rng.choice(alnum[:26], 2)) + f"{rng.integers(10**8):08d}".encode()
+        cipher = bytes(rng.choice(alnum, 24))
+        left = number + b"1151103" + f"{i:04d}".encode() + b"00000064" * 2 + cipher + b":**********"
+        items = rng.choice(len(_ITEMS), 2, replace=False)
+        right = b"**" + b"".join(f":{_ITEMS[j]}:1:{10 * (j + 1)}".encode("big5") for j in items)
+        out.append((left, right))
+    return out
+
+
+def write_invoice_dataset(
+    out_dir: str | Path,
+    n: int = 4,
+    seed: int = 0,
+    module_px: int = 4,
+    conditions: tuple[str, ...] = INVOICE_CONDITIONS,
+    negatives: bool = True,
+) -> Path:
+    """在 ``out_dir`` 寫出合成電子發票（左右兩個 QR）與其劣化變體，回傳變體 manifest 的路徑。
+
+    原圖寫在 ``sources/``（每張發票一個原始樣本，``truth`` 為 ``format_invoice_truth`` 的寫法）；
+    ``negatives`` 為 ``True`` 時另加一張沒有 QR 的營養標示作為負樣本。變體由
+    ``write_variant_dataset`` 寫在 ``variants/``（``clean`` 加上 ``conditions`` 每個等級各一張），
+    ``split`` 一律為 ``dev``。只供演練流程，不代表真實發票。
+    """
+    if n < 1:
+        raise ValueError(f"n 至少為 1，收到 {n}")
+    out = Path(out_dir)
+    rows: list[dict[str, str]] = []
+    for i, (left, right) in enumerate(invoice_contents(n, seed)):
+        name = f"inv{i:02d}"
+        write_image(out / "sources" / f"{name}.png", invoice_qr_scene(left, right, module_px))
+        rows.append(
+            {"id": name, "image": f"{name}.png", "truth": format_invoice_truth(left, right)}
+        )
+    if negatives:
+        write_image(out / "sources" / "neg00.png", nutrition_label())
+        rows.append({"id": "neg00", "image": "neg00.png", "truth": ""})
+    rows = [{**r, "split": "dev"} for r in rows]
+    sources = write_manifest(out / "sources" / "sources.csv", rows, ())
+    params = {"generator": "dietai.synthetic.write_invoice_dataset", "n": n, "seed": seed}
+    params["module_px"] = module_px
+    sources.with_suffix(".json").write_text(
+        json.dumps(params, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return write_variant_dataset(
+        read_manifest(sources), out / "variants", conditions=conditions, seed=seed, max_side=None
+    )

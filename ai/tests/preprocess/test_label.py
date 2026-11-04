@@ -11,6 +11,7 @@ import pytest
 from dietai.preprocess import (
     LabelConfig,
     PreprocessWarning,
+    binarize,
     detect_glare,
     enhance_contrast,
     label_edges,
@@ -19,7 +20,7 @@ from dietai.preprocess import (
     rectify,
     remove_glare,
 )
-from dietai.preprocess.ops import order_quad
+from dietai.preprocess.ops import median_blur, order_quad
 from dietai.synthetic import add_glare, label_perspective_scene, nutrition_label
 
 TOLERANCE_PX = 10.0  # 任務書驗收：四角平均誤差上限
@@ -320,6 +321,83 @@ def test_each_step_can_be_disabled(disabled):
     assert step.get(disabled, "enhance_contrast") not in names
 
 
+def test_default_keeps_denoise_and_binarize_off():
+    # 程式預設的結果（l2_default）不因新增的兩段而改變
+    cfg = LabelConfig()
+    assert not cfg.enable_denoise and not cfg.enable_binarize
+
+
+def test_all_steps_run_in_order():
+    img, _ = label_perspective_scene(0.1, seed=3)
+    img = add_glare(img, 0.04, seed=4)
+    cfg = LabelConfig(enable_denoise=True, enable_binarize=True)
+    result = preprocess_label(img, cfg)
+    assert [s.name for s in result.steps] == [
+        "locate_label_quad",
+        "rectify",
+        "glare",
+        "denoise",
+        "enhance_contrast",
+        "binarize",
+    ]
+    # 各段依序串接：結果等於逐一呼叫各函式
+    quad = locate_label_quad(img, cfg)
+    assert quad is not None
+    expected = rectify(img, quad, cfg)
+    expected, _ = remove_glare(expected, detect_glare(expected, cfg).mask, cfg)
+    expected = binarize(enhance_contrast(median_blur(expected, cfg.denoise_ksize), cfg), cfg)
+    np.testing.assert_array_equal(result.image, expected)
+    assert result.image.ndim == 2 and set(np.unique(result.image)) <= {0, 255}
+
+
+def test_denoise_only_removes_salt_and_pepper():
+    clean = cv2.cvtColor(nutrition_label(), cv2.COLOR_BGR2GRAY)
+    noisy = clean.copy()
+    rng = np.random.default_rng(0)
+    spots = rng.random(clean.shape) < 0.02
+    noisy[spots] = rng.choice(np.array([0, 255], dtype=np.uint8), int(spots.sum()))
+    result = preprocess_label(noisy, LabelConfig(**{**_off(), "enable_denoise": True}))
+    assert [s.name for s in result.steps] == ["denoise"]
+    assert result.steps[0].params == {"denoise_ksize": 3}
+    before = np.abs(noisy.astype(int) - clean).mean()
+    after = np.abs(result.image.astype(int) - clean).mean()
+    assert after < before / 2
+
+
+@pytest.mark.parametrize("otsu", [False, True])
+def test_binarize_only_outputs_black_and_white(otsu):
+    img = nutrition_label()
+    cfg = LabelConfig(**{**_off(), "enable_binarize": True, "binarize_otsu": otsu})
+    result = preprocess_label(img, cfg)
+    assert result.image.ndim == 2 and set(np.unique(result.image)) == {0, 255}
+    assert result.steps[0].params["method"] == ("otsu" if otsu else "adaptive")
+    np.testing.assert_array_equal(result.image, binarize(img, cfg))
+    # 白底黑字：二值化後仍以白色為主
+    assert (result.image == 255).mean() > 0.5
+
+
+def test_adaptive_binarize_survives_uneven_light_better_than_otsu():
+    gray = cv2.cvtColor(nutrition_label(), cv2.COLOR_BGR2GRAY).astype(np.float64)
+    # 由左至右變暗到 25%：Otsu 的單一門檻會把右側整片判為黑色
+    ramp = np.linspace(1.0, 0.25, gray.shape[1])[None, :]
+    dim = np.clip(gray * ramp, 0, 255).astype(np.uint8)
+    right = slice(gray.shape[1] * 3 // 4, None)
+    adaptive = binarize(dim, LabelConfig())
+    otsu = binarize(dim, LabelConfig(binarize_otsu=True))
+    assert (adaptive[:, right] == 255).mean() > (otsu[:, right] == 255).mean() + 0.3
+
+
+def _off() -> dict[str, bool]:
+    """五段全關的開關（搭配 ``**`` 只打開其中一段）。"""
+    return {
+        "enable_rectify": False,
+        "enable_glare": False,
+        "enable_denoise": False,
+        "enable_contrast": False,
+        "enable_binarize": False,
+    }
+
+
 @pytest.mark.parametrize("cfg", [LabelConfig(), OFF])
 def test_does_not_modify_input(cfg):
     img, _ = label_perspective_scene(0.1, seed=0)
@@ -350,6 +428,10 @@ def test_rejects_invalid_image(bad):
         {"hough_collinear_ratio": -0.1},
         {"hough_min_side_gap_ratio": 1.5},
         {"hough_corner_margin_ratio": -1},
+        {"denoise_ksize": 4},
+        {"denoise_ksize": 1},
+        {"binarize_block_size": 30},
+        {"binarize_block_size": 1},
     ],
 )
 def test_config_rejects_invalid_values(kwargs):

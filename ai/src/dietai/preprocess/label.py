@@ -1,6 +1,6 @@
-"""營養標示前處理：表格定位、透視校正、光斑處理、對比增強。
+"""營養標示前處理：表格定位、透視校正、光斑處理、去噪、對比增強、二值化。
 
-流程為「定位＋校正 → 光斑 → 對比」，各段由 ``LabelConfig.enable_*`` 開關。
+流程為「定位＋校正 → 光斑 → 去噪 → 對比 → 二值化」，各段由 ``LabelConfig.enable_*`` 開關。
 找不到表格框時不中斷：以原圖繼續後續步驟並附 ``LABEL_NOT_LOCATED``。
 只做影像處理，不做 OCR 或欄位解析（屬模組二）。
 """
@@ -38,7 +38,7 @@ class GlareResult:
 class LabelResult:
     """``preprocess_label`` 的結果。
 
-    ``image`` 為處理後影像（校正後尺寸可能與輸入不同；``clahe_on_lab`` 關閉時為灰階）。
+    ``image`` 為處理後影像（校正後尺寸可能與輸入不同；``clahe_on_lab`` 關閉或有二值化時為灰階）。
     ``quad`` 為找到的表格四角（原圖座標，左上起順時針），``quad_method`` 為找到它的方法；
     未啟用定位或找不到時皆為 ``None``。``glare`` 為光斑偵測結果（校正後座標），
     未啟用時為 ``None``。
@@ -171,12 +171,24 @@ def enhance_contrast(img: Image, cfg: LabelConfig = LabelConfig()) -> Image:
     return ops.clahe(ops.to_gray(img), cfg.clahe_clip, cfg.clahe_tile)
 
 
-def preprocess_label(img: Image, cfg: LabelConfig = LabelConfig()) -> LabelResult:
-    """營養標示前處理：定位＋校正 → 光斑 → 對比，各段由 ``cfg.enable_*`` 開關。
+def binarize(img: Image, cfg: LabelConfig = LabelConfig()) -> Image:
+    """二值化，回傳 0／255 的灰階影像；彩色輸入先轉灰階。
 
-    輸入為 BGR 或灰階 ``uint8`` 影像，不會被修改；三段全部關閉時輸出等於輸入（副本）。
+    ``cfg.binarize_otsu`` 開啟時用 Otsu 全域門檻，否則用自適應二值化
+    （``cfg.binarize_block_size``、``cfg.binarize_c``）。
+    """
+    ops.validate_image(img)
+    if cfg.binarize_otsu:
+        return ops.otsu_threshold(img)
+    return ops.adaptive_threshold(img, cfg.binarize_block_size, cfg.binarize_c)
+
+
+def preprocess_label(img: Image, cfg: LabelConfig = LabelConfig()) -> LabelResult:
+    """營養標示前處理：定位＋校正 → 光斑 → 去噪 → 對比 → 二值化，各段由 ``cfg.enable_*`` 開關。
+
+    輸入為 BGR 或灰階 ``uint8`` 影像，不會被修改；全部關閉時輸出等於輸入（副本）。
     找不到表格框時以原圖繼續並附 ``LABEL_NOT_LOCATED``；光斑過大時不修補並附
-    ``GLARE_RETAKE``，但對比增強照常執行。每段的參數與耗時記錄在 ``steps``。
+    ``GLARE_RETAKE``，但後續各段照常執行。每段的參數與耗時記錄在 ``steps``。
     """
     ops.validate_image(img)
     # out 為逐段傳遞的「目前影像」；先複製，確保三段全關時也回傳新陣列而非輸入本身
@@ -255,7 +267,13 @@ def preprocess_label(img: Image, cfg: LabelConfig = LabelConfig()) -> LabelResul
             )
         )
 
-    # ---- 第三段：對比增強（在光斑之後，因此光斑的亮度門檻是套用在未增強的影像上）
+    # ---- 第三段：去噪（在對比之前：CLAHE 會放大雜訊，先去除再增強）
+    if cfg.enable_denoise:
+        start = time.perf_counter()
+        out = ops.median_blur(out, cfg.denoise_ksize)
+        steps.append(StepRecord("denoise", _ms_since(start), {"denoise_ksize": cfg.denoise_ksize}))
+
+    # ---- 第四段：對比增強（在光斑之後，因此光斑的亮度門檻是套用在未增強的影像上）
     if cfg.enable_contrast:
         start = time.perf_counter()
         out = enhance_contrast(out, cfg)
@@ -267,6 +285,22 @@ def preprocess_label(img: Image, cfg: LabelConfig = LabelConfig()) -> LabelResul
                     "clahe_clip": cfg.clahe_clip,
                     "clahe_tile": cfg.clahe_tile,
                     "clahe_on_lab": cfg.clahe_on_lab,
+                },
+            )
+        )
+
+    # ---- 第五段：二值化（最後做：之前的各段都需要灰階層次）
+    if cfg.enable_binarize:
+        start = time.perf_counter()
+        out = binarize(out, cfg)
+        steps.append(
+            StepRecord(
+                "binarize",
+                _ms_since(start),
+                {
+                    "method": "otsu" if cfg.binarize_otsu else "adaptive",
+                    "binarize_block_size": cfg.binarize_block_size,
+                    "binarize_c": cfg.binarize_c,
                 },
             )
         )

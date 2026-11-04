@@ -54,6 +54,7 @@ from dietai.preprocess.invoice_qr import InvoiceQrResult, locate_invoice_qrs
 from dietai.preprocess.label import (
     GlareResult,
     LabelResult,
+    binarize,
     detect_glare,
     enhance_contrast,
     label_edges,
@@ -109,6 +110,7 @@ __all__ = [
     "VlmImage",
     "ZxingConfig",
     "ZxingDecoder",
+    "binarize",
     "blur_score",
     "check_quality",
     "crop_dishes",
