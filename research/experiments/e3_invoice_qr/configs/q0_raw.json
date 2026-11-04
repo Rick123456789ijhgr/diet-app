@@ -1,0 +1,6 @@
+{
+  "name": "q0_raw",
+  "description": "基準 A0：原圖直接送 zxing-cpp（內建旋轉、縮小、反色嘗試維持預設）",
+  "decoder": "zxing",
+  "ladder": {"rungs": ["raw"]}
+}
