@@ -11,7 +11,13 @@ from dietai.evaluation import (
     write_image,
     write_manifest,
 )
-from dietai.synthetic import VARIANT_CONDITIONS, label_scene, write_variant_dataset
+from dietai.synthetic import (
+    COMPOSITE_CONDITIONS,
+    VARIANT_CONDITIONS,
+    condition_levels,
+    label_scene,
+    write_variant_dataset,
+)
 from dietai.synthetic.variants import limit_side, source_seed
 
 
@@ -120,3 +126,38 @@ def test_every_condition_runs():
         for level in cond.levels:
             out = cond.fn(img, level, 7)
             assert out.dtype == np.uint8 and out.ndim == 3, name
+
+
+def test_composite_names_match_parts_with_aligned_levels():
+    for name, parts in COMPOSITE_CONDITIONS.items():
+        assert name == "+".join(parts) and len(parts) >= 2
+        assert all(p in VARIANT_CONDITIONS for p in parts)
+        assert len({len(VARIANT_CONDITIONS[p].levels) for p in parts}) == 1
+    assert condition_levels("dark+blur") == ["0.5+1", "0.3+2", "0.15+3", "0.08+5"]
+    assert condition_levels("perspective") == ["0.05", "0.1", "0.2", "0.3"]
+
+
+def test_composite_applies_parts_in_order_with_same_seed(tmp_path):
+    sources = read_manifest(_sources(tmp_path))
+    out = write_variant_dataset(sources, tmp_path / "out", conditions=["curve+glare"])
+    items = read_manifest(out).items
+    assert [i.tags["condition"] for i in items] == ["clean", *["curve+glare"] * 4]
+    assert [i.tags["level"] for i in items[1:]] == condition_levels("curve+glare")
+    assert items[1].id == "p1__curve+glare_0.3+0.1"
+    # 第 1 級等於依序單獨套用 curve 第 1 級、glare 第 1 級（同一個種子）
+    base = read_image(items[0].image)
+    seed = int(items[1].tags["seed"])
+    curve, glare = VARIANT_CONDITIONS["curve"], VARIANT_CONDITIONS["glare"]
+    expected = glare.fn(curve.fn(base, curve.levels[0], seed), glare.levels[0], seed)
+    np.testing.assert_array_equal(read_image(items[1].image), expected)
+
+    params = json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
+    assert params["conditions"]["curve+glare"]["parts"] == ["curve", "glare"]
+
+
+def test_default_includes_singles_then_composites(tmp_path):
+    rows = [{"id": "p1", "image": "p1.png", "truth": "1", "split": "dev"}]
+    sources = read_manifest(_sources(tmp_path, rows, size=(60, 80)))
+    out = write_variant_dataset(sources, tmp_path / "out")
+    conditions = list(dict.fromkeys(i.tags["condition"] for i in read_manifest(out).items))
+    assert conditions == ["clean", *VARIANT_CONDITIONS, *COMPOSITE_CONDITIONS]

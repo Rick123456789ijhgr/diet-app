@@ -38,12 +38,19 @@ from dietai.synthetic.scenes import (
 )
 
 # 半合成資料集：真實照片 → 參數已知的劣化變體＋manifest（含 source_id，ADR 0005）
-from dietai.synthetic.variants import VARIANT_CONDITIONS, write_variant_dataset
+from dietai.synthetic.variants import (
+    COMPOSITE_CONDITIONS,
+    VARIANT_CONDITIONS,
+    condition_levels,
+    write_variant_dataset,
+)
 
 __all__ = [
+    "COMPOSITE_CONDITIONS",
     "VARIANT_CONDITIONS",
     "add_glare",
     "brightness_gradient",
+    "condition_levels",
     "cylinder_warp",
     "downscale",
     "ean13_codes",
