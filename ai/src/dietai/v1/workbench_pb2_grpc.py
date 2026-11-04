@@ -72,6 +72,21 @@ class WorkbenchServiceStub:
                 request_serializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunRequest.SerializeToString,
                 response_deserializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunResponse.FromString,
                 _registered_method=True)
+        self.StartBestFlowRun = channel.unary_stream(
+                '/dietai.v1.WorkbenchService/StartBestFlowRun',
+                request_serializer=dietai_dot_v1_dot_workbench__pb2.StartBestFlowRunRequest.SerializeToString,
+                response_deserializer=dietai_dot_v1_dot_workbench__pb2.StartBestFlowRunResponse.FromString,
+                _registered_method=True)
+        self.GetBestFlowRun = channel.unary_unary(
+                '/dietai.v1.WorkbenchService/GetBestFlowRun',
+                request_serializer=dietai_dot_v1_dot_workbench__pb2.GetBestFlowRunRequest.SerializeToString,
+                response_deserializer=dietai_dot_v1_dot_workbench__pb2.GetBestFlowRunResponse.FromString,
+                _registered_method=True)
+        self.SetBestFlowTruth = channel.unary_unary(
+                '/dietai.v1.WorkbenchService/SetBestFlowTruth',
+                request_serializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthRequest.SerializeToString,
+                response_deserializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthResponse.FromString,
+                _registered_method=True)
 
 
 class WorkbenchServiceServicer:
@@ -152,6 +167,27 @@ class WorkbenchServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def StartBestFlowRun(self, request, context):
+        """找最佳流程：對資料夾或上傳的圖片執行所有方法（進度＋最後結果）
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetBestFlowRun(self, request, context):
+        """真值表與結論（推薦流程、單一方法比較）
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetBestFlowTruth(self, request, context):
+        """更新人工確認的真值，回傳更新後的真值表與結論
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_WorkbenchServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -209,6 +245,21 @@ def add_WorkbenchServiceServicer_to_server(servicer, server):
                     servicer.StartE1Run,
                     request_deserializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunRequest.FromString,
                     response_serializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunResponse.SerializeToString,
+            ),
+            'StartBestFlowRun': grpc.unary_stream_rpc_method_handler(
+                    servicer.StartBestFlowRun,
+                    request_deserializer=dietai_dot_v1_dot_workbench__pb2.StartBestFlowRunRequest.FromString,
+                    response_serializer=dietai_dot_v1_dot_workbench__pb2.StartBestFlowRunResponse.SerializeToString,
+            ),
+            'GetBestFlowRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetBestFlowRun,
+                    request_deserializer=dietai_dot_v1_dot_workbench__pb2.GetBestFlowRunRequest.FromString,
+                    response_serializer=dietai_dot_v1_dot_workbench__pb2.GetBestFlowRunResponse.SerializeToString,
+            ),
+            'SetBestFlowTruth': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetBestFlowTruth,
+                    request_deserializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthRequest.FromString,
+                    response_serializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -511,6 +562,87 @@ class WorkbenchService:
             '/dietai.v1.WorkbenchService/StartE1Run',
             dietai_dot_v1_dot_workbench__pb2.StartE1RunRequest.SerializeToString,
             dietai_dot_v1_dot_workbench__pb2.StartE1RunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StartBestFlowRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/dietai.v1.WorkbenchService/StartBestFlowRun',
+            dietai_dot_v1_dot_workbench__pb2.StartBestFlowRunRequest.SerializeToString,
+            dietai_dot_v1_dot_workbench__pb2.StartBestFlowRunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetBestFlowRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/dietai.v1.WorkbenchService/GetBestFlowRun',
+            dietai_dot_v1_dot_workbench__pb2.GetBestFlowRunRequest.SerializeToString,
+            dietai_dot_v1_dot_workbench__pb2.GetBestFlowRunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SetBestFlowTruth(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/dietai.v1.WorkbenchService/SetBestFlowTruth',
+            dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthRequest.SerializeToString,
+            dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthResponse.FromString,
             options,
             channel_credentials,
             insecure,

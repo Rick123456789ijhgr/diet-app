@@ -7,14 +7,14 @@
 from __future__ import annotations
 
 import csv
-import queue
 import shutil
-import threading
 from collections.abc import Iterator, Sequence
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
 from dietai.devtools.adaptive import adaptive_run_json, is_methods_run
+from dietai.devtools.background import progress_events
 from dietai.devtools.images import PathNotFoundError, guard_path
 from dietai.devtools.scenes import SceneError
 from dietai.evaluation import (
@@ -184,7 +184,7 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
     arms = [available[a] for a in arm_names]
     folder = resolve_root(root)
 
-    out = _claim_run_dir(folder)
+    out = claim_run_dir(folder, "workbench")
     data_dir = E1_DIR / "synthetic" / out.name
 
     def discard() -> None:
@@ -205,51 +205,20 @@ def start_run(arm_names: Sequence[str], n_codes: int, root: str) -> Iterator[dic
         discard()
         raise
 
-    # run_experiment 以回呼回報進度；在另一個執行緒執行，進度經佇列轉成事件。
-    # 取消時在下一次進度回呼丟出 _Cancelled 中止實驗。
-    events: queue.Queue[tuple[str, Any]] = queue.Queue()
-    cancelled = threading.Event()
-
-    def progress(done: int, n: int) -> None:
-        """run_experiment 的進度回呼（在背景執行緒中呼叫）。"""
-        if cancelled.is_set():
-            raise _Cancelled
-        events.put(("progress", (done, n)))
-
-    def work() -> None:
-        """背景執行緒：跑實驗，結束狀態（done／cancelled／error）一律經佇列回報。"""
-        try:
-            run_experiment(manifest, arms, out, label="workbench", progress=progress)
-            events.put(("done", None))
-        except _Cancelled:
-            discard()
-            events.put(("cancelled", None))
-        except BaseException as exc:  # 交給產生器在呼叫端的執行緒重新丟出
-            discard()
-            events.put(("error", exc))
-
-    worker = threading.Thread(target=work, name="e1-quick-run", daemon=True)
-    worker.start()
-    # 呼叫端執行緒在這裡把佇列轉成事件。產生器被關閉時 yield 處丟出 GeneratorExit，
-    # finally 設下取消旗標，背景執行緒在下一次進度回呼時中止並刪除未完成的資料夾
-    try:
-        while True:
-            kind, value = events.get()
-            if kind == "progress":
-                done, n = value
-                yield {"type": "progress", "done": done, "total": n}
-            elif kind == "error":
-                raise value
-            elif kind == "cancelled":
-                return
-            else:
-                yield {"type": "done", "name": out.name, "path": str(out)}
-                return
-    finally:
-        cancelled.set()
+    # run_experiment 在背景執行緒執行，進度經 progress_events 轉成事件；
+    # 取消（產生器被關閉）時 closing 連帶關閉 progress_events，由它中止實驗並刪除未完成的資料夾
+    events = progress_events(
+        lambda progress: run_experiment(manifest, arms, out, label="workbench", progress=progress),
+        discard,
+        name="e1-quick-run",
+    )
+    with closing(events):
+        for done, n in events:
+            yield {"type": "progress", "done": done, "total": n}
+    yield {"type": "done", "name": out.name, "path": str(out)}
 
 
-def _claim_run_dir(folder: Path) -> Path:
+def claim_run_dir(folder: Path, label: str) -> Path:
     """以 ``mkdir`` 佔用一個新的執行資料夾。
 
     ``new_run_dir`` 只挑尚不存在的名稱；同一秒內開始的兩次執行（例如停止後立刻重跑）
@@ -257,13 +226,9 @@ def _claim_run_dir(folder: Path) -> Path:
     """
     folder.mkdir(parents=True, exist_ok=True)
     while True:
-        out = new_run_dir(folder, "workbench")
+        out = new_run_dir(folder, label)
         try:
             out.mkdir()
         except FileExistsError:
             continue
         return out
-
-
-class _Cancelled(Exception):
-    """使用者取消快速執行。"""

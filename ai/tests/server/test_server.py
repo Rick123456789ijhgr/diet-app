@@ -555,3 +555,51 @@ def test_stream_normal_completion_is_not_logged_as_cancelled(caplog):
     messages = [r.getMessage() for r in caplog.records]
     assert not any("已取消" in m for m in messages)
     assert any("OK 3 筆" in m for m in messages)
+
+
+def test_best_flow_upload_truth_and_thumbs(wb, tmp_path, monkeypatch):
+    import shutil
+
+    from dietai.devtools import best_flow, e1
+
+    root = tmp_path / "e1_barcode"
+    shutil.copytree(e1.E1_DIR / "configs", root / "configs")
+    for mod in (e1, best_flow):
+        monkeypatch.setattr(mod, "E1_DIR", root)
+    monkeypatch.setattr(e1, "DEFAULT_ROOT", root / "runs")
+
+    ref = wb.Synthesize(workbench_pb2.SynthesizeRequest(scene="ean13")).image
+    req = workbench_pb2.StartBestFlowRunRequest(image_ids=[ref.image_id, ref.image_id])
+    events = [json.loads(m.json) for m in wb.StartBestFlowRun(req)]
+    assert events[0] == {"type": "start", "total": 2}
+    name = events[-1]["name"]
+
+    listed = json.loads(wb.ListE1Runs(workbench_pb2.ListE1RunsRequest()).json)
+    assert [r["name"] for r in listed["best_flow_runs"]] == [name]
+    run = json.loads(wb.GetBestFlowRun(workbench_pb2.GetBestFlowRunRequest(run_dir=name)).json)
+    assert run["counts"]["auto"] == 2
+    assert run["result"]["greedy"]["order"] == ["raw"]
+    thumb = run["images"][0]["thumb_id"]
+    assert wb.GetArtifact(workbench_pb2.GetArtifactRequest(id=thumb)).encoded
+
+    first = run["images"][0]["id"]
+    set_req = workbench_pb2.SetBestFlowTruthRequest(
+        run_dir=name, truths_json=json.dumps({first: ""})
+    )
+    after = json.loads(wb.SetBestFlowTruth(set_req).json)
+    assert after["counts"]["negatives"] == 1
+    for truths in ({first: 123}, {first: "4710088410109"}, {"nope": None}):
+        bad = workbench_pb2.SetBestFlowTruthRequest(run_dir=name, truths_json=json.dumps(truths))
+        _expect_error(
+            lambda bad=bad: wb.SetBestFlowTruth(bad),
+            grpc.StatusCode.INVALID_ARGUMENT,
+            "INVALID_PARAMS",
+            "truths",
+        )
+    _expect_error(
+        lambda: wb.StartBestFlowRun(
+            workbench_pb2.StartBestFlowRunRequest(image_ids=["missing"])
+        ).next(),
+        grpc.StatusCode.NOT_FOUND,
+        "IMAGE_NOT_FOUND",
+    )
