@@ -1,0 +1,5 @@
+{
+  "name": "l7_otsu",
+  "description": "單一方法：只做 Otsu 二值化",
+  "label": {"enable_rectify": false, "enable_glare": false, "enable_denoise": false, "enable_contrast": false, "enable_binarize": true, "binarize_otsu": true}
+}

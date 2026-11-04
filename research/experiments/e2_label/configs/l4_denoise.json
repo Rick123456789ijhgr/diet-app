@@ -1,0 +1,5 @@
+{
+  "name": "l4_denoise",
+  "description": "單一方法：只做中值濾波去噪",
+  "label": {"enable_rectify": false, "enable_glare": false, "enable_denoise": true, "enable_contrast": false, "enable_binarize": false}
+}

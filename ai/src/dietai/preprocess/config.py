@@ -434,7 +434,9 @@ class InvoiceQrConfig:
 class LabelConfig:
     """營養標示前處理（``dietai.preprocess.label``）的參數。
 
-    流程為「定位＋校正 → 光斑 → 對比」，三段各由 ``enable_*`` 開關（E1 類消融實驗用）。
+    流程為「定位＋校正 → 光斑 → 去噪 → 對比 → 二值化」，五段各由 ``enable_*`` 開關
+    （E2 的單一方法與疊加流程用）。程式預設開啟定位校正、光斑、對比三段；去噪與二值化
+    預設關閉，是否值得開啟由 E2 實驗決定。
     定位與校正共用一個開關：只定位不校正沒有用途，找到的四角仍會放在結果中。
     定位在縮小到短邊 ``detect_short_side`` 的影像上進行，像素單位的參數皆以該尺寸為準。
     """
@@ -454,11 +456,25 @@ class LabelConfig:
         "偵測反光；面積小時修補，過大時警告 GLARE_RETAKE 並保留原樣。",
         group="label_steps",
     )
+    enable_denoise: bool = param(
+        False,
+        "去噪",
+        "Denoise (median)",
+        "以中值濾波去除椒鹽雜訊；視窗過大會抹除小數點等細小字元。",
+        group="label_steps",
+    )
     enable_contrast: bool = param(
         True,
         "對比增強",
         "Contrast (CLAHE)",
         "以 CLAHE 做局部對比增強。",
+        group="label_steps",
+    )
+    enable_binarize: bool = param(
+        False,
+        "二值化",
+        "Binarize",
+        "轉成黑白（自適應或 Otsu）；輸出一律為灰階。",
         group="label_steps",
     )
     # 定位：先以 Canny＋輪廓多邊形近似找四邊形，找不到時以 HoughLinesP 直線法備援。
@@ -663,6 +679,17 @@ class LabelConfig:
         step=1,
         group="glare",
     )
+    # 去噪（中值濾波）
+    denoise_ksize: int = param(
+        3,
+        "中值濾波大小",
+        "Median ksize",
+        "中值濾波的視窗邊長（奇數）；過大會抹除小數點與細筆畫。",
+        min=3,
+        max=15,
+        step=2,
+        group="denoise",
+    )
     # 對比（CLAHE）
     clahe_clip: float = param(
         2.0,
@@ -691,6 +718,36 @@ class LabelConfig:
         "Keep color (LAB L)",
         "開啟時對 LAB 的 L 通道做 CLAHE 並保留色彩；關閉時輸出灰階。灰階輸入一律輸出灰階。",
         group="contrast",
+    )
+    # 二值化：預設為自適應（可承受光線不均）；binarize_otsu 開啟時改用全域的 Otsu 門檻
+    binarize_otsu: bool = param(
+        False,
+        "改用 Otsu",
+        "Use Otsu",
+        "開啟時以 Otsu 全域門檻二值化（光線均勻時較穩定）；關閉時用自適應二值化。",
+        group="binarize",
+    )
+    binarize_block_size: int = param(
+        31,
+        "二值化鄰域",
+        "Binarize block size",
+        "自適應二值化的鄰域邊長（像素，奇數，以校正後尺寸為準）；應大於文字筆畫寬度數倍。",
+        min=3,
+        max=255,
+        step=2,
+        calibrate=True,
+        group="binarize",
+    )
+    binarize_c: float = param(
+        10.0,
+        "二值化常數",
+        "Binarize C",
+        "從局部平均扣除的常數；越大越多像素判為白色，背景紋理越少但細筆畫可能斷開。",
+        min=-50.0,
+        max=50.0,
+        step=1.0,
+        calibrate=True,
+        group="binarize",
     )
 
     def __post_init__(self) -> None:
@@ -728,6 +785,10 @@ class LabelConfig:
                 raise ValueError(f"{name} 必須介於 0 與 1")
         if self.clahe_clip <= 0:
             raise ValueError("clahe_clip 必須大於 0")
+        for name in ("denoise_ksize", "binarize_block_size"):
+            value = getattr(self, name)
+            if value < 3 or value % 2 == 0:
+                raise ValueError(f"{name} 必須為 ≥ 3 的奇數，收到 {value}")
 
 
 # ---------------------------------------------------------------- 食物照片
