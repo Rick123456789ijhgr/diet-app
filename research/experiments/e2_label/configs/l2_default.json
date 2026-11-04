@@ -1,5 +1,5 @@
 {
   "name": "l2_default",
-  "description": "目前的程式預設：定位＋校正 → 光斑修補 → CLAHE（設計 C-06／C-07 的組合）",
+  "description": "目前的程式預設：定位＋校正 → 光斑修補 → CLAHE（去噪、二值化關閉）",
   "label": {"enable_rectify": true, "enable_glare": true, "enable_contrast": true}
 }

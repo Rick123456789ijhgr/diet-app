@@ -4,6 +4,9 @@
 
 - 每個原圖（manifest 的一列）產生一張未劣化的 ``clean`` 與 ``VARIANT_CONDITIONS`` 中每個條件、
   每個等級各一張；一次只改變一項條件（4.1 節第 1 點），劣化過重的樣本也保留（第 4 點）。
+- 複合情境（``COMPOSITE_CONDITIONS``，4.1 節第 3 點）依序套用多個單一條件，
+  第 i 級為各成分的第 i 級；``condition`` 與 ``level`` 都以 ``+`` 連接各成分
+  （例如 ``dark+blur``、``0.5+1``），與單一劣化分開報告。
 - 變體跟著原圖的 ``split``（3.4 節）：影像寫在 ``splits/<split>/<source_id>/`` 下，
   測試集的變體因此同時受 ``split`` 欄與 ``splits/test`` 路徑兩道鎖保護。
 - manifest 每列記錄 ``source_id``（統計分析的單位）、``condition``、``level`` 與隨機種子 ``seed``；
@@ -43,6 +46,7 @@ from dietai.synthetic.degrade import (
     gaussian_noise,
     jpeg,
     motion_blur,
+    perspective,
     reduce_contrast,
     rotate,
     salt_pepper,
@@ -85,11 +89,34 @@ VARIANT_CONDITIONS: dict[str, Condition] = {
     ),
     "glare": Condition(add_glare, (0.1, 0.2, 0.3, 0.4), "光斑半徑／短邊，位置由種子決定"),
     "rotate": Condition(lambda i, v, s: rotate(i, v), (15.0, 30.0, 45.0, 80.0), "逆時針角度"),
+    "perspective": Condition(
+        perspective, (0.05, 0.1, 0.2, 0.3), "四角向內位移上限／寬高（斜拍），方向由種子決定"
+    ),
     "curve": Condition(
         lambda i, v, s: cylinder_warp(i, v), (0.3, 0.5, 0.7, 0.85), "圓柱邊緣角度／90°"
     ),
     "jpeg": Condition(lambda i, v, s: jpeg(i, int(v)), (90.0, 70.0, 50.0, 30.0), "JPEG 品質"),
 }
+
+
+# 複合情境 → 依序套用的單一條件（名稱即以 + 連接的成分）。各成分的等級數須相同，第 i 級一起套用。
+# 套用順序依拍攝的物理過程：先是物體本身（旋轉、曲面），再是斜拍與反光，最後是曝光與對焦
+COMPOSITE_CONDITIONS: dict[str, tuple[str, ...]] = {
+    "dark+blur": ("dark", "blur"),
+    "rotate+perspective": ("rotate", "perspective"),
+    "curve+glare": ("curve", "glare"),
+}
+
+
+def condition_levels(name: str) -> list[str]:
+    """條件各等級在 manifest 中的寫法（由輕到重）。
+
+    單一條件為數值，複合情境為各成分的等級以 ``+`` 連接。
+    """
+    if name in VARIANT_CONDITIONS:
+        return [f"{v:g}" for v in VARIANT_CONDITIONS[name].levels]
+    parts = [VARIANT_CONDITIONS[c].levels for c in COMPOSITE_CONDITIONS[name]]
+    return ["+".join(f"{v:g}" for v in step) for step in zip(*parts, strict=True)]
 
 
 def source_seed(source_id: str, seed: int) -> int:
@@ -120,16 +147,18 @@ def write_variant_dataset(
 ) -> Path:
     """對 ``sources`` 的每張原圖寫出劣化變體與 ``manifest.csv``，回傳 manifest 路徑。
 
-    ``conditions`` 為 ``VARIANT_CONDITIONS`` 的子集（省略時全部）。原圖的 ``id`` 即 ``source_id``，
+    ``conditions`` 為 ``VARIANT_CONDITIONS`` 與 ``COMPOSITE_CONDITIONS`` 的子集（省略時全部，
+    單一條件在前）。原圖的 ``id`` 即 ``source_id``，
     ``truth``、``split`` 與標籤欄照抄到每個變體。每張原圖都必須有 ``split``（dev／test），
     否則丟 ``ValueError``：切分以原始樣本為單位，變體不能各自決定。
     ``sources`` 是否含測試集由呼叫端以 ``read_manifest(include_test=...)`` 決定。
     ``out_dir`` 已存在且非空時丟 ``FileExistsError``（資料集不覆寫）。
     """
-    names = list(VARIANT_CONDITIONS) if conditions is None else list(conditions)
-    unknown = [c for c in names if c not in VARIANT_CONDITIONS]
+    available = [*VARIANT_CONDITIONS, *COMPOSITE_CONDITIONS]
+    names = available if conditions is None else list(conditions)
+    unknown = [c for c in names if c not in available]
     if unknown:
-        raise ValueError(f"沒有這些劣化條件：{unknown}；可用：{list(VARIANT_CONDITIONS)}")
+        raise ValueError(f"沒有這些劣化條件：{unknown}；可用：{available}")
     if not sources.items:
         raise ValueError("來源 manifest 沒有任何原圖")
     missing = [i.id for i in sources.items if not i.split]
@@ -152,17 +181,17 @@ def write_variant_dataset(
         folder = Path("splits") / item.split / item.id.replace("/", "_").replace("\\", "_")
 
         for condition, level, img in _degraded(base, names, s):
-            rel = (folder / f"{condition}_{level:g}.png").as_posix()
+            rel = (folder / f"{condition}_{level}.png").as_posix()
             write_image(out / rel, img)
             rows.append(
                 {
-                    "id": f"{item.id}__{condition}_{level:g}",
+                    "id": f"{item.id}__{condition}_{level}",
                     "image": rel,
                     "truth": item.truth,
                     "split": item.split,
                     SOURCE_COLUMN: item.id,
                     "condition": condition,
-                    "level": f"{level:g}",
+                    "level": level,
                     "seed": str(s),
                     **item.tags,
                 }
@@ -179,10 +208,7 @@ def write_variant_dataset(
         },
         "seed": seed,
         "max_side": max_side,
-        "conditions": {
-            n: {"levels": list(VARIANT_CONDITIONS[n].levels), "unit": VARIANT_CONDITIONS[n].unit}
-            for n in names
-        },
+        "conditions": {n: _condition_params(n) for n in names},
         "code_sha256": _code_hash(),
     }
     manifest.with_suffix(".json").write_text(
@@ -191,16 +217,30 @@ def write_variant_dataset(
     return manifest
 
 
-def _degraded(base: Image, names: Sequence[str], seed: int) -> Iterator[tuple[str, float, Image]]:
+def _condition_params(name: str) -> dict[str, object]:
+    """寫入產生參數的條件說明；複合情境另列成分。"""
+    if name in VARIANT_CONDITIONS:
+        cond = VARIANT_CONDITIONS[name]
+        return {"levels": list(cond.levels), "unit": cond.unit}
+    parts = COMPOSITE_CONDITIONS[name]
+    return {"parts": list(parts), "levels": condition_levels(name), "unit": "各成分的等級以 + 連接"}
+
+
+def _degraded(base: Image, names: Sequence[str], seed: int) -> Iterator[tuple[str, str, Image]]:
     """依序產生（條件, 等級, 影像）：先是未劣化的 ``clean``，再是各條件的各等級。
 
+    複合情境依序套用各成分，各成分使用同一個種子（與單獨套用時相同）。
     惰性產生，一次只保留一張變體在記憶體中（真實照片很大）。
     """
-    yield CLEAN, 0.0, base
+    yield CLEAN, "0", base
     for name in names:
-        cond = VARIANT_CONDITIONS[name]
-        for level in cond.levels:
-            yield name, level, cond.fn(base, level, seed)
+        parts = COMPOSITE_CONDITIONS.get(name, (name,))
+        levels = zip(*(VARIANT_CONDITIONS[c].levels for c in parts), strict=True)
+        for label, step in zip(condition_levels(name), levels, strict=True):
+            img = base
+            for c, v in zip(parts, step, strict=True):
+                img = VARIANT_CONDITIONS[c].fn(img, v, seed)
+            yield name, label, img
 
 
 def _code_hash() -> str:

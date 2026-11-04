@@ -1,0 +1,17 @@
+{
+  "name": "q1_all_methods",
+  "description": "每個方法都執行：所有單一方法＋多尺度＋疊加流程 C-01～C-05；zxing-cpp 內建嘗試關閉（同 E1 c0_all_methods）",
+  "decoder": "zxing",
+  "zxing": {"try_rotate": false, "try_downscale": false, "try_invert": false},
+  "ladder": {
+    "rungs": ["raw", "gray", "binarize", "otsu", "clahe", "sharpen", "denoise", "deskew", "multiscale", "pipeline"],
+    "scales": [2.0, 0.5],
+    "pipelines": [
+      ["denoise", "binarize"],
+      ["clahe", "binarize"],
+      ["clahe", "denoise"],
+      ["denoise", "clahe", "binarize"],
+      ["deskew", "denoise", "binarize"]
+    ]
+  }
+}

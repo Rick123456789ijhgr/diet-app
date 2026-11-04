@@ -115,8 +115,10 @@ python make_variants.py --sources ... --out ... --conditions blur,motion,jpeg --
 ```
 
 - 來源 manifest 格式同上，每列一張品質良好的原圖；`id` 即 `source_id`，**每張原圖都必須有 `split`**（以原始樣本為單位切分，變體跟著原圖走）。
-- 每張原圖產生 `clean` 與 12 種條件 × 4 級（`dietai.synthetic.VARIANT_CONDITIONS`）：
-  `blur`、`motion`（手震，方向由種子決定）、`noise`、`salt_pepper`、`downscale`、`dark`、`contrast`、`gradient`、`glare`、`rotate`（到 80°）、`curve`（圓柱曲面）、`jpeg`。
+- 每張原圖產生 `clean` 與 13 種單一條件 × 4 級（`dietai.synthetic.VARIANT_CONDITIONS`）：
+  `blur`、`motion`（手震，方向由種子決定）、`noise`、`salt_pepper`、`downscale`、`dark`、`contrast`、`gradient`、`glare`、`rotate`（到 80°）、`perspective`（斜拍，方向由種子決定）、`curve`（圓柱曲面）、`jpeg`。
+- 另有 3 種複合情境 × 4 級（`COMPOSITE_CONDITIONS`，設計 4.1 節第 3 點）：`dark+blur`、`rotate+perspective`、`curve+glare`。
+  依序套用各成分，第 i 級為各成分的第 i 級，`level` 也以 `+` 連接（例如 `0.5+1`）；報告時與單一劣化分開。
   劣化過重的等級也保留，結果以「劣化程度 → 成功率」曲線呈現。
 - 原圖先縮到長邊 1600 px（`--max-side`），等級才對不同手機的照片有一致意義。變體一律存 PNG（無損）。
 - 輸出 `splits/<split>/<source_id>/<條件>_<等級>.png`、`manifest.csv`（標籤欄 `source_id`、`condition`、`level`、`seed`，再接原圖的標籤）與 `manifest.json`（產生參數、來源 manifest 的 sha256、劣化程式的雜湊）。
@@ -124,7 +126,6 @@ python make_variants.py --sources ... --out ... --conditions blur,motion,jpeg --
 - 測試集原圖的變體寫在 `splits/test/` 下，預設不產生；正式實驗前才加 `--include-test`。
 - `source_id`、`seed` 不會出現在「依標籤分組」的表格中；`source_id` 是以原始樣本為單位統計時的集群。
 - 合成資料（`make_synthetic.py`）也帶 `source_id`（條碼代碼），可以先用來演練整套流程。
-- 尚未實作：複合情境（例如「低亮度＋模糊」，設計 4.1 節第 3 點）、透視變形條件。
 
 ## 工作台：找最佳流程
 

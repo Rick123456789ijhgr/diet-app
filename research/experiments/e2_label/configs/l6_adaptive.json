@@ -1,0 +1,5 @@
+{
+  "name": "l6_adaptive",
+  "description": "單一方法：只做自適應二值化",
+  "label": {"enable_rectify": false, "enable_glare": false, "enable_denoise": false, "enable_contrast": false, "enable_binarize": true}
+}
