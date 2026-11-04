@@ -1,0 +1,5 @@
+{
+  "name": "l5_clahe",
+  "description": "單一方法：只做 CLAHE 對比增強",
+  "label": {"enable_rectify": false, "enable_glare": false, "enable_denoise": false, "enable_contrast": true, "enable_binarize": false}
+}

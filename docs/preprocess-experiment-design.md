@@ -541,12 +541,12 @@
 | 條碼逐步升級與每一步紀錄 | 已有：`dietai.preprocess.barcode`、`attempts.csv`（第一次有結果即停止；不停止的版本見下方結果表） |
 | 電子發票雙 QR 定位 | 已有：`dietai.preprocess.invoice_qr` |
 | 電子發票 QR 實驗（正確／部分／誤讀、每個方法都執行、離線逐步升級） | 已有：`evaluation.invoice`、`research/experiments/e3_invoice_qr`（真值為左右原始位元組的 hex）；OpenCV QRCodeDetector 未實作 |
-| 營養標示定位、透視校正、光斑、CLAHE | 已有：`dietai.preprocess.label` |
+| 營養標示定位、透視校正、光斑、去噪、CLAHE、二值化；C-06、C-07 | 已有：`dietai.preprocess.label`（各段由 `LabelConfig.enable_*` 開關，去噪與二值化預設關閉）；`e2_label/configs` 的 `l1`～`l9` |
 | 品質量測：模糊、曝光、解析度、傾斜 | 已有：`dietai.preprocess.quality`、`ops.estimate_skew` |
 | 劣化：旋轉、縮小、模糊、亮度、漸層、光斑、雜訊、透視 | 已有：`dietai.devtools.degradations`（含透視強度） |
 | 營養標示定位對真實四角的評分（合成場景） | 已有：`dietai.devtools.label_eval` |
 | 劣化：手震模糊、椒鹽雜訊、對比降低、JPEG、曲面 | 已有：`dietai.synthetic`（`motion_blur`、`salt_pepper`、`reduce_contrast`、`jpeg`、`cylinder_warp`），工作台退化表單同步 |
-| 由真實照片產生變體與 manifest 的腳本 | 已有：`synthetic.write_variant_dataset`、`e1_barcode/make_variants.py`（manifest 含 `source_id`、`condition`、`level`、`seed`；複合情境未實作） |
+| 由真實照片產生變體與 manifest 的腳本 | 已有：`synthetic.write_variant_dataset`、`e1_barcode/make_variants.py`（manifest 含 `source_id`、`condition`、`level`、`seed`；含透視與 `dark+blur`、`rotate+perspective`、`curve+glare` 三種複合情境） |
 | 「每個方法都執行」模式與「變體 × 方法」結果表 | 已有：`dietai.evaluation.methods`、`e1_barcode/run_methods.py`（條碼；前處理與辨識耗時分開記錄） |
 | 疊加型固定流程 | 已有：`Rung.PIPELINE` 與 `LadderConfig.pipelines`（條碼，預設 C-01～C-05；新增 Otsu、CLAHE 單一方法）、`evaluation.pipeline_vs_parts`（H3） |
 | 逐步升級的離線計算與貪婪選擇 | 已有：`simulate_ladder`、`greedy_ladder`、`e1_barcode/analyze_methods.py`（條碼） |

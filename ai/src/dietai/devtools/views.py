@@ -70,10 +70,13 @@ def mask_on_small(img: Image, mask: npt.NDArray[np.bool_]) -> Image:
 def glare_overlay(img: Image, cfg: LabelConfig) -> tuple[Image, float] | None:
     """光斑遮罩疊在「校正後、修補前」的影像上，並回傳光斑比例；光斑步驟未啟用時回傳 ``None``。
 
-    ``preprocess_label`` 就是在這個版本上偵測光斑，因此只需跑一次不含光斑與對比的流程。
+    ``preprocess_label`` 就是在這個版本上偵測光斑，因此只需跑一次只含定位校正的流程。
     """
     if not cfg.enable_glare:
         return None
-    before = preprocess_label(img, replace(cfg, enable_glare=False, enable_contrast=False)).image
+    after_rectify = replace(
+        cfg, enable_glare=False, enable_denoise=False, enable_contrast=False, enable_binarize=False
+    )
+    before = preprocess_label(img, after_rectify).image
     glare = detect_glare(before, cfg)
     return mask_overlay(before, glare.mask), glare.ratio

@@ -1,0 +1,5 @@
+{
+  "name": "l9_c07",
+  "description": "疊加 C-07：光斑修補 → CLAHE（不定位）",
+  "label": {"enable_rectify": false, "enable_glare": true, "enable_denoise": false, "enable_contrast": true, "enable_binarize": false}
+}

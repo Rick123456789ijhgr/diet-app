@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 from dietai.evaluation import read_manifest
-from dietai.synthetic import VARIANT_CONDITIONS, write_variant_dataset
+from dietai.synthetic import COMPOSITE_CONDITIONS, VARIANT_CONDITIONS, write_variant_dataset
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,7 +31,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--conditions",
         default="",
-        help=f"劣化條件（逗號分隔，省略時全部）：{','.join(VARIANT_CONDITIONS)}",
+        help=f"劣化條件（逗號分隔，省略時全部）：{','.join(VARIANT_CONDITIONS)}；"
+        f"複合情境：{','.join(COMPOSITE_CONDITIONS)}",
     )
     p.add_argument("--seed", type=int, default=0, help="隨機種子（與各原圖的 id 一起決定）")
     p.add_argument(
