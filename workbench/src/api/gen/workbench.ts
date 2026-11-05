@@ -453,6 +453,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workbench/v1/dev/best-flow/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
+         * @description folder 與 image_ids 擇一。事件依序為 start（total）、progress（done、total）、done（name、path）。
+         *     已完成的執行列在 GET /dev/e1/runs 回應的 best_flow_runs。拒絕 test split 下的路徑（SPLIT_LOCKED）。
+         */
+        post: operations["startBestFlowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/dev/best-flow/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 找最佳流程：真值表與結論 */
+        get: operations["getBestFlowRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/dev/best-flow/runs/{run_id}/truth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * 找最佳流程：更新人工確認的真值
+         * @description 只更新 truths 中列出的圖片；回傳同 GET。
+         */
+        put: operations["setBestFlowTruth"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -709,6 +767,24 @@ export interface components {
             arms: string[];
             n_codes?: number;
             root?: string;
+        };
+        /** @description folder 與 image_ids 擇一 */
+        StartBestFlowRunRequest: {
+            /** @description 本機資料夾路徑；test split 已鎖定 */
+            folder?: string;
+            /** @description 以 POST /dev/images 上傳的暫存影像 */
+            image_ids?: string[];
+            /** @default false */
+            recursive: boolean;
+            limit?: number;
+            /** @description 結果資料夾；省略時使用預設的 runs 資料夾 */
+            root?: string;
+        };
+        SetBestFlowTruthRequest: {
+            /** @description 圖片 id → 條碼（EAN-13／UPC-A／EAN-8）；空字串＝沒有條碼；null＝取消人工確認 */
+            truths: {
+                [key: string]: string | null;
+            };
         };
         /** @enum {string} */
         SubmissionStatus: "draft" | "confirmed" | "rejected";
@@ -979,6 +1055,14 @@ export interface components {
         IfMatch: string;
         /** @description 暫存影像的 ID */
         ImageId: string;
+        /** @description 執行資料夾名稱（位於 root 之下） */
+        BestFlowRunId: string;
+        /** @description 貪婪選擇：每一步至少要多救回幾張（預設 1） */
+        BestFlowMinGain: number;
+        /** @description 貪婪選擇：每一步最多新增幾張誤讀＋誤報（預設 0） */
+        BestFlowMaxNewWrong: number;
+        /** @description 貪婪選擇：平均耗時上限（毫秒）；省略為不限 */
+        BestFlowMaxMeanMs: number;
         /** @description E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾 */
         E1Root: string;
     };
@@ -1793,6 +1877,110 @@ export interface operations {
                     "application/json": components["schemas"]["FreeJson"];
                 };
             };
+            403: components["responses"]["SplitLocked"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    startBestFlowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartBestFlowRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Server-Sent Events 串流 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["SplitLocked"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getBestFlowRun: {
+        parameters: {
+            query?: {
+                /** @description E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾 */
+                root?: components["parameters"]["E1Root"];
+                /** @description 貪婪選擇：每一步至少要多救回幾張（預設 1） */
+                min_gain?: components["parameters"]["BestFlowMinGain"];
+                /** @description 貪婪選擇：每一步最多新增幾張誤讀＋誤報（預設 0） */
+                max_new_wrong?: components["parameters"]["BestFlowMaxNewWrong"];
+                /** @description 貪婪選擇：平均耗時上限（毫秒）；省略為不限 */
+                max_mean_ms?: components["parameters"]["BestFlowMaxMeanMs"];
+            };
+            header?: never;
+            path: {
+                /** @description 執行資料夾名稱（位於 root 之下） */
+                run_id: components["parameters"]["BestFlowRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 真值表與結論（結構由 Python 定義） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeJson"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["SplitLocked"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    setBestFlowTruth: {
+        parameters: {
+            query?: {
+                /** @description E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾 */
+                root?: components["parameters"]["E1Root"];
+                /** @description 貪婪選擇：每一步至少要多救回幾張（預設 1） */
+                min_gain?: components["parameters"]["BestFlowMinGain"];
+                /** @description 貪婪選擇：每一步最多新增幾張誤讀＋誤報（預設 0） */
+                max_new_wrong?: components["parameters"]["BestFlowMaxNewWrong"];
+                /** @description 貪婪選擇：平均耗時上限（毫秒）；省略為不限 */
+                max_mean_ms?: components["parameters"]["BestFlowMaxMeanMs"];
+            };
+            header?: never;
+            path: {
+                /** @description 執行資料夾名稱（位於 root 之下） */
+                run_id: components["parameters"]["BestFlowRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetBestFlowTruthRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新後的真值表與結論（結構由 Python 定義） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeJson"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             403: components["responses"]["SplitLocked"];
             404: components["responses"]["NotFound"];
             503: components["responses"]["Unavailable"];

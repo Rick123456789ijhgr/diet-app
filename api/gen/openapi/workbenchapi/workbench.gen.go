@@ -647,6 +647,26 @@ type RungAttempt struct {
 	Skipped bool   `json:"skipped"`
 }
 
+// SetBestFlowTruthRequest defines model for SetBestFlowTruthRequest.
+type SetBestFlowTruthRequest struct {
+	// Truths 圖片 id → 條碼（EAN-13／UPC-A／EAN-8）；空字串＝沒有條碼；null＝取消人工確認
+	Truths map[string]*string `json:"truths"`
+}
+
+// StartBestFlowRunRequest folder 與 image_ids 擇一
+type StartBestFlowRunRequest struct {
+	// Folder 本機資料夾路徑；test split 已鎖定
+	Folder *string `json:"folder,omitempty"`
+
+	// ImageIds 以 POST /dev/images 上傳的暫存影像
+	ImageIds  *[]string `json:"image_ids,omitempty"`
+	Limit     *int      `json:"limit,omitempty"`
+	Recursive *bool     `json:"recursive,omitempty"`
+
+	// Root 結果資料夾；省略時使用預設的 runs 資料夾
+	Root *string `json:"root,omitempty"`
+}
+
 // StartE1RunRequest defines model for StartE1RunRequest.
 type StartE1RunRequest struct {
 	Arms   []string `json:"arms"`
@@ -745,6 +765,18 @@ type VlmImage struct {
 	Scale    float64     `json:"scale"`
 }
 
+// BestFlowMaxMeanMs defines model for BestFlowMaxMeanMs.
+type BestFlowMaxMeanMs = float64
+
+// BestFlowMaxNewWrong defines model for BestFlowMaxNewWrong.
+type BestFlowMaxNewWrong = int
+
+// BestFlowMinGain defines model for BestFlowMinGain.
+type BestFlowMinGain = int
+
+// BestFlowRunId defines model for BestFlowRunId.
+type BestFlowRunId = string
+
 // E1Root defines model for E1Root.
 type E1Root = string
 
@@ -820,6 +852,36 @@ type RejectSubmissionParams struct {
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
 
+// GetBestFlowRunParams defines parameters for GetBestFlowRun.
+type GetBestFlowRunParams struct {
+	// Root E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾
+	Root *E1Root `form:"root,omitempty" json:"root,omitempty"`
+
+	// MinGain 貪婪選擇：每一步至少要多救回幾張（預設 1）
+	MinGain *BestFlowMinGain `form:"min_gain,omitempty" json:"min_gain,omitempty"`
+
+	// MaxNewWrong 貪婪選擇：每一步最多新增幾張誤讀＋誤報（預設 0）
+	MaxNewWrong *BestFlowMaxNewWrong `form:"max_new_wrong,omitempty" json:"max_new_wrong,omitempty"`
+
+	// MaxMeanMs 貪婪選擇：平均耗時上限（毫秒）；省略為不限
+	MaxMeanMs *BestFlowMaxMeanMs `form:"max_mean_ms,omitempty" json:"max_mean_ms,omitempty"`
+}
+
+// SetBestFlowTruthParams defines parameters for SetBestFlowTruth.
+type SetBestFlowTruthParams struct {
+	// Root E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾
+	Root *E1Root `form:"root,omitempty" json:"root,omitempty"`
+
+	// MinGain 貪婪選擇：每一步至少要多救回幾張（預設 1）
+	MinGain *BestFlowMinGain `form:"min_gain,omitempty" json:"min_gain,omitempty"`
+
+	// MaxNewWrong 貪婪選擇：每一步最多新增幾張誤讀＋誤報（預設 0）
+	MaxNewWrong *BestFlowMaxNewWrong `form:"max_new_wrong,omitempty" json:"max_new_wrong,omitempty"`
+
+	// MaxMeanMs 貪婪選擇：平均耗時上限（毫秒）；省略為不限
+	MaxMeanMs *BestFlowMaxMeanMs `form:"max_mean_ms,omitempty" json:"max_mean_ms,omitempty"`
+}
+
 // ListE1RunsParams defines parameters for ListE1Runs.
 type ListE1RunsParams struct {
 	// Root E1 結果所在資料夾（本機路徑）；省略時使用預設的 runs 資料夾
@@ -861,6 +923,12 @@ type DecodeBarcodeJSONRequestBody = LadderRequest
 
 // RunBatchJSONRequestBody defines body for RunBatch for application/json ContentType.
 type RunBatchJSONRequestBody = BatchRequest
+
+// StartBestFlowRunJSONRequestBody defines body for StartBestFlowRun for application/json ContentType.
+type StartBestFlowRunJSONRequestBody = StartBestFlowRunRequest
+
+// SetBestFlowTruthJSONRequestBody defines body for SetBestFlowTruth for application/json ContentType.
+type SetBestFlowTruthJSONRequestBody = SetBestFlowTruthRequest
 
 // StartE1RunJSONRequestBody defines body for StartE1Run for application/json ContentType.
 type StartE1RunJSONRequestBody = StartE1RunRequest
@@ -1001,6 +1069,15 @@ type ServerInterface interface {
 	// RunBatch 資料夾批次（以 SSE 逐張回報）
 	// (POST /workbench/v1/dev/batches)
 	RunBatch(w http.ResponseWriter, r *http.Request)
+	// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
+	// (POST /workbench/v1/dev/best-flow/runs)
+	StartBestFlowRun(w http.ResponseWriter, r *http.Request)
+	// GetBestFlowRun 找最佳流程：真值表與結論
+	// (GET /workbench/v1/dev/best-flow/runs/{run_id})
+	GetBestFlowRun(w http.ResponseWriter, r *http.Request, runId BestFlowRunId, params GetBestFlowRunParams)
+	// SetBestFlowTruth 找最佳流程：更新人工確認的真值
+	// (PUT /workbench/v1/dev/best-flow/runs/{run_id}/truth)
+	SetBestFlowTruth(w http.ResponseWriter, r *http.Request, runId BestFlowRunId, params SetBestFlowTruthParams)
 	// GetConfigSchemas 參數表單結構（由 Python 的 param() 宣告產生）
 	// (GET /workbench/v1/dev/config-schemas)
 	GetConfigSchemas(w http.ResponseWriter, r *http.Request)
@@ -1479,6 +1556,182 @@ func (siw *ServerInterfaceWrapper) RunBatch(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// StartBestFlowRun operation middleware
+func (siw *ServerInterfaceWrapper) StartBestFlowRun(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartBestFlowRun(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetBestFlowRun operation middleware
+func (siw *ServerInterfaceWrapper) GetBestFlowRun(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "run_id" -------------
+	var runId BestFlowRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", r.PathValue("run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetBestFlowRunParams
+
+	// ------------- Optional query parameter "root" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "root", r.URL.Query(), &params.Root, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "root"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "root", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "min_gain" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "min_gain", r.URL.Query(), &params.MinGain, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "min_gain"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "min_gain", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "max_new_wrong" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "max_new_wrong", r.URL.Query(), &params.MaxNewWrong, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "max_new_wrong"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "max_new_wrong", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "max_mean_ms" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "max_mean_ms", r.URL.Query(), &params.MaxMeanMs, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "max_mean_ms"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "max_mean_ms", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetBestFlowRun(w, r, runId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetBestFlowTruth operation middleware
+func (siw *ServerInterfaceWrapper) SetBestFlowTruth(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "run_id" -------------
+	var runId BestFlowRunId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "run_id", r.PathValue("run_id"), &runId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "run_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetBestFlowTruthParams
+
+	// ------------- Optional query parameter "root" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "root", r.URL.Query(), &params.Root, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "root"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "root", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "min_gain" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "min_gain", r.URL.Query(), &params.MinGain, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "min_gain"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "min_gain", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "max_new_wrong" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "max_new_wrong", r.URL.Query(), &params.MaxNewWrong, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "max_new_wrong"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "max_new_wrong", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "max_mean_ms" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "max_mean_ms", r.URL.Query(), &params.MaxMeanMs, runtime.BindQueryParameterOptions{Type: "number", Format: "double"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "max_mean_ms"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "max_mean_ms", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetBestFlowTruth(w, r, runId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetConfigSchemas operation middleware
 func (siw *ServerInterfaceWrapper) GetConfigSchemas(w http.ResponseWriter, r *http.Request) {
 
@@ -1868,6 +2121,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/e1/runs", wrapper.ListE1Runs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/e1/runs", wrapper.StartE1Run)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/e1/runs/{run_id}", wrapper.GetE1Run)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs", wrapper.StartBestFlowRun)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs/{run_id}", wrapper.GetBestFlowRun)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs/{run_id}/truth", wrapper.SetBestFlowTruth)
 
 	return m
 }
@@ -3083,6 +3339,272 @@ func (response RunBatch503JSONResponse) VisitRunBatchResponse(w http.ResponseWri
 	return err
 }
 
+type StartBestFlowRunRequestObject struct {
+	Body *StartBestFlowRunJSONRequestBody
+}
+
+type StartBestFlowRunResponseObject interface {
+	VisitStartBestFlowRunResponse(w http.ResponseWriter) error
+}
+
+type StartBestFlowRun200TexteventStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response StartBestFlowRun200TexteventStreamResponse) VisitStartBestFlowRunResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		// If w doesn't support flushing, fall back to io.Copy.
+		_, err := io.Copy(w, response.Body)
+		return err
+	}
+	// text/event-stream messages are typically small; use a
+	// modest buffer and flush after each chunk so clients see
+	// events immediately instead of waiting on OS buffering.
+	buf := make([]byte, 4096)
+	for {
+		n, err := response.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			flusher.Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+type StartBestFlowRun400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response StartBestFlowRun400JSONResponse) VisitStartBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartBestFlowRun403JSONResponse struct{ SplitLockedJSONResponse }
+
+func (response StartBestFlowRun403JSONResponse) VisitStartBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartBestFlowRun404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response StartBestFlowRun404JSONResponse) VisitStartBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StartBestFlowRun503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response StartBestFlowRun503JSONResponse) VisitStartBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBestFlowRunRequestObject struct {
+	RunId  BestFlowRunId `json:"run_id"`
+	Params GetBestFlowRunParams
+}
+
+type GetBestFlowRunResponseObject interface {
+	VisitGetBestFlowRunResponse(w http.ResponseWriter) error
+}
+
+type GetBestFlowRun200JSONResponse FreeJson
+
+func (response GetBestFlowRun200JSONResponse) VisitGetBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBestFlowRun400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetBestFlowRun400JSONResponse) VisitGetBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBestFlowRun403JSONResponse struct{ SplitLockedJSONResponse }
+
+func (response GetBestFlowRun403JSONResponse) VisitGetBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBestFlowRun404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetBestFlowRun404JSONResponse) VisitGetBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetBestFlowRun503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response GetBestFlowRun503JSONResponse) VisitGetBestFlowRunResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBestFlowTruthRequestObject struct {
+	RunId  BestFlowRunId `json:"run_id"`
+	Params SetBestFlowTruthParams
+	Body   *SetBestFlowTruthJSONRequestBody
+}
+
+type SetBestFlowTruthResponseObject interface {
+	VisitSetBestFlowTruthResponse(w http.ResponseWriter) error
+}
+
+type SetBestFlowTruth200JSONResponse FreeJson
+
+func (response SetBestFlowTruth200JSONResponse) VisitSetBestFlowTruthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBestFlowTruth400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response SetBestFlowTruth400JSONResponse) VisitSetBestFlowTruthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBestFlowTruth403JSONResponse struct{ SplitLockedJSONResponse }
+
+func (response SetBestFlowTruth403JSONResponse) VisitSetBestFlowTruthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBestFlowTruth404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response SetBestFlowTruth404JSONResponse) VisitSetBestFlowTruthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetBestFlowTruth503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response SetBestFlowTruth503JSONResponse) VisitSetBestFlowTruthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetConfigSchemasRequestObject struct {
 }
 
@@ -4006,6 +4528,15 @@ type StrictServerInterface interface {
 	// RunBatch 資料夾批次（以 SSE 逐張回報）
 	// (POST /workbench/v1/dev/batches)
 	RunBatch(ctx context.Context, request RunBatchRequestObject) (RunBatchResponseObject, error)
+	// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
+	// (POST /workbench/v1/dev/best-flow/runs)
+	StartBestFlowRun(ctx context.Context, request StartBestFlowRunRequestObject) (StartBestFlowRunResponseObject, error)
+	// GetBestFlowRun 找最佳流程：真值表與結論
+	// (GET /workbench/v1/dev/best-flow/runs/{run_id})
+	GetBestFlowRun(ctx context.Context, request GetBestFlowRunRequestObject) (GetBestFlowRunResponseObject, error)
+	// SetBestFlowTruth 找最佳流程：更新人工確認的真值
+	// (PUT /workbench/v1/dev/best-flow/runs/{run_id}/truth)
+	SetBestFlowTruth(ctx context.Context, request SetBestFlowTruthRequestObject) (SetBestFlowTruthResponseObject, error)
 	// GetConfigSchemas 參數表單結構（由 Python 的 param() 宣告產生）
 	// (GET /workbench/v1/dev/config-schemas)
 	GetConfigSchemas(ctx context.Context, request GetConfigSchemasRequestObject) (GetConfigSchemasResponseObject, error)
@@ -4511,6 +5042,98 @@ func (sh *strictHandler) RunBatch(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RunBatchResponseObject); ok {
 		if err := validResponse.VisitRunBatchResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StartBestFlowRun operation middleware
+func (sh *strictHandler) StartBestFlowRun(w http.ResponseWriter, r *http.Request) {
+	var request StartBestFlowRunRequestObject
+
+	var body StartBestFlowRunJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StartBestFlowRun(ctx, request.(StartBestFlowRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StartBestFlowRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StartBestFlowRunResponseObject); ok {
+		if err := validResponse.VisitStartBestFlowRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetBestFlowRun operation middleware
+func (sh *strictHandler) GetBestFlowRun(w http.ResponseWriter, r *http.Request, runId BestFlowRunId, params GetBestFlowRunParams) {
+	var request GetBestFlowRunRequestObject
+
+	request.RunId = runId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetBestFlowRun(ctx, request.(GetBestFlowRunRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetBestFlowRun")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetBestFlowRunResponseObject); ok {
+		if err := validResponse.VisitGetBestFlowRunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetBestFlowTruth operation middleware
+func (sh *strictHandler) SetBestFlowTruth(w http.ResponseWriter, r *http.Request, runId BestFlowRunId, params SetBestFlowTruthParams) {
+	var request SetBestFlowTruthRequestObject
+
+	request.RunId = runId
+	request.Params = params
+
+	var body SetBestFlowTruthJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetBestFlowTruth(ctx, request.(SetBestFlowTruthRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetBestFlowTruth")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetBestFlowTruthResponseObject); ok {
+		if err := validResponse.VisitSetBestFlowTruthResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

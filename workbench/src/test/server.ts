@@ -500,6 +500,137 @@ export const e1Run = {
   attempts: [{ id: 'img-1', arm: 'a0_raw', rung: 'raw', elapsed_ms: '1.2', hits: '1' }],
 }
 
+/** 找最佳流程的一次執行（dietai.devtools.best_flow.run_json 的形狀）。 */
+const bestFlowImage = (
+  id: string,
+  status: 'auto' | 'review' | 'unknown',
+  candidates: { code: string; methods: string[]; checksum_ok: boolean }[],
+  applied: { truth: string; source: 'auto' | 'manual' } | null,
+) => ({
+  id,
+  image: `D:/photos/${id}`,
+  status,
+  truth: status === 'auto' ? candidates[0]!.code : '',
+  candidates,
+  applied,
+  error: '',
+  thumb_id: `thumb-${id}`,
+})
+
+const bestSummary = (arm: string, correct: number, extra: Record<string, unknown> = {}) => ({
+  arm,
+  n: 2,
+  correct,
+  rate: correct / 2,
+  ci_low: 0.1,
+  ci_high: 0.99,
+  misread: 0,
+  missed: 2 - correct,
+  negatives: 0,
+  false_positive: 0,
+  errors: 0,
+  median_ms: 3.5,
+  ...extra,
+})
+
+/** truths：圖片 id → 採用的真值（null 為未定）；依此產生真值表與結論。 */
+export function bestFlowRun(truths: Record<string, string | null>) {
+  const code = '4710088410108'
+  const images = [
+    bestFlowImage('a.jpg', 'auto', [{ code, methods: ['raw', 'gray'], checksum_ok: true }], {
+      truth: code,
+      source: 'auto',
+    }),
+    bestFlowImage(
+      'b.jpg',
+      'review',
+      [
+        { code, methods: ['otsu'], checksum_ok: true },
+        { code: '4712612300015', methods: ['clahe'], checksum_ok: true },
+      ],
+      null,
+    ),
+    bestFlowImage('c.jpg', 'unknown', [], null),
+  ].map((img) =>
+    img.id in truths
+      ? {
+          ...img,
+          applied: truths[img.id] === null ? null : { truth: truths[img.id]!, source: 'manual' },
+        }
+      : img,
+  )
+  const decided = images.filter((i) => i.applied)
+  return {
+    name: '20261105-bestflow',
+    path: 'D:/runs/20261105-bestflow',
+    meta: { created: '2026-11-05T00:00:00+08:00', source: 'upload', images: 3, min_methods: 2 },
+    counts: {
+      images: 3,
+      decided: decided.length,
+      undecided: 3 - decided.length,
+      positives: decided.filter((i) => i.applied!.truth).length,
+      negatives: decided.filter((i) => !i.applied!.truth).length,
+      auto: 1,
+      review: 1,
+      unknown: 1,
+    },
+    images,
+    result: {
+      methods: [bestSummary('raw', 1), bestSummary('otsu', 2, { gained: 1, lost: 0, p_value: 1 })],
+      greedy: {
+        order: ['raw', 'otsu', 'pipeline@denoise+binarize'],
+        stop: 'exhausted',
+        excluded: 0,
+        steps: [
+          {
+            method: 'raw',
+            rescued: 1,
+            new_misread: 0,
+            new_false_positive: 0,
+            correct: 1,
+            positives: 2,
+            misread: 0,
+            false_positive: 0,
+            rate: 0.5,
+            mean_ms: 3,
+          },
+          {
+            method: 'otsu',
+            rescued: 1,
+            new_misread: 0,
+            new_false_positive: 0,
+            correct: 2,
+            positives: 2,
+            misread: 0,
+            false_positive: 0,
+            rate: 1,
+            mean_ms: 5,
+          },
+        ],
+      },
+      compare: {
+        orders: { raw: ['raw'], greedy: ['raw', 'otsu'], all: ['raw', 'gray', 'otsu'] },
+        summary: [
+          bestSummary('raw', 1),
+          bestSummary('greedy', 2, { lost: 0, gained: 1, p_value: 1 }),
+          bestSummary('all', 2, { lost: 0, gained: 1, p_value: 1 }),
+        ],
+      },
+      export: { class: 'LadderConfig', values: { rungs: ['raw', 'otsu'] }, exact: true },
+      errors: 0,
+    },
+  }
+}
+
+/** 目前人工確認的真值（PUT 會修改）；測試開始前以 resetBestFlow 清空。 */
+let bestFlowTruths: Record<string, string | null> = {}
+/** 結果資料夾中是否已有找最佳流程的執行；false 時頁面顯示步驟說明。 */
+let bestFlowListed = true
+export function resetBestFlow(listed = true) {
+  bestFlowTruths = {}
+  bestFlowListed = listed
+}
+
 export const handlers = [
   ...coldstartHandlers,
   http.post('*/workbench/v1/dev/sweeps', async ({ request }) => {
@@ -642,6 +773,9 @@ export const handlers = [
     HttpResponse.json({
       root: 'D:/runs',
       runs: [{ name: '20261014-run', path: 'D:/runs/20261014-run' }],
+      best_flow_runs: bestFlowListed
+        ? [{ name: '20261105-bestflow', path: 'D:/runs/20261105-bestflow' }]
+        : [],
       method_runs: [
         { name: '20261103-methods', path: 'D:/runs/20261103-methods', features: true },
         { name: '20261102-raw', path: 'D:/runs/20261102-raw', features: false },
@@ -678,6 +812,36 @@ export const handlers = [
       { type: 'progress', done: 4, total: 4 },
       { type: 'done', name: '20261014-run', path: 'D:/runs/20261014-run' },
     ])
+  }),
+  http.post('*/workbench/v1/dev/best-flow/runs', async ({ request }) => {
+    const body = (await json(request)) as { folder?: string }
+    if (body.folder?.includes('splits/test')) {
+      return HttpResponse.json({ code: 'SPLIT_LOCKED', message: '測試集已鎖定' }, { status: 403 })
+    }
+    bestFlowListed = true
+    return sse([
+      { type: 'start', total: 3 },
+      { type: 'progress', done: 3, total: 3 },
+      { type: 'done', name: '20261105-bestflow', path: 'D:/runs/20261105-bestflow' },
+    ])
+  }),
+  http.get('*/workbench/v1/dev/best-flow/runs/:id', ({ request }) => {
+    requests.push({ path: new URL(request.url).pathname, body: new URL(request.url).search })
+    return HttpResponse.json(bestFlowRun(bestFlowTruths))
+  }),
+  http.put('*/workbench/v1/dev/best-flow/runs/:id/truth', async ({ request }) => {
+    const body = (await json(request)) as { truths: Record<string, string | null> }
+    for (const [id, v] of Object.entries(body.truths)) {
+      if (v === null) delete bestFlowTruths[id]
+      else bestFlowTruths[id] = v
+    }
+    return HttpResponse.json(bestFlowRun(bestFlowTruths))
+  }),
+  http.post('*/workbench/v1/dev/images', ({ request }) => {
+    // jsdom 的 File 經 undici 送出時，MSW 讀取 multipart 內容會卡住；只記錄呼叫，依順序編號
+    const n = requests.filter((r) => r.path.endsWith('/dev/images')).length + 1
+    requests.push({ path: new URL(request.url).pathname, body: n })
+    return HttpResponse.json({ ...base, image_id: `upload-${n}` }, { status: 201 })
   }),
   http.get('*/workbench/v1/dev/config-schemas', () => HttpResponse.json(schemas)),
   http.post('*/workbench/v1/dev/images/synthesize', async ({ request }) => {

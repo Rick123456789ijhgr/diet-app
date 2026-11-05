@@ -32,7 +32,7 @@ type Events interface {
 	Next() (string, error)
 }
 
-// jsonMessage 是只帶一個 JSON 字串的串流訊息（RunBatchResponse、StartE1RunResponse）。
+// jsonMessage 是只帶一個 JSON 字串的串流訊息（RunBatchResponse、StartE1RunResponse、StartBestFlowRunResponse）。
 // 以泛型約束「*T 有 GetJson()」，讓兩種訊息共用 grpcEvents 與 openStream。
 type jsonMessage[T any] interface {
 	*T
@@ -135,18 +135,11 @@ func (s *Service) ListE1Runs(ctx context.Context, root string) (api.FreeJson, er
 	return object(resp.GetJson())
 }
 
-// GetE1Run 一次執行的彙整；runID 只能是資料夾名稱（不得含路徑）。
+// GetE1Run 一次執行的彙整；runID 只能是資料夾名稱（不得含路徑，見 runDirOf）。
 func (s *Service) GetE1Run(ctx context.Context, root, runID string) (api.FreeJson, error) {
-	// run_id 來自 URL 路徑，先擋掉可以跳出結果資料夾的值（路徑分隔字元、. 與 ..）
-	if runID == "" || runID == "." || runID == ".." || strings.ContainsAny(runID, `/\`) {
-		return nil, &Error{http.StatusBadRequest, "INVALID_PARAMS", "run_id 只能是執行資料夾名稱", "run_id"}
-	}
-	// root 為空時只送資料夾名稱，由 Python 接上預設的結果資料夾。
-	// Windows 路徑先把 \ 換成 /，才能用 path.Join（path 套件只認 /）。root 本身不檢查，可指向任何本機資料夾，
-	// 測試集鎖定由 Python 端負責。
-	runDir := runID
-	if root != "" {
-		runDir = path.Join(strings.ReplaceAll(root, `\`, "/"), runID)
+	runDir, err := runDirOf(root, runID)
+	if err != nil {
+		return nil, err
 	}
 	resp, err := s.ai.GetE1Run(ctx, &dietaiv1.GetE1RunRequest{RunDir: runDir})
 	if err != nil {
@@ -167,6 +160,89 @@ func (s *Service) StartE1Run(ctx context.Context, req api.StartE1RunRequest) (Ev
 	return openStream[dietaiv1.StartE1RunResponse](s.ai.StartE1Run(ctx, r))
 }
 
+// runDirOf 組出執行資料夾的路徑；runID 只能是資料夾名稱（不得含路徑）。
+// root 為空時只回傳資料夾名稱，由 Python 接上預設的結果資料夾。
+func runDirOf(root, runID string) (string, error) {
+	// run_id 來自 URL 路徑，先擋掉可以跳出結果資料夾的值（路徑分隔字元、. 與 ..）
+	if runID == "" || runID == "." || runID == ".." || strings.ContainsAny(runID, `/\`) {
+		return "", &Error{http.StatusBadRequest, "INVALID_PARAMS", "run_id 只能是執行資料夾名稱", "run_id"}
+	}
+	if root == "" {
+		return runID, nil
+	}
+	// Windows 路徑先把 \ 換成 / 才能用 path.Join（path 套件只認 /）。root 本身不檢查，可指向任何本機資料夾，
+	// 測試集鎖定由 Python 端負責。
+	return path.Join(strings.ReplaceAll(root, `\`, "/"), runID), nil
+}
+
+// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所有方法（folder 與 image_ids 擇一，由 Python 檢查）。
+func (s *Service) StartBestFlowRun(ctx context.Context, req api.StartBestFlowRunRequest) (Events, error) {
+	r := &dietaiv1.StartBestFlowRunRequest{
+		Folder:    deref(req.Folder),
+		Recursive: deref(req.Recursive),
+		Root:      deref(req.Root),
+	}
+	if req.ImageIds != nil {
+		r.ImageIds = *req.ImageIds
+	}
+	if req.Limit != nil {
+		r.Limit = int32(*req.Limit)
+	}
+	// ctx 為請求的 context（不另設期限），見檔案開頭的生命週期說明
+	return openStream[dietaiv1.StartBestFlowRunResponse](s.ai.StartBestFlowRun(ctx, r))
+}
+
+// BestFlowCriteria 是貪婪選擇的準則；nil 表示用 Python 的預設值（min_gain 1、max_new_wrong 0、耗時不限）。
+type BestFlowCriteria struct {
+	MinGain     *int
+	MaxNewWrong *int
+	MaxMeanMs   *float64
+}
+
+// GetBestFlowRun 找最佳流程的真值表與結論。
+func (s *Service) GetBestFlowRun(ctx context.Context, root, runID string, c BestFlowCriteria) (api.FreeJson, error) {
+	runDir, err := runDirOf(root, runID)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.ai.GetBestFlowRun(ctx, &dietaiv1.GetBestFlowRunRequest{
+		RunDir:      runDir,
+		MinGain:     int32(deref(c.MinGain)),
+		MaxNewWrong: int32(deref(c.MaxNewWrong)),
+		MaxMeanMs:   deref(c.MaxMeanMs),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return object(resp.GetJson())
+}
+
+// SetBestFlowTruth 更新人工確認的真值；值為 nil（JSON null）表示取消確認、空字串表示沒有條碼。
+func (s *Service) SetBestFlowTruth(ctx context.Context, root, runID string, c BestFlowCriteria, truths map[string]*string) (api.FreeJson, error) {
+	runDir, err := runDirOf(root, runID)
+	if err != nil {
+		return nil, err
+	}
+	if truths == nil {
+		return nil, &Error{http.StatusBadRequest, "INVALID_PARAMS", "缺少 truths", "truths"}
+	}
+	body, err := json.Marshal(truths)
+	if err != nil {
+		return nil, fmt.Errorf("workbench: 編碼 truths: %w", err)
+	}
+	resp, err := s.ai.SetBestFlowTruth(ctx, &dietaiv1.SetBestFlowTruthRequest{
+		RunDir:      runDir,
+		TruthsJson:  string(body),
+		MinGain:     int32(deref(c.MinGain)),
+		MaxNewWrong: int32(deref(c.MaxNewWrong)),
+		MaxMeanMs:   deref(c.MaxMeanMs),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return object(resp.GetJson())
+}
+
 // object 解析 Python 回傳的 JSON 物件；與 freeJSON 不同，這裡的回應一定要有內容，空字串視為錯誤。
 func object(s string) (api.FreeJson, error) {
 	var m api.FreeJson
@@ -177,13 +253,16 @@ func object(s string) (api.FreeJson, error) {
 }
 
 // sseResponse 以 Server-Sent Events 逐筆輸出；中途出錯時送出 event: error 後結束。
-// 同一型別同時實作 RunBatch 與 StartE1Run 兩個產生的回應介面。
+// 同一型別同時實作 RunBatch、StartE1Run 與 StartBestFlowRun 產生的回應介面。
 type sseResponse struct {
 	events Events
 }
 
 func (r sseResponse) VisitRunBatchResponse(w http.ResponseWriter) error   { return r.write(w) }
 func (r sseResponse) VisitStartE1RunResponse(w http.ResponseWriter) error { return r.write(w) }
+func (r sseResponse) VisitStartBestFlowRunResponse(w http.ResponseWriter) error {
+	return r.write(w)
+}
 
 // write 寫出 SSE。每筆訊息為一行 "data: <JSON>"，後接空行；每筆寫完立即 Flush，前端才能即時看到進度。
 // 標頭一旦送出就無法再改 HTTP 狀態，因此串流中途的錯誤改以 event: error 傳遞（內容同 HTTP 錯誤本文）。

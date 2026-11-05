@@ -127,6 +127,17 @@ python make_variants.py --sources ... --out ... --conditions blur,motion,jpeg --
 - `source_id`、`seed` 不會出現在「依標籤分組」的表格中；`source_id` 是以原始樣本為單位統計時的集群。
 - 合成資料（`make_synthetic.py`）也帶 `source_id`（條碼代碼），可以先用來演練整套流程。
 
+## 工作台：找最佳流程
+
+不想手寫 manifest 時，用工作台「模組一 → 找最佳流程」（`make workbench`）：上傳圖片或填資料夾，
+後端以 `c0_all_methods` 對每張圖執行所有方法（同 `run_methods.py`），再由各方法解出的號碼推定真值
+（至少 2 個方法讀出相同且檢查碼正確的號碼才自動採用，其餘人工確認），確認後即時以 `greedy_ladder` 選出推薦流程。
+
+- 結果存在 `runs/<時間>_bestflow/`：`inputs/`（自動產生的 manifest 與上傳的圖片）、`methods/`（`run_methods` 的輸出）、
+  `truth.csv`（採用的真值與來源 auto／manual）、`best_flow.json`（完成標記）。`methods/` 在子資料夾，`analyze*.py` 與 E1／自適應頁不會列出。
+- 推定只用讀得到的圖片會偏高，未確認的圖片不納入統計，頁面會提示張數。
+- 推薦流程是在這批圖片上選的（dev）；寫成結論前仍要以 `run_methods.py --include-test --order …` 在測試集驗證。
+
 ## 每個方法都執行（ADR 0005）
 
 `run.py` 的階梯在第一次有結果時就停止，只看得出「依這個順序加入時」每一步的貢獻。

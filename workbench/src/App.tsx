@@ -43,9 +43,9 @@ export const routes = [
         path: 'm1/multi/:mode',
         lazy: async () => ({ Component: (await import('@/pages/multi/MultiPage')).MultiPage }),
       },
-      { path: 'm1/results', element: <Navigate to="/m1/results/e1" replace /> },
+      { path: 'm1/results', element: <Navigate to="/m1/results/best" replace /> },
       {
-        // 實驗結果：E1 消融與自適應策略，種類在網址最後一段
+        // 實驗結果：找最佳流程，以及進階的 E1 消融與自適應策略，種類在網址最後一段
         path: 'm1/results/:kind',
         lazy: async () => ({
           Component: (await import('@/pages/results/ResultsPage')).ResultsPage,

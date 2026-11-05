@@ -374,12 +374,13 @@ func truncateUTF8(b []byte) string {
 	return string(b)
 }
 
-// deref 把選填的查詢參數轉成字串；未提供時為空字串（交給 Python 用預設值）。
-func deref(s *string) string {
-	if s == nil {
-		return ""
+// deref 取出選填參數的值；未提供（nil）時為零值，交給 Python 用預設值。
+func deref[T any](p *T) T {
+	if p == nil {
+		var zero T
+		return zero
 	}
-	return *s
+	return *p
 }
 
 // canceled 判斷請求是否因使用者取消而失敗（瀏覽器中止請求後，呼叫 Python 會以 Canceled 結束）。
@@ -390,4 +391,32 @@ func canceled(r *http.Request, err error) bool {
 	}
 	var aiErr *aiclient.Error
 	return errors.As(err, &aiErr) && aiErr.Code == codes.Canceled
+}
+
+func (h *handler) StartBestFlowRun(ctx context.Context, req api.StartBestFlowRunRequestObject) (api.StartBestFlowRunResponseObject, error) {
+	events, err := h.svc.StartBestFlowRun(ctx, *req.Body)
+	if err != nil {
+		return nil, err
+	}
+	return sseResponse{events}, nil
+}
+
+func (h *handler) GetBestFlowRun(ctx context.Context, req api.GetBestFlowRunRequestObject) (api.GetBestFlowRunResponseObject, error) {
+	p := req.Params
+	c := BestFlowCriteria{MinGain: p.MinGain, MaxNewWrong: p.MaxNewWrong, MaxMeanMs: p.MaxMeanMs}
+	out, err := h.svc.GetBestFlowRun(ctx, deref(p.Root), req.RunId, c)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetBestFlowRun200JSONResponse(out), nil
+}
+
+func (h *handler) SetBestFlowTruth(ctx context.Context, req api.SetBestFlowTruthRequestObject) (api.SetBestFlowTruthResponseObject, error) {
+	p := req.Params
+	c := BestFlowCriteria{MinGain: p.MinGain, MaxNewWrong: p.MaxNewWrong, MaxMeanMs: p.MaxMeanMs}
+	out, err := h.svc.SetBestFlowTruth(ctx, deref(p.Root), req.RunId, c, req.Body.Truths)
+	if err != nil {
+		return nil, err
+	}
+	return api.SetBestFlowTruth200JSONResponse(out), nil
 }

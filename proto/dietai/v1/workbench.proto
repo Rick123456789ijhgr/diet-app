@@ -25,6 +25,12 @@ service WorkbenchService {
   rpc GetE1Run(GetE1RunRequest) returns (GetE1RunResponse);
   // 進度＋最後結果
   rpc StartE1Run(StartE1RunRequest) returns (stream StartE1RunResponse);
+  // 找最佳流程：對資料夾或上傳的圖片執行所有方法（進度＋最後結果）
+  rpc StartBestFlowRun(StartBestFlowRunRequest) returns (stream StartBestFlowRunResponse);
+  // 真值表與結論（推薦流程、單一方法比較）
+  rpc GetBestFlowRun(GetBestFlowRunRequest) returns (GetBestFlowRunResponse);
+  // 更新人工確認的真值，回傳更新後的真值表與結論
+  rpc SetBestFlowTruth(SetBestFlowTruthRequest) returns (SetBestFlowTruthResponse);
 }
 
 // 暫存影像。image_id 與診斷影像的 ID 共用同一個空間，皆可由 GetArtifact 取得
@@ -133,5 +139,44 @@ message StartE1RunRequest {
 }
 
 message StartE1RunResponse {
+  string json = 1;
+}
+
+// folder 與 image_ids 擇一；image_ids 為 PutImage 暫存的影像
+message StartBestFlowRunRequest {
+  string folder = 1;
+  repeated string image_ids = 2;
+  bool recursive = 3;
+  int32 limit = 4; // 0 為預設上限
+  string root = 5; // 結果資料夾；空字串為預設
+}
+
+message StartBestFlowRunResponse {
+  string json = 1;
+}
+
+// 選擇準則：min_gain 為 0 時用 1；max_mean_ms 為 0 表示不限
+message GetBestFlowRunRequest {
+  string run_dir = 1;
+  int32 min_gain = 2;
+  int32 max_new_wrong = 3;
+  double max_mean_ms = 4;
+}
+
+message GetBestFlowRunResponse {
+  string json = 1;
+}
+
+// truths_json：{"圖片 id": "條碼" | "" | null}；""＝沒有條碼，null＝取消人工確認
+message SetBestFlowTruthRequest {
+  string run_dir = 1;
+  string truths_json = 2;
+  int32 min_gain = 3;
+  int32 max_new_wrong = 4;
+  double max_mean_ms = 5;
+}
+
+// 內容同 GetBestFlowRunResponse（更新後的真值表與結論）
+message SetBestFlowTruthResponse {
   string json = 1;
 }

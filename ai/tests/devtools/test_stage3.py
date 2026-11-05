@@ -282,8 +282,8 @@ def test_e1_claim_run_dir_never_hands_out_the_same_folder(e1_dir, monkeypatch):
     root = e1_dir / "runs"
     names = iter(["same", "same", "other"])
     monkeypatch.setattr(e1, "new_run_dir", lambda folder, label: folder / next(names))
-    first = e1._claim_run_dir(root)
-    second = e1._claim_run_dir(root)
+    first = e1.claim_run_dir(root, "workbench")
+    second = e1.claim_run_dir(root, "workbench")
     assert first.is_dir() and second.is_dir()
     assert (first.name, second.name) == ("same", "other")
 

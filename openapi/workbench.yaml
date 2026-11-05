@@ -798,6 +798,94 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /workbench/v1/dev/best-flow/runs:
+    post:
+      operationId: startBestFlowRun
+      summary: 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
+      description: |
+        folder 與 image_ids 擇一。事件依序為 start（total）、progress（done、total）、done（name、path）。
+        已完成的執行列在 GET /dev/e1/runs 回應的 best_flow_runs。拒絕 test split 下的路徑（SPLIT_LOCKED）。
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartBestFlowRunRequest"
+      responses:
+        "200":
+          description: Server-Sent Events 串流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/best-flow/runs/{run_id}:
+    get:
+      operationId: getBestFlowRun
+      summary: 找最佳流程：真值表與結論
+      tags: [dev]
+      parameters:
+        - $ref: "#/components/parameters/BestFlowRunId"
+        - $ref: "#/components/parameters/E1Root"
+        - $ref: "#/components/parameters/BestFlowMinGain"
+        - $ref: "#/components/parameters/BestFlowMaxNewWrong"
+        - $ref: "#/components/parameters/BestFlowMaxMeanMs"
+      responses:
+        "200":
+          description: 真值表與結論（結構由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/best-flow/runs/{run_id}/truth:
+    put:
+      operationId: setBestFlowTruth
+      summary: 找最佳流程：更新人工確認的真值
+      description: 只更新 truths 中列出的圖片；回傳同 GET。
+      tags: [dev]
+      parameters:
+        - $ref: "#/components/parameters/BestFlowRunId"
+        - $ref: "#/components/parameters/E1Root"
+        - $ref: "#/components/parameters/BestFlowMinGain"
+        - $ref: "#/components/parameters/BestFlowMaxNewWrong"
+        - $ref: "#/components/parameters/BestFlowMaxMeanMs"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetBestFlowTruthRequest"
+      responses:
+        "200":
+          description: 更新後的真值表與結論（結構由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
 components:
   securitySchemes:
     sessionCookie:
@@ -833,6 +921,38 @@ components:
       description: 暫存影像的 ID
       schema:
         type: string
+    BestFlowRunId:
+      name: run_id
+      in: path
+      required: true
+      description: 執行資料夾名稱（位於 root 之下）
+      schema:
+        type: string
+    BestFlowMinGain:
+      name: min_gain
+      in: query
+      required: false
+      description: 貪婪選擇：每一步至少要多救回幾張（預設 1）
+      schema:
+        type: integer
+        minimum: 1
+    BestFlowMaxNewWrong:
+      name: max_new_wrong
+      in: query
+      required: false
+      description: 貪婪選擇：每一步最多新增幾張誤讀＋誤報（預設 0）
+      schema:
+        type: integer
+        minimum: 0
+    BestFlowMaxMeanMs:
+      name: max_mean_ms
+      in: query
+      required: false
+      description: 貪婪選擇：平均耗時上限（毫秒）；省略為不限
+      schema:
+        type: number
+        format: double
+        exclusiveMinimum: 0
     E1Root:
       name: root
       in: query
@@ -1387,6 +1507,39 @@ components:
           minimum: 1
         root:
           type: string
+
+    StartBestFlowRunRequest:
+      type: object
+      description: folder 與 image_ids 擇一
+      properties:
+        folder:
+          type: string
+          description: 本機資料夾路徑；test split 已鎖定
+        image_ids:
+          type: array
+          description: 以 POST /dev/images 上傳的暫存影像
+          items:
+            type: string
+        recursive:
+          type: boolean
+          default: false
+        limit:
+          type: integer
+          minimum: 1
+        root:
+          type: string
+          description: 結果資料夾；省略時使用預設的 runs 資料夾
+    SetBestFlowTruthRequest:
+      type: object
+      required: [truths]
+      properties:
+        truths:
+          type: object
+          description: 圖片 id → 條碼（EAN-13／UPC-A／EAN-8）；空字串＝沒有條碼；null＝取消人工確認
+          # Go 須保留 null（取消人工確認）與空字串（沒有條碼）的差別
+          x-go-type: map[string]*string
+          additionalProperties:
+            type: [string, "null"]
 
     # ── 冷啟動上傳（任務書 2.6 節） ──
     SubmissionStatus:

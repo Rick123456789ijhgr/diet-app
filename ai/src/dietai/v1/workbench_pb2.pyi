@@ -175,3 +175,61 @@ class StartE1RunResponse(_message.Message):
     JSON_FIELD_NUMBER: _ClassVar[int]
     json: str
     def __init__(self, json: _Optional[str] = ...) -> None: ...
+
+class StartBestFlowRunRequest(_message.Message):
+    __slots__ = ("folder", "image_ids", "recursive", "limit", "root")
+    FOLDER_FIELD_NUMBER: _ClassVar[int]
+    IMAGE_IDS_FIELD_NUMBER: _ClassVar[int]
+    RECURSIVE_FIELD_NUMBER: _ClassVar[int]
+    LIMIT_FIELD_NUMBER: _ClassVar[int]
+    ROOT_FIELD_NUMBER: _ClassVar[int]
+    folder: str
+    image_ids: _containers.RepeatedScalarFieldContainer[str]
+    recursive: bool
+    limit: int
+    root: str
+    def __init__(self, folder: _Optional[str] = ..., image_ids: _Optional[_Iterable[str]] = ..., recursive: _Optional[bool] = ..., limit: _Optional[int] = ..., root: _Optional[str] = ...) -> None: ...
+
+class StartBestFlowRunResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...
+
+class GetBestFlowRunRequest(_message.Message):
+    __slots__ = ("run_dir", "min_gain", "max_new_wrong", "max_mean_ms")
+    RUN_DIR_FIELD_NUMBER: _ClassVar[int]
+    MIN_GAIN_FIELD_NUMBER: _ClassVar[int]
+    MAX_NEW_WRONG_FIELD_NUMBER: _ClassVar[int]
+    MAX_MEAN_MS_FIELD_NUMBER: _ClassVar[int]
+    run_dir: str
+    min_gain: int
+    max_new_wrong: int
+    max_mean_ms: float
+    def __init__(self, run_dir: _Optional[str] = ..., min_gain: _Optional[int] = ..., max_new_wrong: _Optional[int] = ..., max_mean_ms: _Optional[float] = ...) -> None: ...
+
+class GetBestFlowRunResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...
+
+class SetBestFlowTruthRequest(_message.Message):
+    __slots__ = ("run_dir", "truths_json", "min_gain", "max_new_wrong", "max_mean_ms")
+    RUN_DIR_FIELD_NUMBER: _ClassVar[int]
+    TRUTHS_JSON_FIELD_NUMBER: _ClassVar[int]
+    MIN_GAIN_FIELD_NUMBER: _ClassVar[int]
+    MAX_NEW_WRONG_FIELD_NUMBER: _ClassVar[int]
+    MAX_MEAN_MS_FIELD_NUMBER: _ClassVar[int]
+    run_dir: str
+    truths_json: str
+    min_gain: int
+    max_new_wrong: int
+    max_mean_ms: float
+    def __init__(self, run_dir: _Optional[str] = ..., truths_json: _Optional[str] = ..., min_gain: _Optional[int] = ..., max_new_wrong: _Optional[int] = ..., max_mean_ms: _Optional[float] = ...) -> None: ...
+
+class SetBestFlowTruthResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...

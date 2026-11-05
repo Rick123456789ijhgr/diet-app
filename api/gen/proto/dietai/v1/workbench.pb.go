@@ -1163,6 +1163,362 @@ func (x *StartE1RunResponse) GetJson() string {
 	return ""
 }
 
+// folder 與 image_ids 擇一；image_ids 為 PutImage 暫存的影像
+type StartBestFlowRunRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Folder        string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
+	ImageIds      []string               `protobuf:"bytes,2,rep,name=image_ids,json=imageIds,proto3" json:"image_ids,omitempty"`
+	Recursive     bool                   `protobuf:"varint,3,opt,name=recursive,proto3" json:"recursive,omitempty"`
+	Limit         int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"` // 0 為預設上限
+	Root          string                 `protobuf:"bytes,5,opt,name=root,proto3" json:"root,omitempty"`    // 結果資料夾；空字串為預設
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartBestFlowRunRequest) Reset() {
+	*x = StartBestFlowRunRequest{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartBestFlowRunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartBestFlowRunRequest) ProtoMessage() {}
+
+func (x *StartBestFlowRunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartBestFlowRunRequest.ProtoReflect.Descriptor instead.
+func (*StartBestFlowRunRequest) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *StartBestFlowRunRequest) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *StartBestFlowRunRequest) GetImageIds() []string {
+	if x != nil {
+		return x.ImageIds
+	}
+	return nil
+}
+
+func (x *StartBestFlowRunRequest) GetRecursive() bool {
+	if x != nil {
+		return x.Recursive
+	}
+	return false
+}
+
+func (x *StartBestFlowRunRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *StartBestFlowRunRequest) GetRoot() string {
+	if x != nil {
+		return x.Root
+	}
+	return ""
+}
+
+type StartBestFlowRunResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Json          string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartBestFlowRunResponse) Reset() {
+	*x = StartBestFlowRunResponse{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartBestFlowRunResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartBestFlowRunResponse) ProtoMessage() {}
+
+func (x *StartBestFlowRunResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartBestFlowRunResponse.ProtoReflect.Descriptor instead.
+func (*StartBestFlowRunResponse) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *StartBestFlowRunResponse) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
+// 選擇準則：min_gain 為 0 時用 1；max_mean_ms 為 0 表示不限
+type GetBestFlowRunRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunDir        string                 `protobuf:"bytes,1,opt,name=run_dir,json=runDir,proto3" json:"run_dir,omitempty"`
+	MinGain       int32                  `protobuf:"varint,2,opt,name=min_gain,json=minGain,proto3" json:"min_gain,omitempty"`
+	MaxNewWrong   int32                  `protobuf:"varint,3,opt,name=max_new_wrong,json=maxNewWrong,proto3" json:"max_new_wrong,omitempty"`
+	MaxMeanMs     float64                `protobuf:"fixed64,4,opt,name=max_mean_ms,json=maxMeanMs,proto3" json:"max_mean_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBestFlowRunRequest) Reset() {
+	*x = GetBestFlowRunRequest{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBestFlowRunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBestFlowRunRequest) ProtoMessage() {}
+
+func (x *GetBestFlowRunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBestFlowRunRequest.ProtoReflect.Descriptor instead.
+func (*GetBestFlowRunRequest) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *GetBestFlowRunRequest) GetRunDir() string {
+	if x != nil {
+		return x.RunDir
+	}
+	return ""
+}
+
+func (x *GetBestFlowRunRequest) GetMinGain() int32 {
+	if x != nil {
+		return x.MinGain
+	}
+	return 0
+}
+
+func (x *GetBestFlowRunRequest) GetMaxNewWrong() int32 {
+	if x != nil {
+		return x.MaxNewWrong
+	}
+	return 0
+}
+
+func (x *GetBestFlowRunRequest) GetMaxMeanMs() float64 {
+	if x != nil {
+		return x.MaxMeanMs
+	}
+	return 0
+}
+
+type GetBestFlowRunResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Json          string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetBestFlowRunResponse) Reset() {
+	*x = GetBestFlowRunResponse{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetBestFlowRunResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetBestFlowRunResponse) ProtoMessage() {}
+
+func (x *GetBestFlowRunResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetBestFlowRunResponse.ProtoReflect.Descriptor instead.
+func (*GetBestFlowRunResponse) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GetBestFlowRunResponse) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
+// truths_json：{"圖片 id": "條碼" | "" | null}；""＝沒有條碼，null＝取消人工確認
+type SetBestFlowTruthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunDir        string                 `protobuf:"bytes,1,opt,name=run_dir,json=runDir,proto3" json:"run_dir,omitempty"`
+	TruthsJson    string                 `protobuf:"bytes,2,opt,name=truths_json,json=truthsJson,proto3" json:"truths_json,omitempty"`
+	MinGain       int32                  `protobuf:"varint,3,opt,name=min_gain,json=minGain,proto3" json:"min_gain,omitempty"`
+	MaxNewWrong   int32                  `protobuf:"varint,4,opt,name=max_new_wrong,json=maxNewWrong,proto3" json:"max_new_wrong,omitempty"`
+	MaxMeanMs     float64                `protobuf:"fixed64,5,opt,name=max_mean_ms,json=maxMeanMs,proto3" json:"max_mean_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetBestFlowTruthRequest) Reset() {
+	*x = SetBestFlowTruthRequest{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBestFlowTruthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBestFlowTruthRequest) ProtoMessage() {}
+
+func (x *SetBestFlowTruthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBestFlowTruthRequest.ProtoReflect.Descriptor instead.
+func (*SetBestFlowTruthRequest) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *SetBestFlowTruthRequest) GetRunDir() string {
+	if x != nil {
+		return x.RunDir
+	}
+	return ""
+}
+
+func (x *SetBestFlowTruthRequest) GetTruthsJson() string {
+	if x != nil {
+		return x.TruthsJson
+	}
+	return ""
+}
+
+func (x *SetBestFlowTruthRequest) GetMinGain() int32 {
+	if x != nil {
+		return x.MinGain
+	}
+	return 0
+}
+
+func (x *SetBestFlowTruthRequest) GetMaxNewWrong() int32 {
+	if x != nil {
+		return x.MaxNewWrong
+	}
+	return 0
+}
+
+func (x *SetBestFlowTruthRequest) GetMaxMeanMs() float64 {
+	if x != nil {
+		return x.MaxMeanMs
+	}
+	return 0
+}
+
+// 內容同 GetBestFlowRunResponse（更新後的真值表與結論）
+type SetBestFlowTruthResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Json          string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetBestFlowTruthResponse) Reset() {
+	*x = SetBestFlowTruthResponse{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetBestFlowTruthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetBestFlowTruthResponse) ProtoMessage() {}
+
+func (x *SetBestFlowTruthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetBestFlowTruthResponse.ProtoReflect.Descriptor instead.
+func (*SetBestFlowTruthResponse) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SetBestFlowTruthResponse) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
 var File_dietai_v1_workbench_proto protoreflect.FileDescriptor
 
 const file_dietai_v1_workbench_proto_rawDesc = "" +
@@ -1234,7 +1590,31 @@ const file_dietai_v1_workbench_proto_rawDesc = "" +
 	"\an_codes\x18\x02 \x01(\x05R\x06nCodes\x12\x12\n" +
 	"\x04root\x18\x03 \x01(\tR\x04root\"(\n" +
 	"\x12StartE1RunResponse\x12\x12\n" +
-	"\x04json\x18\x01 \x01(\tR\x04json2\xba\x06\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\"\x96\x01\n" +
+	"\x17StartBestFlowRunRequest\x12\x16\n" +
+	"\x06folder\x18\x01 \x01(\tR\x06folder\x12\x1b\n" +
+	"\timage_ids\x18\x02 \x03(\tR\bimageIds\x12\x1c\n" +
+	"\trecursive\x18\x03 \x01(\bR\trecursive\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x12\n" +
+	"\x04root\x18\x05 \x01(\tR\x04root\".\n" +
+	"\x18StartBestFlowRunResponse\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\"\x8f\x01\n" +
+	"\x15GetBestFlowRunRequest\x12\x17\n" +
+	"\arun_dir\x18\x01 \x01(\tR\x06runDir\x12\x19\n" +
+	"\bmin_gain\x18\x02 \x01(\x05R\aminGain\x12\"\n" +
+	"\rmax_new_wrong\x18\x03 \x01(\x05R\vmaxNewWrong\x12\x1e\n" +
+	"\vmax_mean_ms\x18\x04 \x01(\x01R\tmaxMeanMs\",\n" +
+	"\x16GetBestFlowRunResponse\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\"\xb2\x01\n" +
+	"\x17SetBestFlowTruthRequest\x12\x17\n" +
+	"\arun_dir\x18\x01 \x01(\tR\x06runDir\x12\x1f\n" +
+	"\vtruths_json\x18\x02 \x01(\tR\n" +
+	"truthsJson\x12\x19\n" +
+	"\bmin_gain\x18\x03 \x01(\x05R\aminGain\x12\"\n" +
+	"\rmax_new_wrong\x18\x04 \x01(\x05R\vmaxNewWrong\x12\x1e\n" +
+	"\vmax_mean_ms\x18\x05 \x01(\x01R\tmaxMeanMs\".\n" +
+	"\x18SetBestFlowTruthResponse\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json2\xcd\b\n" +
 	"\x10WorkbenchService\x12[\n" +
 	"\x10GetConfigSchemas\x12\".dietai.v1.GetConfigSchemasRequest\x1a#.dietai.v1.GetConfigSchemasResponse\x12C\n" +
 	"\bPutImage\x12\x1a.dietai.v1.PutImageRequest\x1a\x1b.dietai.v1.PutImageResponse\x12I\n" +
@@ -1250,7 +1630,10 @@ const file_dietai_v1_workbench_proto_rawDesc = "" +
 	"ListE1Runs\x12\x1c.dietai.v1.ListE1RunsRequest\x1a\x1d.dietai.v1.ListE1RunsResponse\x12C\n" +
 	"\bGetE1Run\x12\x1a.dietai.v1.GetE1RunRequest\x1a\x1b.dietai.v1.GetE1RunResponse\x12K\n" +
 	"\n" +
-	"StartE1Run\x12\x1c.dietai.v1.StartE1RunRequest\x1a\x1d.dietai.v1.StartE1RunResponse0\x01B?Z=github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1b\x06proto3"
+	"StartE1Run\x12\x1c.dietai.v1.StartE1RunRequest\x1a\x1d.dietai.v1.StartE1RunResponse0\x01\x12]\n" +
+	"\x10StartBestFlowRun\x12\".dietai.v1.StartBestFlowRunRequest\x1a#.dietai.v1.StartBestFlowRunResponse0\x01\x12U\n" +
+	"\x0eGetBestFlowRun\x12 .dietai.v1.GetBestFlowRunRequest\x1a!.dietai.v1.GetBestFlowRunResponse\x12[\n" +
+	"\x10SetBestFlowTruth\x12\".dietai.v1.SetBestFlowTruthRequest\x1a#.dietai.v1.SetBestFlowTruthResponseB?Z=github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1b\x06proto3"
 
 var (
 	file_dietai_v1_workbench_proto_rawDescOnce sync.Once
@@ -1264,7 +1647,7 @@ func file_dietai_v1_workbench_proto_rawDescGZIP() []byte {
 	return file_dietai_v1_workbench_proto_rawDescData
 }
 
-var file_dietai_v1_workbench_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_dietai_v1_workbench_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_dietai_v1_workbench_proto_goTypes = []any{
 	(*ImageRef)(nil),                 // 0: dietai.v1.ImageRef
 	(*GetConfigSchemasRequest)(nil),  // 1: dietai.v1.GetConfigSchemasRequest
@@ -1289,6 +1672,12 @@ var file_dietai_v1_workbench_proto_goTypes = []any{
 	(*GetE1RunResponse)(nil),         // 20: dietai.v1.GetE1RunResponse
 	(*StartE1RunRequest)(nil),        // 21: dietai.v1.StartE1RunRequest
 	(*StartE1RunResponse)(nil),       // 22: dietai.v1.StartE1RunResponse
+	(*StartBestFlowRunRequest)(nil),  // 23: dietai.v1.StartBestFlowRunRequest
+	(*StartBestFlowRunResponse)(nil), // 24: dietai.v1.StartBestFlowRunResponse
+	(*GetBestFlowRunRequest)(nil),    // 25: dietai.v1.GetBestFlowRunRequest
+	(*GetBestFlowRunResponse)(nil),   // 26: dietai.v1.GetBestFlowRunResponse
+	(*SetBestFlowTruthRequest)(nil),  // 27: dietai.v1.SetBestFlowTruthRequest
+	(*SetBestFlowTruthResponse)(nil), // 28: dietai.v1.SetBestFlowTruthResponse
 }
 var file_dietai_v1_workbench_proto_depIdxs = []int32{
 	0,  // 0: dietai.v1.PutImageResponse.image:type_name -> dietai.v1.ImageRef
@@ -1306,19 +1695,25 @@ var file_dietai_v1_workbench_proto_depIdxs = []int32{
 	17, // 12: dietai.v1.WorkbenchService.ListE1Runs:input_type -> dietai.v1.ListE1RunsRequest
 	19, // 13: dietai.v1.WorkbenchService.GetE1Run:input_type -> dietai.v1.GetE1RunRequest
 	21, // 14: dietai.v1.WorkbenchService.StartE1Run:input_type -> dietai.v1.StartE1RunRequest
-	2,  // 15: dietai.v1.WorkbenchService.GetConfigSchemas:output_type -> dietai.v1.GetConfigSchemasResponse
-	4,  // 16: dietai.v1.WorkbenchService.PutImage:output_type -> dietai.v1.PutImageResponse
-	6,  // 17: dietai.v1.WorkbenchService.Synthesize:output_type -> dietai.v1.SynthesizeResponse
-	8,  // 18: dietai.v1.WorkbenchService.Degrade:output_type -> dietai.v1.DegradeResponse
-	10, // 19: dietai.v1.WorkbenchService.RenderView:output_type -> dietai.v1.RenderViewResponse
-	12, // 20: dietai.v1.WorkbenchService.GetArtifact:output_type -> dietai.v1.GetArtifactResponse
-	14, // 21: dietai.v1.WorkbenchService.Sweep:output_type -> dietai.v1.SweepResponse
-	16, // 22: dietai.v1.WorkbenchService.RunBatch:output_type -> dietai.v1.RunBatchResponse
-	18, // 23: dietai.v1.WorkbenchService.ListE1Runs:output_type -> dietai.v1.ListE1RunsResponse
-	20, // 24: dietai.v1.WorkbenchService.GetE1Run:output_type -> dietai.v1.GetE1RunResponse
-	22, // 25: dietai.v1.WorkbenchService.StartE1Run:output_type -> dietai.v1.StartE1RunResponse
-	15, // [15:26] is the sub-list for method output_type
-	4,  // [4:15] is the sub-list for method input_type
+	23, // 15: dietai.v1.WorkbenchService.StartBestFlowRun:input_type -> dietai.v1.StartBestFlowRunRequest
+	25, // 16: dietai.v1.WorkbenchService.GetBestFlowRun:input_type -> dietai.v1.GetBestFlowRunRequest
+	27, // 17: dietai.v1.WorkbenchService.SetBestFlowTruth:input_type -> dietai.v1.SetBestFlowTruthRequest
+	2,  // 18: dietai.v1.WorkbenchService.GetConfigSchemas:output_type -> dietai.v1.GetConfigSchemasResponse
+	4,  // 19: dietai.v1.WorkbenchService.PutImage:output_type -> dietai.v1.PutImageResponse
+	6,  // 20: dietai.v1.WorkbenchService.Synthesize:output_type -> dietai.v1.SynthesizeResponse
+	8,  // 21: dietai.v1.WorkbenchService.Degrade:output_type -> dietai.v1.DegradeResponse
+	10, // 22: dietai.v1.WorkbenchService.RenderView:output_type -> dietai.v1.RenderViewResponse
+	12, // 23: dietai.v1.WorkbenchService.GetArtifact:output_type -> dietai.v1.GetArtifactResponse
+	14, // 24: dietai.v1.WorkbenchService.Sweep:output_type -> dietai.v1.SweepResponse
+	16, // 25: dietai.v1.WorkbenchService.RunBatch:output_type -> dietai.v1.RunBatchResponse
+	18, // 26: dietai.v1.WorkbenchService.ListE1Runs:output_type -> dietai.v1.ListE1RunsResponse
+	20, // 27: dietai.v1.WorkbenchService.GetE1Run:output_type -> dietai.v1.GetE1RunResponse
+	22, // 28: dietai.v1.WorkbenchService.StartE1Run:output_type -> dietai.v1.StartE1RunResponse
+	24, // 29: dietai.v1.WorkbenchService.StartBestFlowRun:output_type -> dietai.v1.StartBestFlowRunResponse
+	26, // 30: dietai.v1.WorkbenchService.GetBestFlowRun:output_type -> dietai.v1.GetBestFlowRunResponse
+	28, // 31: dietai.v1.WorkbenchService.SetBestFlowTruth:output_type -> dietai.v1.SetBestFlowTruthResponse
+	18, // [18:32] is the sub-list for method output_type
+	4,  // [4:18] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -1335,7 +1730,7 @@ func file_dietai_v1_workbench_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_dietai_v1_workbench_proto_rawDesc), len(file_dietai_v1_workbench_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

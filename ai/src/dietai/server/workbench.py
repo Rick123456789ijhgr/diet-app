@@ -1,7 +1,7 @@
 """``WorkbenchService``：開發工作台的輔助功能，只在開發模式註冊。
 
 暫存、合成、退化、各頁的診斷檢視、取得影像、參數掃描、資料夾批次（串流）、
-E1 的執行結果與快速執行（串流）。讀取本機路徑的功能一律經測試集鎖定。
+E1 的執行結果與快速執行（串流）、找最佳流程（串流＋真值確認）。讀取本機路徑的功能一律經測試集鎖定。
 
 各方法只做 proto ↔ devtools 的轉換：結構化的參數與結果多半以 JSON 字串欄位傳遞
 （``*_json``），設定一律經 ``config_from_override`` 建構與驗證。方法以 ``rpc.unary``／
@@ -17,14 +17,15 @@ import functools
 import json
 from collections.abc import Callable, Iterator
 from itertools import islice
+from pathlib import Path
 from typing import Any
 
 import grpc
 
-from dietai.devtools import batch, degradations, e1, sweep
+from dietai.devtools import batch, best_flow, degradations, e1, sweep
 from dietai.devtools.configs import config_from_override
 from dietai.devtools.degradations import Degradation
-from dietai.devtools.images import decode_image
+from dietai.devtools.images import decode_image, load_image
 from dietai.devtools.scenes import SceneError, synthesize
 from dietai.devtools.schema import config_schemas
 from dietai.devtools.store import ImageStore, StoredImage
@@ -45,10 +46,14 @@ from dietai.preprocess import (
     label_edges,
     ladder_variants,
 )
+from dietai.preprocess.ops import resize_short_side
 from dietai.preprocess.types import Image, Rung
 from dietai.server import convert
 from dietai.server.rpc import RpcError, stream, unary
 from dietai.v1 import workbench_pb2, workbench_pb2_grpc
+
+# 找最佳流程真值表的縮圖短邊（像素）
+_THUMB_SHORT_SIDE = 240
 
 # 只依一組設定產生一張影像的檢視：名稱 → (設定類別, 說明, 產生函式)
 # 新增這類檢視只要加一列；需要額外資料或特殊快取的檢視（光斑、逐步升級）另寫方法
@@ -245,8 +250,12 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
     def ListE1Runs(
         self, request: workbench_pb2.ListE1RunsRequest
     ) -> workbench_pb2.ListE1RunsResponse:
-        """E1 結果資料夾下的各次執行與可用的實驗組（root 為空時用預設資料夾）。"""
-        return workbench_pb2.ListE1RunsResponse(json=convert.dumps(e1.list_runs_json(request.root)))
+        """E1 結果資料夾下的各次執行、可用的實驗組與找最佳流程的執行（root 為空時用預設資料夾）。"""
+        out = {
+            **e1.list_runs_json(request.root),
+            "best_flow_runs": best_flow.list_runs_json(request.root),
+        }
+        return workbench_pb2.ListE1RunsResponse(json=convert.dumps(out))
 
     @unary
     def GetE1Run(self, request: workbench_pb2.GetE1RunRequest) -> workbench_pb2.GetE1RunResponse:
@@ -265,6 +274,67 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         events = e1.start_run(list(request.arms), request.n_codes or 2, request.root)
         for event in events:
             yield workbench_pb2.StartE1RunResponse(json=convert.dumps(event))
+
+    @stream
+    def StartBestFlowRun(
+        self, request: workbench_pb2.StartBestFlowRunRequest
+    ) -> Iterator[workbench_pb2.StartBestFlowRunResponse]:
+        """找最佳流程：對資料夾或上傳的圖片執行所有方法，逐筆回傳進度事件。
+
+        上傳的圖片先由暫存區取出（找不到時回 ``IMAGE_NOT_FOUND``）。呼叫端取消時
+        ``rpc.stream`` 關閉本產生器，連帶關閉 ``best_flow.start_run``，由它刪除未完成的資料夾。
+        """
+        uploads = [
+            (item.description, item.image)
+            for item in (self._store.get(i) for i in request.image_ids)
+        ]
+        events = best_flow.start_run(
+            folder=request.folder,
+            uploads=uploads,
+            recursive=request.recursive,
+            limit=request.limit,
+            root=request.root,
+        )
+        for event in events:
+            yield workbench_pb2.StartBestFlowRunResponse(json=convert.dumps(event))
+
+    @unary
+    def GetBestFlowRun(
+        self, request: workbench_pb2.GetBestFlowRunRequest
+    ) -> workbench_pb2.GetBestFlowRunResponse:
+        """找最佳流程的真值表與結論（見 ``best_flow.run_json``）。"""
+        criteria = best_flow.criteria_of(
+            request.min_gain, request.max_new_wrong, request.max_mean_ms
+        )
+        out = best_flow.run_json(request.run_dir, criteria, self._best_flow_thumb)
+        return workbench_pb2.GetBestFlowRunResponse(json=convert.dumps(out))
+
+    @unary
+    def SetBestFlowTruth(
+        self, request: workbench_pb2.SetBestFlowTruthRequest
+    ) -> workbench_pb2.SetBestFlowTruthResponse:
+        """更新人工確認的真值（null 取消確認），回傳更新後的真值表與結論。"""
+        criteria = best_flow.criteria_of(
+            request.min_gain, request.max_new_wrong, request.max_mean_ms
+        )
+        updates = _json_object(request.truths_json, "truths")
+        if not all(v is None or isinstance(v, str) for v in updates.values()):
+            raise SceneError("truths 的值必須是字串或 null", "truths")
+        out = best_flow.set_truth(request.run_dir, updates, criteria, self._best_flow_thumb)
+        return workbench_pb2.SetBestFlowTruthResponse(json=convert.dumps(out))
+
+    def _best_flow_thumb(self, path: str) -> str:
+        """找最佳流程真值表的縮圖：依原檔路徑快取在暫存區，同一張只讀檔一次。"""
+        cached = self._store.derived(f"best-flow:{path}", "thumb")
+        if cached is not None:
+            return cached.image_id
+        img = load_image(path)
+        if min(img.shape[:2]) > _THUMB_SHORT_SIDE:
+            img = resize_short_side(img, _THUMB_SHORT_SIDE)
+        item = self._store.put_derived(
+            f"best-flow:{path}", "thumb", img, Path(path).name, detached=True
+        )
+        return item.image_id
 
     def _derived(
         self, source: StoredImage, key: str, label: str, render: Callable[[], Image]

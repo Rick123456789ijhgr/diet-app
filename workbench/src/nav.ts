@@ -4,7 +4,6 @@ import {
   BrainCircuit,
   Database,
   Focus,
-  FlaskConical,
   Images,
   LayoutDashboard,
   ListChecks,
@@ -12,6 +11,7 @@ import {
   PackagePlus,
   ScanSearch,
   ScanText,
+  Trophy,
 } from 'lucide-react'
 
 /** 模組內的一個工具頁；slug 為網址的第二段（/模組 id/slug）。 */
@@ -52,8 +52,7 @@ export const MODULES: Module[] = [
     short: '模組一',
     name: '影像前處理',
     icon: Focus,
-    description:
-      '單張影像的前處理檢視、多張影像的參數掃描與批次，以及 E1 條碼消融與自適應策略的結果。',
+    description: '單張影像的前處理檢視、多張影像的參數掃描與批次，以及放入圖片找出最佳前處理流程。',
     tools: [
       {
         slug: 'inspect',
@@ -75,9 +74,10 @@ export const MODULES: Module[] = [
       },
       {
         slug: 'results',
-        name: '實驗結果',
-        icon: FlaskConical,
-        description: 'E1 條碼消融的成功率與失敗影像，以及自適應策略與貪婪逐步升級的比較。',
+        name: '找最佳流程',
+        icon: Trophy,
+        description:
+          '放入圖片，比較各種前處理方法與流程並選出最佳的順序；進階為 E1 條碼消融與自適應策略的結果。',
         stage: 3,
         ready: true,
       },
