@@ -2,18 +2,15 @@
 //
 // 一份文件（ArchDoc）由多張圖（Diagram）組成，像 C4 Model 一樣逐層放大：
 // 圖上的元件（ArchNode）可以指向一張「細部圖」（child），點進去看該元件內部的組成或流程。
-// 每張圖是固定 1920×1080 的畫板（與簡報同比例），座標一律是畫板座標（px）。
+// 每張圖是一塊無限畫布，座標一律是畫布座標（px）；元件對齊 GRID 的點點格子。
 
-/** 畫板尺寸（與 16:9 簡報同大小，匯出 PNG／SVG 也用這個尺寸）。 */
-export const ARTBOARD = { w: 1920, h: 1080 } as const
+/** 點點格子的間距，也是拖曳與縮放尺寸時吸附的單位（px）。 */
+export const GRID = 20
 
-/** 拖曳時對齊的格線（px）。 */
-export const GRID = 10
+/** 新元件的預設尺寸（都是格子的整數倍，放在格點上時四邊都會落在格線上）。 */
+export const NODE_DEFAULTS = { w: 240, h: 160, accentW: 160 } as const
 
-/** 新元件的預設尺寸（與參考簡報的方塊同大小）。 */
-export const NODE_DEFAULTS = { w: 250, h: 180, accentW: 170 } as const
-
-/** 元件尺寸的上下限（避免拖到看不見或超出畫板）。 */
+/** 元件尺寸的上下限。 */
 export const SIZE_LIMITS = { min: 60, maxW: 900, maxH: 600 } as const
 
 /**
@@ -22,7 +19,7 @@ export const SIZE_LIMITS = { min: 60, maxW: 900, maxH: 600 } as const
  */
 export interface ArchNode {
   id: string
-  /** 主方塊左上角（畫板座標） */
+  /** 主方塊左上角（畫布座標） */
   x: number
   y: number
   /** 主方塊寬高；強調塊與主方塊同高、接在右側 */
@@ -34,7 +31,7 @@ export interface ArchNode {
   /** 強調塊文字；空字串表示沒有強調塊 */
   accent: string
   accentW: number
-  /** 說明：點選元件時顯示在右側，描述這個元件做什麼、怎麼運作 */
+  /** 說明：滑過元件時顯示，描述這個元件做什麼、怎麼運作 */
   note: string
   /** 細部圖的 id（C4 的下一層）；沒有時不能點進去 */
   child?: string
@@ -64,17 +61,12 @@ export interface ArchEdge {
   label: string
 }
 
-/** 一張圖（一頁畫板）。 */
+/** 一張圖。 */
 export interface Diagram {
   id: string
-  /** C4 層級名稱（例如「L2 容器」），顯示在麵包屑旁 */
+  /** C4 層級名稱（例如「L2 容器」），顯示在層級路徑旁 */
   level: string
-  /** 頁首左側（例如「05 — 各模組功能實作」） */
-  section: string
-  /** 頁首右側頁碼 */
-  page: string
-  /** 標題上方的白底標章（例如「模組一」），空字串時不畫 */
-  badge: string
+  /** 圖的名稱，顯示在層級路徑上 */
   title: string
   nodes: ArchNode[]
   edges: ArchEdge[]
@@ -85,6 +77,13 @@ export interface ArchDoc {
   /** 最上層的圖 */
   root: string
   diagrams: Record<string, Diagram>
+}
+
+export interface Box {
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 /** 產生短 id（前綴＋8 碼）。 */
@@ -106,17 +105,32 @@ export function clamp(v: number, lo: number, hi: number): number {
 
 // ---------------------------------------------------------------- 查詢
 
-/** 元件整體寬度（含強調塊）。 */
-export function nodeWidth(n: ArchNode): number {
-  return n.w + (n.accent ? n.accentW : 0)
-}
-
 export function hasAccent(n: ArchNode): boolean {
   return n.accent.trim() !== ''
 }
 
+/** 元件整體寬度（含強調塊）。 */
+export function nodeWidth(n: ArchNode): number {
+  return n.w + (hasAccent(n) ? n.accentW : 0)
+}
+
+/** 元件整體的外框（含強調塊）。 */
+export function nodeBox(n: ArchNode): Box {
+  return { x: n.x, y: n.y, w: nodeWidth(n), h: n.h }
+}
+
+/** 所有元件的外框；沒有元件時回傳一塊預設大小的區域（讓空白圖也能置中）。 */
+export function bounds(nodes: ArchNode[]): Box {
+  if (nodes.length === 0) return { x: 0, y: 0, w: 800, h: 450 }
+  const x0 = Math.min(...nodes.map((n) => n.x))
+  const y0 = Math.min(...nodes.map((n) => n.y))
+  const x1 = Math.max(...nodes.map((n) => n.x + nodeWidth(n)))
+  const y1 = Math.max(...nodes.map((n) => n.y + n.h))
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
 /**
- * 從最上層到指定圖的路徑（麵包屑用）：依「哪個元件的 child 是這張圖」往上找。
+ * 從最上層到指定圖的路徑（層級路徑用）：依「哪個元件的 child 是這張圖」往上找。
  * 找不到（孤兒圖或 id 不存在）時只回傳最上層。
  */
 export function pathTo(doc: ArchDoc, diagramId: string): { diagram: Diagram; via?: ArchNode }[] {
@@ -145,9 +159,10 @@ export function subtree(doc: ArchDoc, diagramId: string): string[] {
   const stack = [diagramId]
   while (stack.length) {
     const id = stack.pop()!
-    if (out.includes(id) || !doc.diagrams[id]) continue
+    const d = doc.diagrams[id]
+    if (out.includes(id) || !d) continue
     out.push(id)
-    for (const n of doc.diagrams[id].nodes) if (n.child) stack.push(n.child)
+    for (const n of d.nodes) if (n.child) stack.push(n.child)
   }
   return out
 }
@@ -155,6 +170,7 @@ export function subtree(doc: ArchDoc, diagramId: string): string[] {
 // ---------------------------------------------------------------- 編輯操作
 
 export type Op =
+  /** 位置由編輯器決定（格點或對齊其他元件），這裡只取整數 */
   | { type: 'moveNode'; diagram: string; node: string; x: number; y: number }
   | { type: 'updateNode'; diagram: string; node: string; patch: Partial<Omit<ArchNode, 'id'>> }
   | { type: 'addNode'; diagram: string; node: ArchNode }
@@ -162,11 +178,7 @@ export type Op =
   | { type: 'addEdge'; diagram: string; edge: ArchEdge }
   | { type: 'updateEdge'; diagram: string; edge: string; patch: Partial<Omit<ArchEdge, 'id'>> }
   | { type: 'removeEdge'; diagram: string; edge: string }
-  | {
-      type: 'updateDiagram'
-      diagram: string
-      patch: Partial<Omit<Diagram, 'id' | 'nodes' | 'edges'>>
-    }
+  | { type: 'updateDiagram'; diagram: string; patch: Partial<Pick<Diagram, 'level' | 'title'>> }
   /** 為元件建立細部圖（已有則不動） */
   | { type: 'createChild'; diagram: string; node: string; childId: string }
 
@@ -177,24 +189,19 @@ function withDiagram(doc: ArchDoc, id: string, fn: (d: Diagram) => Diagram): Arc
   return next === d ? doc : { ...doc, diagrams: { ...doc.diagrams, [id]: next } }
 }
 
-/** 把元件位置限制在畫板內並對齊格線。 */
-export function placeNode(n: ArchNode, x: number, y: number): { x: number; y: number } {
-  return {
-    x: clamp(snap(x), 0, ARTBOARD.w - nodeWidth(n)),
-    y: clamp(snap(y), 0, ARTBOARD.h - n.h),
-  }
-}
-
 const sameEnd = (a: EdgeEnd, b: EdgeEnd) => a.node === b.node && a.part === b.part
 
 /** 套用一個編輯操作，回傳新文件（不改動原文件；沒有變化時回傳同一個物件）。 */
 export function applyOp(doc: ArchDoc, op: Op): ArchDoc {
   switch (op.type) {
     case 'moveNode':
-      return withDiagram(doc, op.diagram, (d) => ({
-        ...d,
-        nodes: d.nodes.map((n) => (n.id === op.node ? { ...n, ...placeNode(n, op.x, op.y) } : n)),
-      }))
+      return withDiagram(doc, op.diagram, (d) => {
+        const x = Math.round(op.x)
+        const y = Math.round(op.y)
+        const n = d.nodes.find((m) => m.id === op.node)
+        if (!n || (n.x === x && n.y === y)) return d
+        return { ...d, nodes: d.nodes.map((m) => (m === n ? { ...m, x, y } : m)) }
+      })
     case 'updateNode':
       return withDiagram(doc, op.diagram, (d) => ({
         ...d,
@@ -252,20 +259,17 @@ export function applyOp(doc: ArchDoc, op: Op): ArchDoc {
   }
 }
 
-/** 新的細部圖：沿用上層的頁首，標章寫上層標題、標題寫元件名稱，放一組「輸入 → 輸出」當起點。 */
+/** 新的細部圖：名稱用元件名稱，放一組「輸入 → 輸出」當起點。 */
 function starterDiagram(id: string, parent: Diagram, node: ArchNode): Diagram {
   const a = uid('n')
   const b = uid('n')
   return {
     id,
     level: nextLevel(parent.level),
-    section: parent.section,
-    page: '',
-    badge: node.title,
-    title: '內部流程',
+    title: node.title || '細部圖',
     nodes: [
-      { ...newNode(a, 120, 480), kicker: 'INPUT', title: '輸入' },
-      { ...newNode(b, 1550, 480), kicker: 'OUTPUT', title: '輸出' },
+      { ...newNode(a, 0, 0), kicker: 'INPUT', title: '輸入' },
+      { ...newNode(b, 400, 0), kicker: 'OUTPUT', title: '輸出' },
     ],
     edges: [
       {
@@ -303,34 +307,41 @@ export function newNode(id: string, x: number, y: number): ArchNode {
   }
 }
 
-/** 頁首與標題佔用的高度：新元件不放在這之上。 */
-const CONTENT_TOP = 320
+/** 兩個外框（彼此至少相隔 gap）是否重疊。 */
+export function overlaps(a: Box, b: Box, gap = 0): boolean {
+  return !(
+    a.x + a.w + gap <= b.x ||
+    b.x + b.w + gap <= a.x ||
+    a.y + a.h + gap <= b.y ||
+    b.y + b.h + gap <= a.y
+  )
+}
 
 /**
- * 新元件的位置：在標題下方的格點中，找離畫板中央最近、且與既有元件（留 20 px 間距）不重疊的一格。
- * 畫板滿了就放在中央（使用者再拖開）。
+ * 新元件的位置：從 near（通常是畫面中央）附近的格點由近而遠找，
+ * 第一個與既有元件（留一格間距）不重疊的位置。找不到就放在 near。
  */
-export function freeSpot(d: Diagram): { x: number; y: number } {
+export function freeSpot(d: Diagram, near: { x: number; y: number }): { x: number; y: number } {
   const { w, h } = NODE_DEFAULTS
-  const gap = 20
-  const center = { x: snap((ARTBOARD.w - w) / 2), y: snap((ARTBOARD.h - h) / 2) }
-  const free = (x: number, y: number) =>
-    d.nodes.every(
-      (n) =>
-        x + w + gap <= n.x ||
-        n.x + nodeWidth(n) + gap <= x ||
-        y + h + gap <= n.y ||
-        n.y + n.h + gap <= y,
-    )
-  let best: { x: number; y: number; dist: number } | undefined
-  for (let y = CONTENT_TOP; y <= ARTBOARD.h - h - 40; y += 20) {
-    for (let x = 120; x <= ARTBOARD.w - w - 120; x += 20) {
-      if (!free(x, y)) continue
-      const dist = Math.hypot(x - center.x, y - center.y)
-      if (!best || dist < best.dist) best = { x, y, dist }
+  const cx = snap(near.x - w / 2)
+  const cy = snap(near.y - h / 2)
+  const boxes = d.nodes.map(nodeBox)
+  const free = (x: number, y: number) => boxes.every((b) => !overlaps({ x, y, w, h }, b, GRID))
+  // 以 near 為中心一圈一圈往外找（第 r 圈是邊長 2r+1 格的方框），同一圈取最近的
+  for (let r = 0; r <= 40; r++) {
+    let best: { x: number; y: number; dist: number } | undefined
+    for (let i = -r; i <= r; i++) {
+      for (let j = -r; j <= r; j++) {
+        if (Math.max(Math.abs(i), Math.abs(j)) !== r) continue
+        const x = cx + i * GRID
+        const y = cy + j * GRID
+        const dist = Math.hypot(i, j)
+        if (free(x, y) && (!best || dist < best.dist)) best = { x, y, dist }
+      }
     }
+    if (best) return { x: best.x, y: best.y }
   }
-  return best ? { x: best.x, y: best.y } : center
+  return { x: cx, y: cy }
 }
 
 // ---------------------------------------------------------------- 匯入驗證
@@ -347,7 +358,7 @@ function parseEnd(v: unknown): EdgeEnd | undefined {
 }
 
 /**
- * 驗證並正規化匯入的 JSON（或 localStorage 內容）；缺的欄位補預設值。
+ * 驗證並正規化匯入的 JSON（或 localStorage 內容）；缺的欄位補預設值、多的欄位丟掉。
  * 結構不對時丟出中文錯誤訊息。
  */
 export function parseDoc(raw: unknown): ArchDoc {
@@ -379,16 +390,7 @@ export function parseDoc(raw: unknown): ArchDoc {
       const route: Route = e.route === 'hv' || e.route === 'vh' ? e.route : 'auto'
       edges.push({ id: str(e.id) || uid('e'), from, to, route, label: str(e.label) })
     }
-    diagrams[id] = {
-      id,
-      level: str(d.level),
-      section: str(d.section),
-      page: str(d.page),
-      badge: str(d.badge),
-      title: str(d.title),
-      nodes,
-      edges,
-    }
+    diagrams[id] = { id, level: str(d.level), title: str(d.title), nodes, edges }
   }
   const root = str(raw.root)
   if (!diagrams[root]) throw new Error('找不到最上層的圖（root）')

@@ -253,3 +253,61 @@ export function fitFontSize(
   if (w <= maxWidth || w === 0) return size
   return Math.max(minSize, Math.floor((size * maxWidth) / w))
 }
+
+// ---------------------------------------------------------------- 吸附
+
+/** 對齊參考線：axis 'x' 為垂直線（位置 pos＝x），從 from 畫到 to（另一軸的範圍）。 */
+export interface Guide {
+  axis: 'x' | 'y'
+  pos: number
+  from: number
+  to: number
+}
+
+/**
+ * 拖曳中的元件吸附位置：每一軸各自判斷。
+ * 1. 元件的左／中／右（上／中／下）與其他元件的左／中／右在 threshold 內 → 對齊該元件，並回傳參考線。
+ * 2. 否則對齊格點。
+ * threshold 以畫布座標計（呼叫端依縮放換算，畫面上約 6 px）。
+ */
+export function snapMove(
+  moving: Rect,
+  others: Rect[],
+  threshold: number,
+  grid: number,
+): { x: number; y: number; guides: Guide[] } {
+  const guides: Guide[] = []
+  const axis = (a: 'x' | 'y') => {
+    const pos = a === 'x' ? moving.x : moving.y
+    const size = a === 'x' ? moving.w : moving.h
+    let best: { delta: number; line: number } | undefined
+    for (const o of others) {
+      const opos = a === 'x' ? o.x : o.y
+      const osize = a === 'x' ? o.w : o.h
+      for (const mine of [0, size / 2, size]) {
+        for (const theirs of [0, osize / 2, osize]) {
+          const delta = opos + theirs - (pos + mine)
+          if (Math.abs(delta) <= threshold && (!best || Math.abs(delta) < Math.abs(best.delta)))
+            best = { delta, line: opos + theirs }
+        }
+      }
+    }
+    if (!best) return Math.round(pos / grid) * grid
+    const snapped = pos + best.delta
+    // 參考線畫過所有在這條線上的元件
+    const line = best.line
+    const span = [moving, ...others].filter((r) => {
+      const p = a === 'x' ? r.x : r.y
+      const s = a === 'x' ? r.w : r.h
+      const shift = r === moving ? best.delta : 0
+      return [p + shift, p + shift + s / 2, p + shift + s].some((v) => Math.abs(v - line) < 0.5)
+    })
+    const lo = Math.min(...span.map((r) => (a === 'x' ? r.y : r.x)))
+    const hi = Math.max(...span.map((r) => (a === 'x' ? r.y + r.h : r.x + r.w)))
+    guides.push({ axis: a, pos: line, from: lo, to: hi })
+    return snapped
+  }
+  const x = axis('x')
+  const y = axis('y')
+  return { x, y, guides }
+}

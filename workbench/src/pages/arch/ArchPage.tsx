@@ -1,425 +1,135 @@
-// 專案架構・架構圖：像 C4 Model 一樣逐層放大的架構圖編輯器，樣式為深藍簡報風（可匯出 PNG／SVG 貼進簡報）。
-// 純前端：文件存在瀏覽器（localStorage），可匯出／匯入 JSON 與組員交換；不經後端。
-import {
-  AlertTriangle,
-  ChevronRight,
-  Download,
-  Eye,
-  FileJson,
-  Image as ImageIcon,
-  Maximize,
-  Pencil,
-  Plus,
-  Redo2,
-  RotateCcw,
-  Undo2,
-  Upload,
-} from 'lucide-react'
-import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
+// 專案架構・架構圖（檢視）：只顯示成品，點有細部圖的元件逐層進入（類似 C4 Model）。
+// 「編輯」在新分頁開啟編輯器（/arch/edit）；編輯器存檔時這裡經 storage 事件即時更新。
+import { ChevronRight, Network, SquarePen } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 
-import { PanelSection, PanelStack } from '@/components/layout/PanelSections'
-import { MainView, Split, Workspace } from '@/components/layout/Workspace'
-import { Badge, Button, Hint, Segmented } from '@/components/ui/primitives'
-import { SLIDE } from '@/lib/arch/theme'
-import {
-  freeSpot,
-  newNode,
-  parseDoc,
-  pathTo,
-  uid,
-  type Diagram,
-  type EdgeEnd,
-} from '@/lib/arch/model'
-import { sampleDoc } from '@/lib/arch/sample'
+import { EmptyState, PageHeader } from '@/components/layout/Workspace'
+import { Badge } from '@/components/ui/primitives'
+import { type ArchDoc, pathTo } from '@/lib/arch/model'
+import { ARCH } from '@/lib/arch/theme'
 import { cn } from '@/lib/cn'
-import { downloadBlob } from '@/lib/download'
 
-import { ArchCanvas, type Selection, serializeSvg, svgToPng } from './ArchCanvas'
-import { DiagramSummary, EdgeInspector, NodeInspector, TextField } from './Inspector'
-import { useArchDoc } from './useArchDoc'
+import { DrillIcon, StaticDiagram } from './DiagramSvg'
+import { useStoredDoc } from './useArchDoc'
 
-type Mode = 'view' | 'edit'
-
-/** 鍵盤事件來自輸入框時不處理快捷鍵（避免打字時刪掉元件）。 */
-function isTyping(t: EventTarget | null): boolean {
-  if (!(t instanceof HTMLElement)) return false
-  return t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)
+/** 編輯器的網址（新分頁開啟）；帶目前的圖，打開就在同一層。 */
+export function editorUrl(doc: ArchDoc, diagramId: string): string {
+  return diagramId === doc.root ? '/arch/edit' : `/arch/edit?d=${encodeURIComponent(diagramId)}`
 }
 
-/** 檔名用的安全字串。 */
-const fileName = (d: Diagram) => (d.title || d.id).replace(/[\\/:*?"<>|\s]+/g, '_')
+/** 層級路徑（檢視頁與編輯器共用）：最後一層為目前的圖，其餘可點回去。 */
+export function Breadcrumb({
+  doc,
+  diagramId,
+  onGo,
+  className,
+}: {
+  doc: ArchDoc
+  diagramId: string
+  onGo: (id: string) => void
+  className?: string
+}) {
+  const trail = pathTo(doc, diagramId)
+  const level = trail.at(-1)?.diagram.level
+  return (
+    <nav aria-label="層級" className={cn('flex min-w-0 items-center gap-1 text-[13px]', className)}>
+      {trail.map(({ diagram: d }, i) => {
+        const last = i === trail.length - 1
+        return (
+          <span key={d.id} className="flex min-w-0 items-center gap-1">
+            {i > 0 && <ChevronRight className="text-muted size-3.5 shrink-0" aria-hidden />}
+            {last ? (
+              <span aria-current="page" className="truncate font-semibold">
+                {d.title || '未命名'}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onGo(d.id)}
+                className="text-ink-2 hover:text-ink truncate rounded px-1 hover:underline"
+              >
+                {d.title || '未命名'}
+              </button>
+            )}
+          </span>
+        )
+      })}
+      {level && <Badge className="ml-2">{level}</Badge>}
+    </nav>
+  )
+}
 
 export function ArchPage() {
-  const { doc, apply, checkpoint, replace, undo, redo, canUndo, canRedo } = useArchDoc()
+  const doc = useStoredDoc()
   const [params, setParams] = useSearchParams()
-  const diagram = doc.diagrams[params.get('d') ?? ''] ?? doc.diagrams[doc.root]! // 最上層一定存在（parseDoc 驗證過）
-  const trail = pathTo(doc, diagram.id)
-  const [mode, setMode] = useState<Mode>('edit')
-  const editable = mode === 'edit'
-  const [rawSelection, setSelection] = useState<Selection>(null)
-  const [error, setError] = useState<string | null>(null)
-  const svgRef = useRef<SVGSVGElement>(null)
-  const stageRef = useRef<HTMLDivElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  // 復原或刪除後，選取的東西可能已不存在
-  const node =
-    rawSelection?.kind === 'node' ? diagram.nodes.find((n) => n.id === rawSelection.id) : undefined
-  const edge =
-    rawSelection?.kind === 'edge' ? diagram.edges.find((e) => e.id === rawSelection.id) : undefined
-  const selection: Selection = node || edge ? rawSelection : null
-
-  /** 切換到某張圖；省略 id 時回到最上層。 */
-  function go(id?: string) {
-    setSelection(null)
-    setParams(id && id !== doc.root ? { d: id } : {})
-  }
-
-  function drill(nodeId: string) {
-    const child = diagram.nodes.find((n) => n.id === nodeId)?.child
-    if (child && doc.diagrams[child]) go(child)
-  }
-
-  function createChild(nodeId: string) {
-    const childId = uid('d')
-    apply({ type: 'createChild', diagram: diagram.id, node: nodeId, childId })
-    go(childId)
-  }
-
-  function addNode() {
-    const id = uid('n')
-    apply({
-      type: 'addNode',
-      diagram: diagram.id,
-      node: { ...newNode(id, 0, 0), ...freeSpot(diagram) },
-    })
-    setSelection({ kind: 'node', id })
-  }
-
-  function connect(from: EdgeEnd, to: EdgeEnd) {
-    const id = uid('e')
-    apply({
-      type: 'addEdge',
-      diagram: diagram.id,
-      edge: { id, from, to, route: 'auto', label: '' },
-    })
-    setSelection({ kind: 'edge', id })
-  }
-
-  function removeSelected() {
-    if (node) apply({ type: 'removeNode', diagram: diagram.id, node: node.id })
-    if (edge) apply({ type: 'removeEdge', diagram: diagram.id, edge: edge.id })
-    setSelection(null)
-  }
-
-  /** 匯出前取消選取並立即重畫，避免選取框或選取色出現在檔案裡。 */
-  function cleanSvg(): string | undefined {
-    flushSync(() => setSelection(null))
-    return svgRef.current ? serializeSvg(svgRef.current) : undefined
-  }
-
-  async function exportPng() {
-    const svg = cleanSvg()
-    if (!svg) return
-    try {
-      downloadBlob(await svgToPng(svg), `${fileName(diagram)}.png`)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '無法產生 PNG')
-    }
-  }
-
-  function exportSvg() {
-    const svg = cleanSvg()
-    if (svg) downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${fileName(diagram)}.svg`)
-  }
-
-  function exportJson() {
-    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })
-    downloadBlob(blob, 'architecture.json')
-  }
-
-  async function importJson(file: File) {
-    try {
-      replace(parseDoc(JSON.parse(await file.text())))
-      setError(null)
-      go()
-    } catch (e) {
-      setError(`匯入失敗：${e instanceof SyntaxError ? '不是 JSON 檔' : (e as Error).message}`)
-    }
-  }
-
-  // 快捷鍵：Delete 刪除、Ctrl+Z 復原、Ctrl+Shift+Z／Ctrl+Y 重做、Esc 取消選取或回上一層
-  const onKey = useEffectEvent((e: KeyboardEvent) => {
-    if (isTyping(e.target)) return
-    const mod = e.ctrlKey || e.metaKey
-    if (mod && e.key.toLowerCase() === 'z') {
-      e.preventDefault()
-      if (e.shiftKey) redo()
-      else undo()
-    } else if (mod && e.key.toLowerCase() === 'y') {
-      e.preventDefault()
-      redo()
-    } else if ((e.key === 'Delete' || e.key === 'Backspace') && editable && selection) {
-      e.preventDefault()
-      removeSelected()
-    } else if (e.key === 'Escape') {
-      if (selection) setSelection(null)
-      else if (trail.length > 1) go(trail.at(-2)?.diagram.id)
-    }
-  })
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => onKey(e)
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
-
-  const setDiagram = (patch: Partial<Diagram>) =>
-    apply({ type: 'updateDiagram', diagram: diagram.id, patch }, false)
-
-  const inspectorProps = {
-    diagram,
-    editable,
-    apply,
-    checkpoint,
-    onDrill: drill,
-    onCreateChild: createChild,
-    onDeleteNode: (id: string) => {
-      apply({ type: 'removeNode', diagram: diagram.id, node: id })
-      setSelection(null)
-    },
-    onDeleteEdge: (id: string) => {
-      apply({ type: 'removeEdge', diagram: diagram.id, edge: id })
-      setSelection(null)
-    },
-  }
-
-  const panel = (
-    <PanelStack>
-      <PanelSection title="圖面">
-        <TextField
-          label="C4 層級"
-          value={diagram.level}
-          disabled={!editable}
-          onFocus={checkpoint}
-          onChange={(level) => setDiagram({ level })}
-          placeholder="例如 L2 容器"
-        />
-        <TextField
-          label="標章"
-          value={diagram.badge}
-          disabled={!editable}
-          onFocus={checkpoint}
-          onChange={(badge) => setDiagram({ badge })}
-          placeholder="空白表示不顯示"
-        />
-        <TextField
-          label="頁面標題"
-          value={diagram.title}
-          disabled={!editable}
-          onFocus={checkpoint}
-          onChange={(title) => setDiagram({ title })}
-        />
-        <div className="grid grid-cols-[1fr_72px] gap-2">
-          <TextField
-            label="頁首"
-            value={diagram.section}
-            disabled={!editable}
-            onFocus={checkpoint}
-            onChange={(section) => setDiagram({ section })}
-          />
-          <TextField
-            label="頁碼"
-            value={diagram.page}
-            disabled={!editable}
-            onFocus={checkpoint}
-            onChange={(page) => setDiagram({ page })}
-          />
-        </div>
-        {editable && (
-          <Button variant="primary" onClick={addNode} className="w-full">
-            <Plus className="size-4" aria-hidden />
-            新增元件
-          </Button>
-        )}
-      </PanelSection>
-      <PanelSection title="匯出與匯入">
-        <div className="grid grid-cols-2 gap-2">
-          <Button onClick={exportPng}>
-            <ImageIcon className="size-4" aria-hidden />
-            匯出 PNG
-          </Button>
-          <Button onClick={exportSvg}>
-            <Download className="size-4" aria-hidden />
-            匯出 SVG
-          </Button>
-          <Button onClick={exportJson}>
-            <FileJson className="size-4" aria-hidden />
-            匯出 JSON
-          </Button>
-          <Button onClick={() => fileRef.current?.click()}>
-            <Upload className="size-4" aria-hidden />
-            匯入 JSON
-          </Button>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          aria-label="選擇架構圖 JSON"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0]
-            if (f) void importJson(f)
-            e.target.value = ''
-          }}
-        />
-        <Hint text="以本專案的架構範例取代目前的內容（可用復原找回）。">
-          <Button
-            variant="ghost"
-            className="w-full"
-            onClick={() => {
-              replace(sampleDoc())
-              go()
-            }}
-          >
-            <RotateCcw className="size-4" aria-hidden />
-            還原範例
-          </Button>
-        </Hint>
-        {error && (
-          <p role="alert" className="text-danger flex items-start gap-1.5 text-xs">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            {error}
-          </p>
-        )}
-        <p className="text-muted text-xs leading-relaxed">
-          內容自動存在這個瀏覽器；要給組員或換電腦時匯出 JSON。PNG 為 3840×2160，可直接貼進簡報。
-        </p>
-      </PanelSection>
-    </PanelStack>
-  )
-
-  const toolbar = (
-    <>
-      <nav aria-label="層級" className="flex min-w-0 flex-1 items-center gap-1 text-[13px]">
-        {trail.map(({ diagram: d }, i) => {
-          const last = i === trail.length - 1
-          return (
-            <span key={d.id} className="flex min-w-0 items-center gap-1">
-              {i > 0 && <ChevronRight className="text-muted size-3.5 shrink-0" aria-hidden />}
-              {last ? (
-                <span aria-current="page" className="truncate font-semibold">
-                  {d.title || '未命名'}
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => go(d.id)}
-                  className="text-ink-2 hover:text-ink truncate rounded px-1 hover:underline"
-                >
-                  {d.title || '未命名'}
-                </button>
-              )}
-            </span>
-          )
-        })}
-        {diagram.level && <Badge className="ml-2">{diagram.level}</Badge>}
-      </nav>
-      <Hint text="復原（Ctrl+Z）">
-        <Button size="sm" variant="ghost" aria-label="復原" disabled={!canUndo} onClick={undo}>
-          <Undo2 className="size-4" aria-hidden />
-        </Button>
-      </Hint>
-      <Hint text="重做（Ctrl+Shift+Z）">
-        <Button size="sm" variant="ghost" aria-label="重做" disabled={!canRedo} onClick={redo}>
-          <Redo2 className="size-4" aria-hidden />
-        </Button>
-      </Hint>
-      <Hint text="全螢幕簡報（Esc 離開）">
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="全螢幕"
-          onClick={() => void stageRef.current?.requestFullscreen?.()}
-        >
-          <Maximize className="size-4" aria-hidden />
-        </Button>
-      </Hint>
-    </>
-  )
+  const diagram = doc.diagrams[params.get('d') ?? ''] ?? doc.diagrams[doc.root]! // 最上層一定存在
+  const go = (id: string) => setParams(id === doc.root ? {} : { d: id })
+  const drill = (child?: string) => child && doc.diagrams[child] && go(child)
 
   return (
-    <Workspace
-      panel={panel}
-      title="架構圖"
-      description="逐層放大的專案架構（類似 C4 Model）：點兩下元件看內部流程；編輯模式可拖曳元件、拉線連接，匯出 PNG／SVG。"
-      aside={
-        <Segmented
-          label="模式"
-          value={mode}
-          onChange={(m) => {
-            setMode(m)
-            if (m === 'view') (document.activeElement as HTMLElement | null)?.blur?.()
-          }}
-          options={[
-            {
-              value: 'view',
-              label: (
-                <>
-                  <Eye aria-hidden />
-                  檢視
-                </>
-              ),
-            },
-            {
-              value: 'edit',
-              label: (
-                <>
-                  <Pencil aria-hidden />
-                  編輯
-                </>
-              ),
-            },
-          ]}
-        />
-      }
-    >
-      <Split
-        main={
-          <MainView toolbar={toolbar}>
-            <div
-              ref={stageRef}
-              className={cn('min-h-0 flex-1 overflow-hidden rounded-xl')}
-              style={{ background: SLIDE.bg }}
-            >
-              <ArchCanvas
-                diagram={diagram}
-                editable={editable}
-                selection={selection}
-                svgRef={svgRef}
-                onSelect={setSelection}
-                onDragStart={checkpoint}
-                onMove={(id, x, y) =>
-                  apply({ type: 'moveNode', diagram: diagram.id, node: id, x, y }, false)
-                }
-                onConnect={connect}
-                onDrill={drill}
-              />
-            </div>
-          </MainView>
-        }
-        readout={
-          node ? (
-            <NodeInspector key={node.id} node={node} {...inspectorProps} />
-          ) : edge ? (
-            <EdgeInspector key={edge.id} edge={edge} {...inspectorProps} />
-          ) : (
-            <DiagramSummary diagram={diagram} editable={editable} />
-          )
+    <div className="flex h-full min-h-0 flex-col pr-3 pb-3">
+      <PageHeader
+        title="架構圖"
+        description="逐層放大的專案架構（類似 C4 Model）：點有疊層圖示的元件看內部組成與流程；滑過元件看說明。"
+        aside={
+          <a
+            href={editorUrl(doc, diagram.id)}
+            target="_blank"
+            rel="noopener"
+            className="bg-ink text-on-ink focus-visible:ring-primary/40 inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium hover:opacity-85 focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <SquarePen className="size-4" aria-hidden />
+            編輯
+          </a>
         }
       />
-    </Workspace>
+      <div className="bg-card shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px]">
+        <div className="flex shrink-0 items-center px-4 pt-4 pb-3">
+          <Breadcrumb doc={doc} diagramId={diagram.id} onGo={go} />
+        </div>
+        <div
+          className="mx-3 mb-3 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl"
+          style={{ background: ARCH.canvas }}
+        >
+          {diagram.nodes.length === 0 ? (
+            <EmptyState icon={<Network className="size-8" aria-hidden />}>
+              這張圖還沒有元件，按「編輯」開始畫。
+            </EmptyState>
+          ) : (
+            <StaticDiagram
+              key={diagram.id}
+              diagram={diagram}
+              idPrefix="view"
+              labelBg={ARCH.canvas}
+              role="group"
+              aria-label={`${diagram.title} 架構圖`}
+              className="block h-full max-h-full w-full max-w-full"
+              preserveAspectRatio="xMidYMid meet"
+              nodeProps={(n) => ({
+                role: 'button',
+                tabIndex: 0,
+                'aria-label': n.title || '未命名元件',
+                'aria-description': n.note || undefined,
+                'data-node': n.id,
+                style: { cursor: n.child ? 'zoom-in' : 'default', outline: 'none' },
+                onClick: () => drill(n.child),
+                onKeyDown: (e) => {
+                  if (e.key === 'Enter' && n.child) {
+                    e.preventDefault()
+                    drill(n.child)
+                  }
+                },
+              })}
+              nodeChildren={(n) => (
+                <>
+                  {n.note && <title>{n.note}</title>}
+                  {n.child && <DrillIcon node={n} />}
+                </>
+              )}
+            />
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

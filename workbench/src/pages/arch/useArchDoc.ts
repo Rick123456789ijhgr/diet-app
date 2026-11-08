@@ -1,5 +1,5 @@
-// 架構圖文件的狀態：編輯操作、復原／重做、存在瀏覽器（localStorage）。
-import { useCallback, useEffect, useReducer } from 'react'
+// 架構圖文件的狀態：編輯器的編輯操作、復原／重做、存在瀏覽器（localStorage）；檢視頁的唯讀訂閱。
+import { useCallback, useEffect, useMemo, useReducer, useSyncExternalStore } from 'react'
 
 import { type ArchDoc, applyOp, type Op, parseDoc } from '@/lib/arch/model'
 import { sampleDoc } from '@/lib/arch/sample'
@@ -59,15 +59,42 @@ export function historyReducer(h: History, a: Action): History {
   }
 }
 
-/** 讀取瀏覽器中保存的文件；沒有、讀不到或格式不對時用範例。 */
-export function loadDoc(): ArchDoc {
+function readRaw(): string | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    return localStorage.getItem(STORAGE_KEY)
+  } catch {
+    return null // 私密視窗或被封鎖的儲存空間
+  }
+}
+
+/** 解析保存的字串；沒有或格式不對時用範例。 */
+function parseRaw(raw: string | null): ArchDoc {
+  try {
     if (raw) return parseDoc(JSON.parse(raw))
   } catch {
-    // 私密視窗、被封鎖的儲存空間或舊格式：改用範例
+    // 舊格式或損壞：改用範例
   }
   return sampleDoc()
+}
+
+/** 讀取瀏覽器中保存的文件；沒有、讀不到或格式不對時用範例。 */
+export function loadDoc(): ArchDoc {
+  return parseRaw(readRaw())
+}
+
+/** 其他分頁（編輯器）改了文件時通知（storage 事件只會送到「其他」分頁）。 */
+function subscribe(onChange: () => void) {
+  const handler = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY || e.key === null) onChange()
+  }
+  window.addEventListener('storage', handler)
+  return () => window.removeEventListener('storage', handler)
+}
+
+/** 檢視頁用：唯讀的文件，編輯器分頁存檔時即時更新。 */
+export function useStoredDoc(): ArchDoc {
+  const raw = useSyncExternalStore(subscribe, readRaw, () => null)
+  return useMemo(() => parseRaw(raw), [raw])
 }
 
 export function useArchDoc() {

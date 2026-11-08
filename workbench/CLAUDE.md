@@ -13,7 +13,7 @@
 - **版面**：左側浮動圖示欄＝深淺色切換＋模組；頂部列＝標誌、頁面膠囊、服務狀態。工具頁用 `Workspace`（控制面板卡＋大標題）＋`Split`（主檢視卡＋右側讀數卡）＋`MainView`（工具列＋撐滿的影像或可捲動的圖表）；狀態用 `StatusCard`，指標用 `MetricGrid`／`Metric`，讀數欄的其他區塊用 `ReadoutBlock`。
 - **單張檢視**（`pages/inspect/`）：單張影像的前處理都是同一頁的「任務」，共用一張影像與一組模擬退化，切換任務時保留影像、退化與各任務參數；左欄依序為影像 → 模擬退化 → 處理參數（預設收合），不再分頁。新的單張前處理加成任務，不另開頁面。
 - **模組一只有三頁**：單張檢視、多張測試（`pages/multi/`：參數掃描、資料夾批次）、實驗結果（`pages/results/`：E1 消融、自適應策略）。模式在網址最後一段，標題列右側切換；去過的模式以 `KeepAlive` 保持掛載。所有左欄都用 `PanelSections` 由上而下排段落，不用分頁。
-- **專案架構圖**（`pages/arch/`、`lib/arch/`）：唯一不經後端的頁面，文件存在 `localStorage`（`wb.arch`），以匯出／匯入 JSON 交換。畫板是產出物（匯出的 SVG／PNG 要自帶顏色），配色寫死在 `lib/arch/theme.ts`，是「顏色用主題變數」的例外；只在畫面上出現的元素（選取框、把手、細部圖圖示）標 `data-editor`，匯出時移除。模型、路徑與驗證是純函式，改了要補 `lib/arch/arch.test.ts`。
+- **專案架構圖**（`pages/arch/`、`lib/arch/`）：唯一不經後端的頁面，文件存在 `localStorage`（`wb.arch`），以匯出／匯入 JSON 交換。工作台裡的 `/arch/diagram` **只顯示成品**；編輯一律在新分頁的 `/arch/edit`（註冊在 `AppShell` 之外的全頁介面，類似 IcePanel：點點格子的無限畫布＋右側屬性面板），兩邊經 `storage` 事件同步。圖是產出物（匯出的 SVG／PNG 要自帶顏色），配色寫死在 `lib/arch/theme.ts`，是「顏色用主題變數」的例外；檢視、編輯、匯出共用 `DiagramSvg.tsx` 的畫法，匯出用另一張不含選取與把手的隱藏圖。模型、路徑、吸附與驗證是純函式，改了要補 `lib/arch/arch.test.ts`。
 - **設定**：請求只帶與預設值不同的欄位（`lib/config.ts` 的 `setOverride`）；表單由 `ParamForm` 依結構自動產生，不手寫欄位。
 - **即時調參**：輸入經 `useDebounced`（150 ms）後才進查詢鍵；查詢用 `placeholderData: keepPreviousData` 保留舊結果並淡化；查詢函式要傳入 `signal`，舊請求才會被取消。
 - **影像**：影像只上傳一次，之後只帶 `image_id`；顯示用 `artifactUrl(id)`。幾何結果以 `ImageViewer` 的 `overlay`（SVG、影像座標）疊圖，不要求後端畫進影像。
