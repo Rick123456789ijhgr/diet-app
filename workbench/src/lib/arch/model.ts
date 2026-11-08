@@ -2,56 +2,112 @@
 //
 // 一份文件（ArchDoc）由多張圖（Diagram）組成，像 C4 Model 一樣逐層放大：
 // 圖上的元件（ArchNode）可以指向一張「細部圖」（child），點進去看該元件內部的組成或流程。
-// 每張圖是一塊無限畫布，座標一律是畫布座標（px）；元件對齊 GRID 的點點格子。
+// 每張圖是一塊無限畫布，座標一律是畫布座標（px）；元件的位置與尺寸一律是 GRID 的整數倍（落在點點上）。
+import { DEFAULT_EDGE_STYLE, DEFAULT_NODE_STYLE } from './theme'
 
-/** 點點格子的間距，也是拖曳與縮放尺寸時吸附的單位（px）。 */
+/** 點點格子的間距；元件的位置與尺寸都對齊這個單位（px）。 */
 export const GRID = 20
 
-/** 新元件的預設尺寸（都是格子的整數倍，放在格點上時四邊都會落在格線上）。 */
-export const NODE_DEFAULTS = { w: 240, h: 160, accentW: 160 } as const
+/** 元件尺寸的上下限（都是 GRID 的倍數）。 */
+export const SIZE_LIMITS = { min: 40, maxW: 900, maxH: 600 } as const
 
-/** 元件尺寸的上下限。 */
-export const SIZE_LIMITS = { min: 60, maxW: 900, maxH: 600 } as const
+/** 字級上下限。 */
+export const FONT_LIMITS = { min: 10, max: 72 } as const
+
+export type NodeShapeKind = 'rect' | 'ellipse' | 'diamond' | 'cylinder' | 'hexagon'
+
+export const SHAPES: { value: NodeShapeKind; label: string }[] = [
+  { value: 'rect', label: '矩形' },
+  { value: 'ellipse', label: '橢圓' },
+  { value: 'diamond', label: '菱形' },
+  { value: 'cylinder', label: '圓柱' },
+  { value: 'hexagon', label: '六角形' },
+]
+
+/** 元件外觀。顏色為 #rrggbb；底色與框線可為 'none'（透明）。 */
+export interface NodeStyle {
+  shape: NodeShapeKind
+  fill: string
+  stroke: string
+  strokeWidth: number
+  /** 圓角（只有矩形有） */
+  radius: number
+  textColor: string
+  kickerColor: string
+  accentFill: string
+  accentText: string
+  titleSize: number
+  kickerSize: number
+  /** 文字對齊（只有矩形可以靠左，其他形狀一律置中） */
+  align: 'left' | 'center'
+}
 
 /**
- * 一個元件：左邊是主方塊（小標＋標題），右邊可附一塊強調色方塊（accent，例如「品質門檻」）。
- * 連線可以接在主方塊或強調塊上（Part），對應參考圖中箭頭從橘色方塊出發的畫法。
+ * 一個元件：主圖形（小標＋標題），矩形還可以在右側附一塊強調色方塊（accent，例如「品質門檻」）。
+ * 連線可以接在主圖形或強調塊上（Part），對應參考圖中箭頭從橘色方塊出發的畫法。
  */
 export interface ArchNode {
   id: string
-  /** 主方塊左上角（畫布座標） */
+  /** 主圖形左上角（畫布座標，GRID 的倍數） */
   x: number
   y: number
-  /** 主方塊寬高；強調塊與主方塊同高、接在右側 */
+  /** 主圖形寬高（GRID 的倍數）；強調塊與主圖形同高、接在右側 */
   w: number
   h: number
-  /** 小標（例如「01」「INPUT」），空字串時標題垂直置中 */
+  /** 小標（例如「01」「INPUT」），空字串時只顯示標題 */
   kicker: string
   title: string
-  /** 強調塊文字；空字串表示沒有強調塊 */
+  /** 強調塊文字；空字串（或非矩形）表示沒有強調塊 */
   accent: string
   accentW: number
   /** 說明：滑過元件時顯示，描述這個元件做什麼、怎麼運作 */
   note: string
   /** 細部圖的 id（C4 的下一層）；沒有時不能點進去 */
   child?: string
+  style: NodeStyle
 }
 
 /** 連線接在元件的哪一塊。 */
 export type Part = 'main' | 'accent'
 
-export interface EdgeEnd {
+/** 圖形的四個邊；每邊中點是一個定位點。 */
+export type Side = 'top' | 'right' | 'bottom' | 'left'
+
+/** 接在元件上的端點；side 省略時自動選邊（朝向另一端）。 */
+export interface NodeEnd {
   node: string
   part: Part
+  side?: Side
+}
+
+/** 自由端點（沒有接在元件上，畫布座標）。 */
+export interface PointEnd {
+  x: number
+  y: number
+}
+
+export type EdgeEnd = NodeEnd | PointEnd
+
+export function isNodeEnd(e: EdgeEnd): e is NodeEnd {
+  return 'node' in e
 }
 
 /**
- * 連線路線：
+ * 轉彎方式（只用在「直角」且兩端都自動選邊時）：
  * - auto：同一列或同一欄時畫直線，否則畫 Z 形折線。
- * - hv：先水平再垂直（從側邊出去、從上方或下方進入）。
- * - vh：先垂直再水平（從上方或下方出去、從側邊進入）。
+ * - hv：先水平再垂直。 - vh：先垂直再水平。
  */
 export type Route = 'auto' | 'hv' | 'vh'
+
+export interface EdgeStyle {
+  color: string
+  width: number
+  dash: 'solid' | 'dashed' | 'dotted'
+  /** 箭頭畫在哪一端 */
+  arrow: 'end' | 'start' | 'both' | 'none'
+  /** 直角折線、直線、曲線 */
+  shape: 'orthogonal' | 'straight' | 'curved'
+}
 
 export interface ArchEdge {
   id: string
@@ -59,6 +115,7 @@ export interface ArchEdge {
   to: EdgeEnd
   route: Route
   label: string
+  style: EdgeStyle
 }
 
 /** 一張圖。 */
@@ -103,10 +160,16 @@ export function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v))
 }
 
+/** 尺寸：對齊格點並限制範圍。 */
+export function snapSize(v: number, max: number): number {
+  return clamp(snap(v), SIZE_LIMITS.min, max)
+}
+
 // ---------------------------------------------------------------- 查詢
 
+/** 有沒有強調塊（只有矩形可以有）。 */
 export function hasAccent(n: ArchNode): boolean {
-  return n.accent.trim() !== ''
+  return n.style.shape === 'rect' && n.accent.trim() !== ''
 }
 
 /** 元件整體寬度（含強調塊）。 */
@@ -119,14 +182,17 @@ export function nodeBox(n: ArchNode): Box {
   return { x: n.x, y: n.y, w: nodeWidth(n), h: n.h }
 }
 
-/** 所有元件的外框；沒有元件時回傳一塊預設大小的區域（讓空白圖也能置中）。 */
-export function bounds(nodes: ArchNode[]): Box {
-  if (nodes.length === 0) return { x: 0, y: 0, w: 800, h: 450 }
-  const x0 = Math.min(...nodes.map((n) => n.x))
-  const y0 = Math.min(...nodes.map((n) => n.y))
-  const x1 = Math.max(...nodes.map((n) => n.x + nodeWidth(n)))
-  const y1 = Math.max(...nodes.map((n) => n.y + n.h))
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+/** 所有元件與自由端點的外框；什麼都沒有時回傳一塊預設大小的區域（讓空白圖也能置中）。 */
+export function bounds(nodes: ArchNode[], edges: ArchEdge[] = []): Box {
+  const boxes = nodes.map(nodeBox)
+  for (const e of edges)
+    for (const end of [e.from, e.to]) if (!isNodeEnd(end)) boxes.push({ ...end, w: 0, h: 0 })
+  if (boxes.length === 0) return { x: 0, y: 0, w: 800, h: 450 }
+  const x0 = Math.min(...boxes.map((b) => b.x))
+  const y0 = Math.min(...boxes.map((b) => b.y))
+  const x1 = Math.max(...boxes.map((b) => b.x + b.w))
+  const y1 = Math.max(...boxes.map((b) => b.y + b.h))
+  return { x: x0, y: y0, w: Math.max(x1 - x0, 1), h: Math.max(y1 - y0, 1) }
 }
 
 /**
@@ -169,14 +235,17 @@ export function subtree(doc: ArchDoc, diagramId: string): string[] {
 
 // ---------------------------------------------------------------- 編輯操作
 
+export type NodePatch = Partial<Omit<ArchNode, 'id' | 'style'>> & { style?: Partial<NodeStyle> }
+export type EdgePatch = Partial<Omit<ArchEdge, 'id' | 'style'>> & { style?: Partial<EdgeStyle> }
+
 export type Op =
-  /** 位置由編輯器決定（格點或對齊其他元件），這裡只取整數 */
+  /** 位置會對齊格點 */
   | { type: 'moveNode'; diagram: string; node: string; x: number; y: number }
-  | { type: 'updateNode'; diagram: string; node: string; patch: Partial<Omit<ArchNode, 'id'>> }
+  | { type: 'updateNode'; diagram: string; node: string; patch: NodePatch }
   | { type: 'addNode'; diagram: string; node: ArchNode }
   | { type: 'removeNode'; diagram: string; node: string }
   | { type: 'addEdge'; diagram: string; edge: ArchEdge }
-  | { type: 'updateEdge'; diagram: string; edge: string; patch: Partial<Omit<ArchEdge, 'id'>> }
+  | { type: 'updateEdge'; diagram: string; edge: string; patch: EdgePatch }
   | { type: 'removeEdge'; diagram: string; edge: string }
   | { type: 'updateDiagram'; diagram: string; patch: Partial<Pick<Diagram, 'level' | 'title'>> }
   /** 為元件建立細部圖（已有則不動） */
@@ -189,15 +258,24 @@ function withDiagram(doc: ArchDoc, id: string, fn: (d: Diagram) => Diagram): Arc
   return next === d ? doc : { ...doc, diagrams: { ...doc.diagrams, [id]: next } }
 }
 
-const sameEnd = (a: EdgeEnd, b: EdgeEnd) => a.node === b.node && a.part === b.part
+/** 兩個端點是否相同（自由端點比座標；元件端點比元件、塊與邊）。 */
+export function sameEnd(a: EdgeEnd, b: EdgeEnd): boolean {
+  if (isNodeEnd(a) && isNodeEnd(b))
+    return a.node === b.node && a.part === b.part && a.side === b.side
+  if (!isNodeEnd(a) && !isNodeEnd(b)) return a.x === b.x && a.y === b.y
+  return false
+}
+
+const touches = (e: ArchEdge, node: string) =>
+  [e.from, e.to].some((end) => isNodeEnd(end) && end.node === node)
 
 /** 套用一個編輯操作，回傳新文件（不改動原文件；沒有變化時回傳同一個物件）。 */
 export function applyOp(doc: ArchDoc, op: Op): ArchDoc {
   switch (op.type) {
     case 'moveNode':
       return withDiagram(doc, op.diagram, (d) => {
-        const x = Math.round(op.x)
-        const y = Math.round(op.y)
+        const x = snap(op.x)
+        const y = snap(op.y)
         const n = d.nodes.find((m) => m.id === op.node)
         if (!n || (n.x === x && n.y === y)) return d
         return { ...d, nodes: d.nodes.map((m) => (m === n ? { ...m, x, y } : m)) }
@@ -205,7 +283,9 @@ export function applyOp(doc: ArchDoc, op: Op): ArchDoc {
     case 'updateNode':
       return withDiagram(doc, op.diagram, (d) => ({
         ...d,
-        nodes: d.nodes.map((n) => (n.id === op.node ? { ...n, ...op.patch } : n)),
+        nodes: d.nodes.map((n) =>
+          n.id === op.node ? { ...n, ...op.patch, style: { ...n.style, ...op.patch.style } } : n,
+        ),
       }))
     case 'addNode':
       return withDiagram(doc, op.diagram, (d) => ({ ...d, nodes: [...d.nodes, op.node] }))
@@ -218,23 +298,27 @@ export function applyOp(doc: ArchDoc, op: Op): ArchDoc {
       diagrams[d.id] = {
         ...d,
         nodes: d.nodes.filter((n) => n.id !== op.node),
-        edges: d.edges.filter((e) => e.from.node !== op.node && e.to.node !== op.node),
+        edges: d.edges.filter((e) => !touches(e, op.node)),
       }
       return { ...doc, diagrams }
     }
     case 'addEdge':
       return withDiagram(doc, op.diagram, (d) => {
         const { from, to } = op.edge
-        const known = (end: EdgeEnd) => d.nodes.some((n) => n.id === end.node)
-        // 不接自己、不重複、兩端都要存在
-        if (sameEnd(from, to) || !known(from) || !known(to)) return d
+        const known = (end: EdgeEnd) => !isNodeEnd(end) || d.nodes.some((n) => n.id === end.node)
+        // 兩端都要存在、不能是同一點、不重複
+        if (!known(from) || !known(to) || sameEnd(from, to)) return d
+        if (isNodeEnd(from) && isNodeEnd(to) && from.node === to.node && from.part === to.part)
+          return d
         if (d.edges.some((e) => sameEnd(e.from, from) && sameEnd(e.to, to))) return d
         return { ...d, edges: [...d.edges, op.edge] }
       })
     case 'updateEdge':
       return withDiagram(doc, op.diagram, (d) => ({
         ...d,
-        edges: d.edges.map((e) => (e.id === op.edge ? { ...e, ...op.patch } : e)),
+        edges: d.edges.map((e) =>
+          e.id === op.edge ? { ...e, ...op.patch, style: { ...e.style, ...op.patch.style } } : e,
+        ),
       }))
     case 'removeEdge':
       return withDiagram(doc, op.diagram, (d) => ({
@@ -259,6 +343,10 @@ export function applyOp(doc: ArchDoc, op: Op): ArchDoc {
   }
 }
 
+export function newEdge(id: string, from: EdgeEnd, to: EdgeEnd): ArchEdge {
+  return { id, from, to, route: 'auto', label: '', style: { ...DEFAULT_EDGE_STYLE } }
+}
+
 /** 新的細部圖：名稱用元件名稱，放一組「輸入 → 輸出」當起點。 */
 function starterDiagram(id: string, parent: Diagram, node: ArchNode): Diagram {
   const a = uid('n')
@@ -271,15 +359,7 @@ function starterDiagram(id: string, parent: Diagram, node: ArchNode): Diagram {
       { ...newNode(a, 0, 0), kicker: 'INPUT', title: '輸入' },
       { ...newNode(b, 400, 0), kicker: 'OUTPUT', title: '輸出' },
     ],
-    edges: [
-      {
-        id: uid('e'),
-        from: { node: a, part: 'main' },
-        to: { node: b, part: 'main' },
-        route: 'auto',
-        label: '',
-      },
-    ],
+    edges: [newEdge(uid('e'), { node: a, part: 'main' }, { node: b, part: 'main' })],
   }
 }
 
@@ -292,18 +372,29 @@ export function nextLevel(level: string): string {
   return `L${n} ${name[n] ?? '細部'}`
 }
 
-export function newNode(id: string, x: number, y: number): ArchNode {
+/** 各形狀新元件的預設尺寸與標題（尺寸都是 GRID 的倍數）。 */
+const SHAPE_DEFAULTS: Record<NodeShapeKind, { w: number; h: number; title: string }> = {
+  rect: { w: 240, h: 160, title: '新元件' },
+  ellipse: { w: 220, h: 140, title: '新元件' },
+  diamond: { w: 220, h: 160, title: '判斷' },
+  cylinder: { w: 180, h: 160, title: '資料庫' },
+  hexagon: { w: 220, h: 140, title: '服務' },
+}
+
+export function newNode(id: string, x: number, y: number, shape: NodeShapeKind = 'rect'): ArchNode {
+  const s = SHAPE_DEFAULTS[shape]
   return {
     id,
     x,
     y,
-    w: NODE_DEFAULTS.w,
-    h: NODE_DEFAULTS.h,
+    w: s.w,
+    h: s.h,
     kicker: '',
-    title: '新元件',
+    title: s.title,
     accent: '',
-    accentW: NODE_DEFAULTS.accentW,
+    accentW: 160,
     note: '',
+    style: { ...DEFAULT_NODE_STYLE, shape, align: shape === 'rect' ? 'left' : 'center' },
   }
 }
 
@@ -321,8 +412,12 @@ export function overlaps(a: Box, b: Box, gap = 0): boolean {
  * 新元件的位置：從 near（通常是畫面中央）附近的格點由近而遠找，
  * 第一個與既有元件（留一格間距）不重疊的位置。找不到就放在 near。
  */
-export function freeSpot(d: Diagram, near: { x: number; y: number }): { x: number; y: number } {
-  const { w, h } = NODE_DEFAULTS
+export function freeSpot(
+  d: Diagram,
+  near: { x: number; y: number },
+  size: { w: number; h: number } = SHAPE_DEFAULTS.rect,
+): { x: number; y: number } {
+  const { w, h } = size
   const cx = snap(near.x - w / 2)
   const cy = snap(near.y - h / 2)
   const boxes = d.nodes.map(nodeBox)
@@ -351,15 +446,72 @@ const num = (v: unknown, fallback: number): number =>
   typeof v === 'number' && Number.isFinite(v) ? v : fallback
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
+const oneOf = <T extends string>(v: unknown, options: readonly T[], fallback: T): T =>
+  options.includes(v as T) ? (v as T) : fallback
+
+/** 顏色只接受 #rgb／#rrggbb；allowNone 時也接受 'none'。 */
+export function isColor(v: unknown, allowNone = false): v is string {
+  return (
+    typeof v === 'string' &&
+    (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) || (allowNone && v === 'none'))
+  )
+}
+const color = (v: unknown, fallback: string, allowNone = false) =>
+  isColor(v, allowNone) ? v : fallback
+
+const SIDES = ['top', 'right', 'bottom', 'left'] as const
 
 function parseEnd(v: unknown): EdgeEnd | undefined {
-  if (!isObj(v) || typeof v.node !== 'string') return undefined
-  return { node: v.node, part: v.part === 'accent' ? 'accent' : 'main' }
+  if (!isObj(v)) return undefined
+  if (typeof v.node === 'string') {
+    const end: NodeEnd = { node: v.node, part: v.part === 'accent' ? 'accent' : 'main' }
+    if (SIDES.includes(v.side as Side)) end.side = v.side as Side
+    return end
+  }
+  if (typeof v.x === 'number' && typeof v.y === 'number' && Number.isFinite(v.x + v.y))
+    return { x: snap(v.x), y: snap(v.y) }
+  return undefined
+}
+
+function parseNodeStyle(v: unknown): NodeStyle {
+  const s = isObj(v) ? v : {}
+  const d = DEFAULT_NODE_STYLE
+  const shape = oneOf(
+    s.shape,
+    SHAPES.map((x) => x.value),
+    d.shape,
+  )
+  return {
+    shape,
+    fill: color(s.fill, d.fill, true),
+    stroke: color(s.stroke, d.stroke, true),
+    strokeWidth: clamp(num(s.strokeWidth, d.strokeWidth), 0, 8),
+    radius: clamp(num(s.radius, d.radius), 0, 80),
+    textColor: color(s.textColor, d.textColor),
+    kickerColor: color(s.kickerColor, d.kickerColor),
+    accentFill: color(s.accentFill, d.accentFill),
+    accentText: color(s.accentText, d.accentText),
+    titleSize: clamp(num(s.titleSize, d.titleSize), FONT_LIMITS.min, FONT_LIMITS.max),
+    kickerSize: clamp(num(s.kickerSize, d.kickerSize), FONT_LIMITS.min, FONT_LIMITS.max),
+    align: oneOf(s.align, ['left', 'center'] as const, shape === 'rect' ? 'left' : 'center'),
+  }
+}
+
+function parseEdgeStyle(v: unknown): EdgeStyle {
+  const s = isObj(v) ? v : {}
+  const d = DEFAULT_EDGE_STYLE
+  return {
+    color: color(s.color, d.color),
+    width: clamp(num(s.width, d.width), 1, 10),
+    dash: oneOf(s.dash, ['solid', 'dashed', 'dotted'] as const, d.dash),
+    arrow: oneOf(s.arrow, ['end', 'start', 'both', 'none'] as const, d.arrow),
+    shape: oneOf(s.shape, ['orthogonal', 'straight', 'curved'] as const, d.shape),
+  }
 }
 
 /**
- * 驗證並正規化匯入的 JSON（或 localStorage 內容）；缺的欄位補預設值、多的欄位丟掉。
- * 結構不對時丟出中文錯誤訊息。
+ * 驗證並正規化匯入的 JSON（或 localStorage 內容）：缺的欄位補預設值、多的欄位丟掉，
+ * 位置與尺寸對齊格點（舊檔案的元件可能不在點點上）。結構不對時丟出中文錯誤訊息。
  */
 export function parseDoc(raw: unknown): ArchDoc {
   if (!isObj(raw) || !isObj(raw.diagrams)) throw new Error('不是架構圖檔案：缺少 diagrams')
@@ -369,16 +521,17 @@ export function parseDoc(raw: unknown): ArchDoc {
     if (!isObj(d)) throw new Error(`圖 ${id} 的格式不正確`)
     const nodes: ArchNode[] = (Array.isArray(d.nodes) ? d.nodes : []).filter(isObj).map((n) => ({
       id: str(n.id) || uid('n'),
-      x: num(n.x, 0),
-      y: num(n.y, 0),
-      w: clamp(num(n.w, NODE_DEFAULTS.w), SIZE_LIMITS.min, SIZE_LIMITS.maxW),
-      h: clamp(num(n.h, NODE_DEFAULTS.h), SIZE_LIMITS.min, SIZE_LIMITS.maxH),
+      x: snap(num(n.x, 0)),
+      y: snap(num(n.y, 0)),
+      w: snapSize(num(n.w, 240), SIZE_LIMITS.maxW),
+      h: snapSize(num(n.h, 160), SIZE_LIMITS.maxH),
       kicker: str(n.kicker),
       title: str(n.title),
       accent: str(n.accent),
-      accentW: clamp(num(n.accentW, NODE_DEFAULTS.accentW), SIZE_LIMITS.min, SIZE_LIMITS.maxW),
+      accentW: snapSize(num(n.accentW, 160), SIZE_LIMITS.maxW),
       note: str(n.note),
       ...(typeof n.child === 'string' ? { child: n.child } : {}),
+      style: parseNodeStyle(n.style),
     }))
     const ids = new Set(nodes.map((n) => n.id))
     const edges: ArchEdge[] = []
@@ -386,9 +539,16 @@ export function parseDoc(raw: unknown): ArchDoc {
       if (!isObj(e)) continue
       const from = parseEnd(e.from)
       const to = parseEnd(e.to)
-      if (!from || !to || !ids.has(from.node) || !ids.has(to.node)) continue
-      const route: Route = e.route === 'hv' || e.route === 'vh' ? e.route : 'auto'
-      edges.push({ id: str(e.id) || uid('e'), from, to, route, label: str(e.label) })
+      const ok = (end?: EdgeEnd) => end && (!isNodeEnd(end) || ids.has(end.node))
+      if (!from || !to || !ok(from) || !ok(to)) continue
+      edges.push({
+        id: str(e.id) || uid('e'),
+        from,
+        to,
+        route: oneOf(e.route, ['auto', 'hv', 'vh'] as const, 'auto'),
+        label: str(e.label),
+        style: parseEdgeStyle(e.style),
+      })
     }
     diagrams[id] = { id, level: str(d.level), title: str(d.title), nodes, edges }
   }
