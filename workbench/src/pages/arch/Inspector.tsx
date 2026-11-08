@@ -3,7 +3,7 @@
 import { ArrowLeftRight, Ban, Layers, Trash2, Unlink } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { Button, DraftNumberInput, Segmented } from '@/components/ui/primitives'
+import { Button, DraftNumberInput, Hint, Segmented, Slider } from '@/components/ui/primitives'
 import {
   type ArchEdge,
   type ArchNode,
@@ -37,6 +37,18 @@ export function Block({ title, children }: { title: string; children: ReactNode 
       <h2 className="text-muted text-[11px] font-semibold tracking-[0.12em]">{title}</h2>
       {children}
     </section>
+  )
+}
+
+/** 面板頂端的固定列：選取對象的名稱＋最常用的動作（進入細部圖、刪除），捲動時不消失。 */
+function StickyHeader({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="bg-card border-card-border sticky top-0 z-10 flex items-center gap-2 border-b px-4 py-3">
+      <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={title}>
+        {title}
+      </h2>
+      {children}
+    </div>
   )
 }
 
@@ -139,22 +151,34 @@ export function ColorField({
   onChange,
   onFocus,
   allowNone,
+  autoLabel,
 }: {
   label: string
   value: string
   onChange: (v: string, record: boolean) => void
   onFocus: () => void
   allowNone?: boolean
+  /** 有值時多一格「自動」（值為 'auto'），文字為這個說明，例如「同線條」 */
+  autoLabel?: string
 }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
         <span className="text-ink-2">{label}</span>
         <span className="text-muted tabular font-mono text-[11px]">
-          {value === 'none' ? '透明' : value}
+          {value === 'none' ? '透明' : value === 'auto' ? (autoLabel ?? '自動') : value}
         </span>
       </div>
       <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
+        {autoLabel && (
+          <Swatch
+            label={autoLabel}
+            selected={value === 'auto'}
+            onClick={() => onChange('auto', true)}
+          >
+            <span className="text-ink-2 text-[10px] font-semibold">A</span>
+          </Swatch>
+        )}
         {allowNone && (
           <Swatch label="透明" selected={value === 'none'} onClick={() => onChange('none', true)}>
             <Ban className="text-muted size-3.5" aria-hidden />
@@ -310,6 +334,34 @@ export function NodeInspector({
   )
   return (
     <>
+      <StickyHeader title={n.title || '未命名元件'}>
+        {n.child ? (
+          <Hint text="也可以在畫布上點兩下元件" side="bottom">
+            <Button size="sm" variant="primary" onClick={onDrill}>
+              <Layers className="size-3.5" aria-hidden />
+              進入細部圖
+            </Button>
+          </Hint>
+        ) : (
+          <Hint text="為這個元件建立下一層（C4），畫出它內部的組成或流程" side="bottom">
+            <Button size="sm" onClick={onCreateChild}>
+              <Layers className="size-3.5" aria-hidden />
+              建立細部圖
+            </Button>
+          </Hint>
+        )}
+        <Hint text={n.child ? '刪除元件（含細部圖）' : '刪除元件（Delete）'} side="bottom">
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="刪除元件"
+            onClick={onDelete}
+            className="text-danger"
+          >
+            <Trash2 className="size-4" aria-hidden />
+          </Button>
+        </Hint>
+      </StickyHeader>
       <Block title="文字">
         <TextField
           label="小標"
@@ -445,29 +497,6 @@ export function NodeInspector({
           />
         )}
       </Block>
-
-      <Block title="細部圖">
-        <p className="text-muted text-xs leading-relaxed">
-          {n.child
-            ? '這個元件有細部圖（C4 的下一層）。點兩下元件也可以進入。'
-            : '為這個元件建立下一層，畫出它內部的組成或流程。'}
-        </p>
-        {n.child ? (
-          <Button variant="primary" onClick={onDrill} className="w-full">
-            <Layers className="size-4" aria-hidden />
-            進入細部圖
-          </Button>
-        ) : (
-          <Button onClick={onCreateChild} className="w-full">
-            <Layers className="size-4" aria-hidden />
-            建立細部圖
-          </Button>
-        )}
-        <Button variant="ghost" onClick={onDelete} className="text-danger w-full">
-          <Trash2 className="size-4" aria-hidden />
-          刪除元件{n.child ? '（含細部圖）' : ''}
-        </Button>
-      </Block>
     </>
   )
 }
@@ -484,7 +513,12 @@ export function EdgeInspector({
     const n = p.diagram.nodes.find((x) => x.id === end.node)
     if (!n) return '？'
     const base = end.part === 'accent' && n.accent ? `${n.title}・${n.accent}` : n.title
-    return end.side ? `${base}（${SIDE_TEXT[end.side]}）` : base
+    if (!end.side) return base
+    const horizontal = end.side === 'top' || end.side === 'bottom'
+    const pos = end.pos ?? 0.5
+    const part =
+      pos < 0.5 ? (horizontal ? '左段' : '上段') : pos > 0.5 ? (horizontal ? '右段' : '下段') : ''
+    return `${base}（${SIDE_TEXT[end.side]}${part}）`
   }
   const update = (patch: EdgePatch, record = true) =>
     p.apply({ type: 'updateEdge', diagram: p.diagram.id, edge: e.id, patch }, record)
@@ -496,19 +530,25 @@ export function EdgeInspector({
 
   return (
     <>
-      <Block title="連線">
+      <StickyHeader title="連線">
+        <Hint text="刪除連線（Delete）" side="bottom">
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="刪除連線"
+            onClick={onDelete}
+            className="text-danger"
+          >
+            <Trash2 className="size-4" aria-hidden />
+          </Button>
+        </Hint>
+      </StickyHeader>
+      <Block title="端點">
         <div className="space-y-0.5 text-[13px]">
           <div className="font-medium">{name(e.from)}</div>
           <div className="text-muted text-xs">↓</div>
           <div className="font-medium">{name(e.to)}</div>
         </div>
-        <TextField
-          label="標籤"
-          value={e.label}
-          placeholder="例如 gRPC、REST"
-          onFocus={p.checkpoint}
-          onChange={(v) => update({ label: v }, false)}
-        />
         <p className="text-muted text-[11px] leading-relaxed">
           拖曳連線兩端的方塊可以重新接到別的定位點，或拉到空白處成為自由端點。
         </p>
@@ -527,6 +567,66 @@ export function EdgeInspector({
             </Button>
           )}
         </div>
+      </Block>
+
+      <Block title="標籤">
+        <TextField
+          label="文字"
+          value={e.label}
+          placeholder="例如 gRPC、REST"
+          onFocus={p.checkpoint}
+          onChange={(v) => update({ label: v }, false)}
+        />
+        <NumberField
+          label="標籤字級"
+          value={e.style.labelSize}
+          min={FONT_LIMITS.min}
+          max={FONT_LIMITS.max}
+          onFocus={p.checkpoint}
+          onCommit={(labelSize) => setStyle({ labelSize }, false)}
+        />
+        <Row label="字重">
+          <Segmented
+            label="字重"
+            value={e.style.labelBold ? 'bold' : 'normal'}
+            onChange={(v) => setStyle({ labelBold: v === 'bold' })}
+            options={[
+              { value: 'normal', label: '一般' },
+              { value: 'bold', label: '粗體' },
+            ]}
+          />
+        </Row>
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-ink-2">位置（起點 → 終點）</span>
+            <span className="text-muted tabular">{e.style.labelPos}%</span>
+          </div>
+          <Slider
+            aria-label="標籤位置"
+            min={0}
+            max={100}
+            step={5}
+            value={[e.style.labelPos]}
+            onPointerDown={p.checkpoint}
+            onKeyDown={p.checkpoint}
+            onValueChange={([v]) => v !== undefined && setStyle({ labelPos: v }, false)}
+          />
+        </div>
+        <ColorField
+          label="標籤文字顏色"
+          value={e.style.labelColor}
+          autoLabel="同線條"
+          onFocus={p.checkpoint}
+          onChange={(labelColor, record) => setStyle({ labelColor }, record)}
+        />
+        <ColorField
+          label="標籤底色"
+          value={e.style.labelBg}
+          autoLabel="同畫布"
+          allowNone
+          onFocus={p.checkpoint}
+          onChange={(labelBg, record) => setStyle({ labelBg }, record)}
+        />
       </Block>
 
       <Block title="樣式">
@@ -599,13 +699,6 @@ export function EdgeInspector({
           onFocus={p.checkpoint}
           onCommit={(width) => setStyle({ width }, false)}
         />
-      </Block>
-
-      <Block title="刪除">
-        <Button variant="ghost" className="text-danger w-full" onClick={onDelete}>
-          <Trash2 className="size-4" aria-hidden />
-          刪除連線
-        </Button>
       </Block>
     </>
   )

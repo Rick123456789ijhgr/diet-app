@@ -185,6 +185,61 @@ describe('架構圖・編輯器', () => {
     expect(screen.getByRole('button', { name: '選取' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('「進入細部圖」與刪除固定在屬性面板最上方', async () => {
+    const user = userEvent.setup()
+    renderAt('/arch/edit')
+    await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
+    fireEvent.pointerDown(nodeBtn('Python 外掛'))
+    const panel = screen.getByRole('complementary', { name: '屬性' })
+    const drill = within(panel).getByRole('button', { name: '進入細部圖' })
+    const firstField = within(panel).getByRole('textbox', { name: '小標' })
+    // 在所有欄位之前（不用往下捲）
+    expect(
+      drill.compareDocumentPosition(firstField) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(within(panel).getByRole('button', { name: '刪除元件' })).toBeInTheDocument()
+    await user.click(drill)
+    expect(crumbs()).toEqual(['飲食紀錄 APP', 'Python 外掛'])
+  })
+
+  it('連線標籤：文字、字級、粗體、位置與顏色', async () => {
+    const user = userEvent.setup()
+    renderAt('/arch/edit')
+    await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
+    fireEvent.pointerDown(screen.getByTestId('edge-app>api'))
+    const saved = () =>
+      JSON.parse(localStorage.getItem(STORAGE_KEY)!).diagrams.system.edges.find(
+        (x: { id: string }) => x.id === 'app>api',
+      )
+    const text = screen.getByRole('textbox', { name: '文字' })
+    await user.clear(text)
+    await user.type(text, 'HTTPS')
+    const size = screen.getByRole('spinbutton', { name: '標籤字級' })
+    await user.clear(size)
+    await user.type(size, '22')
+    await user.click(screen.getByRole('radio', { name: '粗體' }))
+    screen.getByRole('slider', { name: '標籤位置' }).focus()
+    await user.keyboard('{ArrowRight}{ArrowRight}')
+    await user.click(
+      within(screen.getByRole('group', { name: '標籤文字顏色' })).getByLabelText('#d9502f'),
+    )
+    await user.click(within(screen.getByRole('group', { name: '標籤底色' })).getByLabelText('透明'))
+    expect(saved()).toMatchObject({
+      label: 'HTTPS',
+      style: {
+        labelSize: 22,
+        labelBold: true,
+        labelPos: 60,
+        labelColor: '#d9502f',
+        labelBg: 'none',
+      },
+    })
+    // 畫布上的標籤跟著變
+    const label = within(canvas()).getByText('HTTPS')
+    expect(label).toHaveAttribute('font-size', '22')
+    expect(label).toHaveAttribute('fill', '#d9502f')
+  })
+
   it('選取連線可改路線、刪除', async () => {
     const user = userEvent.setup()
     renderAt('/arch/edit?d=m1')

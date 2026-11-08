@@ -2,7 +2,13 @@
 // 以及縮放到內容大小的靜態圖。
 import type { ReactNode, Ref, SVGProps } from 'react'
 
-import { edgeGeometry, fitFontSize, partRect, textWidth } from '@/lib/arch/geometry'
+import {
+  type EdgeGeometry,
+  fitFontSize,
+  layoutEdges,
+  partRect,
+  textWidth,
+} from '@/lib/arch/geometry'
 import {
   type ArchEdge,
   type ArchNode,
@@ -55,53 +61,59 @@ function dashArray(s: EdgeStyle): string | undefined {
   return undefined
 }
 
-/** 一條連線（路徑＋箭頭＋標籤）。labelBg 為標籤底色（與畫布同色，蓋住線）。 */
+/** 一條連線（路徑＋箭頭＋標籤）。canvasBg 為畫布底色（標籤底色選「自動」時用它蓋住線）。 */
 export function EdgeShape({
-  diagram,
   edge: e,
+  geometry: g,
   prefix,
   selected,
-  labelBg,
+  canvasBg,
 }: {
-  diagram: Diagram
   edge: ArchEdge
+  geometry: EdgeGeometry | undefined
   prefix: string
   selected?: boolean
-  labelBg: string
+  canvasBg: string
 }) {
-  const g = edgeGeometry(diagram.nodes, e)
   if (!g) return null
-  const color = selected ? ARCH.select : e.style.color
+  const s = e.style
+  const color = selected ? ARCH.select : s.color
   const marker = `url(#${arrowId(prefix, color)})`
-  const lw = e.label ? textWidth(e.label, 16) + 16 : 0
+  const textColor = s.labelColor === 'auto' ? s.color : s.labelColor
+  const bg = s.labelBg === 'auto' ? canvasBg : s.labelBg
+  const lw = e.label ? textWidth(e.label, s.labelSize) + s.labelSize : 0
+  const lh = s.labelSize * 1.6
   return (
     <g>
       <path
         d={g.d}
         fill="none"
         stroke={color}
-        strokeWidth={e.style.width}
-        strokeDasharray={dashArray(e.style)}
-        strokeLinecap={e.style.dash === 'dotted' ? 'round' : 'butt'}
+        strokeWidth={s.width}
+        strokeDasharray={dashArray(s)}
+        strokeLinecap={s.dash === 'dotted' ? 'round' : 'butt'}
         strokeLinejoin="round"
-        markerEnd={e.style.arrow === 'end' || e.style.arrow === 'both' ? marker : undefined}
-        markerStart={e.style.arrow === 'start' || e.style.arrow === 'both' ? marker : undefined}
+        markerEnd={s.arrow === 'end' || s.arrow === 'both' ? marker : undefined}
+        markerStart={s.arrow === 'start' || s.arrow === 'both' ? marker : undefined}
       />
       {e.label && (
         <g>
-          <rect
-            x={g.label.x - lw / 2}
-            y={g.label.y - 13}
-            width={lw}
-            height={26}
-            rx={4}
-            fill={labelBg}
-          />
+          {bg !== 'none' && (
+            <rect
+              x={g.label.x - lw / 2}
+              y={g.label.y - lh / 2}
+              width={lw}
+              height={lh}
+              rx={4}
+              fill={bg}
+            />
+          )}
           <text
             x={g.label.x}
             y={g.label.y}
-            fontSize={16}
-            fill={e.style.color}
+            fontSize={s.labelSize}
+            fontWeight={s.labelBold ? 700 : 400}
+            fill={textColor}
             textAnchor="middle"
             dominantBaseline="central"
           >
@@ -336,6 +348,7 @@ export function StaticDiagram({
   nodeChildren?: (n: ArchNode) => ReactNode
 } & SVGProps<SVGSVGElement>) {
   const box = staticBox(diagram)
+  const geometries = layoutEdges(diagram.nodes, diagram.edges)
   return (
     <svg
       ref={svgRef}
@@ -349,7 +362,13 @@ export function StaticDiagram({
       <ArrowDefs prefix={idPrefix} edges={diagram.edges} />
       {background && <rect x={box.x} y={box.y} width={box.w} height={box.h} fill={background} />}
       {diagram.edges.map((e) => (
-        <EdgeShape key={e.id} diagram={diagram} edge={e} prefix={idPrefix} labelBg={labelBg} />
+        <EdgeShape
+          key={e.id}
+          edge={e}
+          geometry={geometries.get(e.id)}
+          prefix={idPrefix}
+          canvasBg={labelBg}
+        />
       ))}
       {diagram.nodes.map((n) => (
         <NodeShape key={n.id} node={n} gProps={nodeProps?.(n)}>

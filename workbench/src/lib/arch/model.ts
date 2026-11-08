@@ -78,7 +78,12 @@ export interface NodeEnd {
   node: string
   part: Part
   side?: Side
+  /** 在那一邊上的位置（0＝上／左端、1＝下／右端），省略為中點 0.5；只在 side 有值時有意義 */
+  pos?: number
 }
+
+/** 每一邊的定位點位置（邊長的比例）：中點，以及 1/4、3/4（兩個元件互指時可以各用一個）。 */
+export const ANCHOR_POSITIONS = [0.25, 0.5, 0.75] as const
 
 /** 自由端點（沒有接在元件上，畫布座標）。 */
 export interface PointEnd {
@@ -107,6 +112,15 @@ export interface EdgeStyle {
   arrow: 'end' | 'start' | 'both' | 'none'
   /** 直角折線、直線、曲線 */
   shape: 'orthogonal' | 'straight' | 'curved'
+  /** 標籤字級 */
+  labelSize: number
+  /** 標籤文字顏色；'auto' 為跟線條同色 */
+  labelColor: string
+  /** 標籤底色；'auto' 為畫布底色（蓋住線），'none' 為透明 */
+  labelBg: string
+  labelBold: boolean
+  /** 標籤沿著線的位置（0＝起點、100＝終點） */
+  labelPos: number
 }
 
 export interface ArchEdge {
@@ -261,7 +275,12 @@ function withDiagram(doc: ArchDoc, id: string, fn: (d: Diagram) => Diagram): Arc
 /** 兩個端點是否相同（自由端點比座標；元件端點比元件、塊與邊）。 */
 export function sameEnd(a: EdgeEnd, b: EdgeEnd): boolean {
   if (isNodeEnd(a) && isNodeEnd(b))
-    return a.node === b.node && a.part === b.part && a.side === b.side
+    return (
+      a.node === b.node &&
+      a.part === b.part &&
+      a.side === b.side &&
+      (a.side ? (a.pos ?? 0.5) === (b.pos ?? 0.5) : true)
+    )
   if (!isNodeEnd(a) && !isNodeEnd(b)) return a.x === b.x && a.y === b.y
   return false
 }
@@ -465,7 +484,11 @@ function parseEnd(v: unknown): EdgeEnd | undefined {
   if (!isObj(v)) return undefined
   if (typeof v.node === 'string') {
     const end: NodeEnd = { node: v.node, part: v.part === 'accent' ? 'accent' : 'main' }
-    if (SIDES.includes(v.side as Side)) end.side = v.side as Side
+    if (SIDES.includes(v.side as Side)) {
+      end.side = v.side as Side
+      const pos = num(v.pos, 0.5)
+      if (pos !== 0.5) end.pos = clamp(pos, 0, 1)
+    }
     return end
   }
   if (typeof v.x === 'number' && typeof v.y === 'number' && Number.isFinite(v.x + v.y))
@@ -506,6 +529,11 @@ function parseEdgeStyle(v: unknown): EdgeStyle {
     dash: oneOf(s.dash, ['solid', 'dashed', 'dotted'] as const, d.dash),
     arrow: oneOf(s.arrow, ['end', 'start', 'both', 'none'] as const, d.arrow),
     shape: oneOf(s.shape, ['orthogonal', 'straight', 'curved'] as const, d.shape),
+    labelSize: clamp(num(s.labelSize, d.labelSize), FONT_LIMITS.min, FONT_LIMITS.max),
+    labelColor: s.labelColor === 'auto' ? 'auto' : color(s.labelColor, d.labelColor),
+    labelBg: s.labelBg === 'auto' ? 'auto' : color(s.labelBg, d.labelBg, true),
+    labelBold: typeof s.labelBold === 'boolean' ? s.labelBold : d.labelBold,
+    labelPos: clamp(num(s.labelPos, d.labelPos), 0, 100),
   }
 }
 

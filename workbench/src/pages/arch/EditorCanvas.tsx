@@ -16,9 +16,11 @@ import {
 
 import { Hint } from '@/components/ui/primitives'
 import {
+  anchorEnd,
   edgeGeometry,
   type Guide,
   hitPart,
+  layoutEdges,
   nearestAnchor,
   nodeAnchors,
   type Pt,
@@ -196,7 +198,7 @@ export function EditorCanvas({
   /** 某個位置當作連線端點：靠近定位點就固定在那一邊；落在元件上就自動選邊；否則是格點上的自由端點。 */
   function endAt(p: Pt): EdgeEnd {
     const a = nearestAnchor(diagram.nodes, p, ANCHOR_PX / view.k)
-    if (a) return { node: a.node, part: a.part, side: a.side }
+    if (a) return anchorEnd(a.node, a.anchor)
     return hitPart(diagram.nodes, p) ?? { x: snap(p.x), y: snap(p.y) }
   }
 
@@ -286,6 +288,7 @@ export function EditorCanvas({
   const preview = previewEdge()
   const snapTarget = link ? nearestAnchor(diagram.nodes, link.pt, ANCHOR_PX / view.k) : undefined
 
+  const geometries = layoutEdges(diagram.nodes, diagram.edges)
   const selectedNode = selection?.kind === 'node' ? selection.id : null
   const selectedEdge = selection?.kind === 'edge' ? selection.id : null
   const editingEdge = link?.mode === 'edit' ? link.edge.id : null
@@ -342,15 +345,15 @@ export function EditorCanvas({
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
           {diagram.edges.map((e) => {
             if (e.id === editingEdge) return null
-            const g = edgeGeometry(diagram.nodes, e)
+            const g = geometries.get(e.id)
             return (
               <g key={e.id}>
                 <EdgeShape
-                  diagram={diagram}
                   edge={e}
+                  geometry={g}
                   prefix={prefix}
                   selected={e.id === selectedEdge}
-                  labelBg={ARCH.canvas}
+                  canvasBg={ARCH.canvas}
                 />
                 {g && (
                   <path
@@ -429,27 +432,28 @@ export function EditorCanvas({
                     />
                   </>
                 )}
-                {/* 定位點：圖形四邊的中點；從這裡拖出線條，或把線條拖到這裡固定 */}
+                {/* 定位點：每邊 1/4、中點、3/4；從這裡拖出線條，或把線條拖到這裡固定 */}
                 {anchors &&
                   nodeAnchors(n).map((a) => {
-                    const hot =
-                      snapTarget?.node === n.id &&
-                      snapTarget.part === a.part &&
-                      snapTarget.side === a.side
+                    const t = snapTarget?.node === n.id ? snapTarget.anchor : undefined
+                    const hot = t?.part === a.part && t.side === a.side && t.pos === a.pos
+                    const mid = a.pos === 0.5
+                    // 測試用的 id：中點只寫邊，其他加上位置（例如 right-25）
+                    const id = `${a.part}-${a.side}${mid ? '' : `-${a.pos * 100}`}`
                     return (
                       <circle
-                        key={`${a.part}-${a.side}`}
-                        data-testid={`anchor-${n.id}-${a.part}-${a.side}`}
+                        key={id}
+                        data-testid={`anchor-${n.id}-${id}`}
                         cx={a.pt.x}
                         cy={a.pt.y}
-                        r={px(hot ? 8 : 5)}
+                        r={px(hot ? 8 : mid ? 5 : 4)}
                         fill={hot ? ARCH.select : '#ffffff'}
                         stroke={ARCH.select}
                         strokeWidth={px(1.5)}
                         style={{ cursor: 'crosshair' }}
                         onPointerDown={(e) => {
                           if (e.button !== 0) return
-                          startLink(e, { node: n.id, part: a.part, side: a.side })
+                          startLink(e, anchorEnd(n.id, a))
                         }}
                       >
                         <title>拖到另一個元件以連線</title>
@@ -464,7 +468,7 @@ export function EditorCanvas({
           {diagram.edges
             .filter((e) => e.id === selectedEdge && !editingEdge)
             .map((e) => {
-              const g = edgeGeometry(diagram.nodes, e)
+              const g = geometries.get(e.id)
               if (!g) return null
               return (['from', 'to'] as const).map((which) => {
                 const pt = which === 'from' ? g.start : g.end
@@ -510,11 +514,11 @@ export function EditorCanvas({
           {preview && (
             <g opacity={0.7} pointerEvents="none">
               <EdgeShape
-                diagram={diagram}
                 edge={preview}
+                geometry={edgeGeometry(diagram.nodes, preview)}
                 prefix={prefix}
                 selected
-                labelBg={ARCH.canvas}
+                canvasBg={ARCH.canvas}
               />
               {/* 自由端點的位置 */}
               {[preview.from, preview.to]

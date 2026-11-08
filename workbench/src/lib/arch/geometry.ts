@@ -1,12 +1,14 @@
 // 架構圖的幾何：元件各塊的矩形、定位點、連線路徑（直角＋圓角、直線、曲線）、命中測試、
 // 拖曳吸附、文字寬度估計。
 import {
+  ANCHOR_POSITIONS,
   type ArchEdge,
   type ArchNode,
   type EdgeEnd,
   hasAccent,
   isNodeEnd,
   type NodeEnd,
+  type NodeShapeKind,
   type Part,
   type Route,
   type Side,
@@ -52,34 +54,74 @@ export function partRect(n: ArchNode, part: Part): Rect {
 const cx = (r: Rect) => r.x + r.w / 2
 const cy = (r: Rect) => r.y + r.h / 2
 
-/** 矩形某一邊的中點（定位點）。橢圓、菱形、六角形的四個端點也正好在這裡。 */
-export function anchorPoint(r: Rect, side: Side): Pt {
-  switch (side) {
-    case 'top':
-      return { x: cx(r), y: r.y }
-    case 'right':
-      return { x: r.x + r.w, y: cy(r) }
-    case 'bottom':
-      return { x: cx(r), y: r.y + r.h }
-    case 'left':
-      return { x: r.x, y: cy(r) }
-  }
+/** 元件某一塊的形狀（強調塊一律是矩形）。 */
+export function partShape(n: ArchNode, part: Part): NodeShapeKind {
+  return part === 'accent' && hasAccent(n) ? 'rect' : n.style.shape
 }
 
-/** 元件的所有定位點；主圖形與強調塊相接的那一邊不算。 */
-export function nodeAnchors(n: ArchNode): { part: Part; side: Side; pt: Pt }[] {
-  const out: { part: Part; side: Side; pt: Pt }[] = []
-  const accent = hasAccent(n)
-  for (const side of SIDES) {
-    if (accent && side === 'right') continue
-    out.push({ part: 'main', side, pt: anchorPoint(partRect(n, 'main'), side) })
-  }
-  if (accent)
-    for (const side of SIDES) {
-      if (side === 'left') continue
-      out.push({ part: 'accent', side, pt: anchorPoint(partRect(n, 'accent'), side) })
+/**
+ * 某一邊上的定位點：沿著外框那一邊取 pos（0＝上／左端、1＝下／右端）的位置，
+ * 再投影到圖形的實際輪廓上（橢圓、菱形、六角形、圓柱的頂底面不是直線）。
+ */
+export function anchorPoint(r: Rect, side: Side, pos = 0.5, shape: NodeShapeKind = 'rect'): Pt {
+  const hw = r.w / 2
+  const hh = r.h / 2
+  if (side === 'top' || side === 'bottom') {
+    const x = r.x + pos * r.w
+    const u = Math.min(1, Math.abs(x - cx(r)) / hw) // 0＝中線、1＝左右端
+    let dy = hh // 輪廓到中線的垂直距離
+    if (shape === 'ellipse') dy = hh * Math.sqrt(1 - u * u)
+    else if (shape === 'diamond') dy = hh * (1 - u)
+    else if (shape === 'hexagon') {
+      const inset = Math.min(r.w * 0.22, hh)
+      const fromEnd = hw - Math.abs(x - cx(r))
+      dy = fromEnd >= inset ? hh : hh * (fromEnd / inset)
+    } else if (shape === 'cylinder') {
+      const ry = Math.min(r.h * 0.12, 22)
+      dy = hh - ry + ry * Math.sqrt(1 - u * u)
     }
+    return { x, y: side === 'top' ? cy(r) - dy : cy(r) + dy }
+  }
+  const y = r.y + pos * r.h
+  const v = Math.min(1, Math.abs(y - cy(r)) / hh)
+  let dx = hw
+  if (shape === 'ellipse') dx = hw * Math.sqrt(1 - v * v)
+  else if (shape === 'diamond') dx = hw * (1 - v)
+  else if (shape === 'hexagon') dx = hw - Math.min(r.w * 0.22, hh) * v
+  return { x: side === 'left' ? cx(r) - dx : cx(r) + dx, y }
+}
+
+export interface Anchor {
+  part: Part
+  side: Side
+  pos: number
+  pt: Pt
+}
+
+/**
+ * 元件的所有定位點：每一邊 1/4、中點、3/4 三個（太短的邊只有中點）；
+ * 主圖形與強調塊相接的那一邊不算。
+ */
+export function nodeAnchors(n: ArchNode): Anchor[] {
+  const out: Anchor[] = []
+  const accent = hasAccent(n)
+  const add = (part: Part, side: Side) => {
+    const r = partRect(n, part)
+    const len = side === 'top' || side === 'bottom' ? r.w : r.h
+    for (const pos of len >= 80 ? ANCHOR_POSITIONS : [0.5]) {
+      out.push({ part, side, pos, pt: anchorPoint(r, side, pos, partShape(n, part)) })
+    }
+  }
+  for (const side of SIDES) if (!(accent && side === 'right')) add('main', side)
+  if (accent) for (const side of SIDES) if (side !== 'left') add('accent', side)
   return out
+}
+
+/** 定位點轉成連線端點（中點不寫 pos）。 */
+export function anchorEnd(node: string, a: Anchor): NodeEnd {
+  return a.pos === 0.5
+    ? { node, part: a.part, side: a.side }
+    : { node, part: a.part, side: a.side, pos: a.pos }
 }
 
 /** 離 p 最近、且在 maxDist 內的定位點。 */
@@ -87,17 +129,14 @@ export function nearestAnchor(
   nodes: ArchNode[],
   p: Pt,
   maxDist: number,
-): (NodeEnd & { side: Side; pt: Pt }) | undefined {
-  let best: (NodeEnd & { side: Side; pt: Pt; d: number }) | undefined
+): { node: string; anchor: Anchor } | undefined {
+  let best: { node: string; anchor: Anchor; d: number } | undefined
   for (const n of nodes)
     for (const a of nodeAnchors(n)) {
       const d = Math.hypot(a.pt.x - p.x, a.pt.y - p.y)
-      if (d <= maxDist && (!best || d < best.d)) best = { node: n.id, ...a, d }
+      if (d <= maxDist && (!best || d < best.d)) best = { node: n.id, anchor: a, d }
     }
-  if (!best) return undefined
-  const { d: _d, ...rest } = best
-  void _d
-  return rest
+  return best && { node: best.node, anchor: best.anchor }
 }
 
 /** 兩個區間的重疊 [lo, hi]；不重疊時 lo > hi。 */
@@ -315,15 +354,19 @@ export function roundedPath(points: Pt[], radius = CORNER_RADIUS): string {
   return `${d} L${f1(last.x)} ${f1(last.y)}`
 }
 
-/** 折線上最長一段的中點（放連線標籤）。 */
-export function labelPoint(points: Pt[]): Pt {
+/** 折線上、從起點算起全長 t（0–1）處的點（放連線標籤）。 */
+export function pointAlong(points: Pt[], t: number): Pt {
   const pts = simplify(points)
-  let best = { len: -1, p: pts[0] ?? { x: 0, y: 0 } }
-  for (const [a, b] of segments(pts)) {
+  const segs = segments(pts)
+  const total = segs.reduce((sum, [a, b]) => sum + Math.hypot(b.x - a.x, b.y - a.y), 0)
+  let left = Math.min(1, Math.max(0, t)) * total
+  for (const [a, b] of segs) {
     const len = Math.hypot(b.x - a.x, b.y - a.y)
-    if (len > best.len) best = { len, p: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }
+    if (left <= len && len > 0)
+      return { x: a.x + ((b.x - a.x) * left) / len, y: a.y + ((b.y - a.y) * left) / len }
+    left -= len
   }
-  return best.p
+  return pts.at(-1) ?? { x: 0, y: 0 }
 }
 
 export interface EdgeGeometry {
@@ -350,7 +393,10 @@ function resolveEnd(nodes: ArchNode[], end: EdgeEnd): Resolved | undefined {
   const n = nodes.find((m) => m.id === end.node)
   if (!n) return undefined
   const rect = partRect(n, end.part)
-  if (end.side) return { pt: anchorPoint(rect, end.side), dir: NORMAL[end.side], rect, auto: false }
+  if (end.side) {
+    const pt = anchorPoint(rect, end.side, end.pos ?? 0.5, partShape(n, end.part))
+    return { pt, dir: NORMAL[end.side], rect, auto: false }
+  }
   return { pt: { x: cx(rect), y: cy(rect) }, rect, auto: true }
 }
 
@@ -376,7 +422,9 @@ export function edgeGeometry(nodes: ArchNode[], e: ArchEdge): EdgeGeometry | und
     ] as const) {
       if (me.auto && me.rect) {
         const side = facingSide(me.rect, other.pt)
-        me.pt = anchorPoint(me.rect, side)
+        const end = (me === s ? e.from : e.to) as NodeEnd
+        const n = nodes.find((m) => m.id === end.node)!
+        me.pt = anchorPoint(me.rect, side, 0.5, partShape(n, end.part))
         me.dir = NORMAL[side]
       }
     }
@@ -387,13 +435,14 @@ export function edgeGeometry(nodes: ArchNode[], e: ArchEdge): EdgeGeometry | und
 
   const start = s.pt
   const end = t.pt
+  const lt = e.style.labelPos / 100
   if (e.style.shape === 'straight') {
     return {
       d: `M${f1(start.x)} ${f1(start.y)} L${f1(end.x)} ${f1(end.y)}`,
       points: [start, end],
       start,
       end,
-      label: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 },
+      label: { x: start.x + (end.x - start.x) * lt, y: start.y + (end.y - start.y) * lt },
     }
   }
   if (e.style.shape === 'curved') {
@@ -405,14 +454,70 @@ export function edgeGeometry(nodes: ArchNode[], e: ArchEdge): EdgeGeometry | und
       points: [start, end],
       start,
       end,
-      // 三次貝茲曲線 t=0.5 的位置
-      label: {
-        x: 0.125 * start.x + 0.375 * c1.x + 0.375 * c2.x + 0.125 * end.x,
-        y: 0.125 * start.y + 0.375 * c1.y + 0.375 * c2.y + 0.125 * end.y,
-      },
+      label: bezier(start, c1, c2, end, lt),
     }
   }
-  return { d: roundedPath(points), points, start, end, label: labelPoint(points) }
+  return { d: roundedPath(points), points, start, end, label: pointAlong(points, lt) }
+}
+
+/** 三次貝茲曲線參數 t 的位置。 */
+function bezier(p0: Pt, p1: Pt, p2: Pt, p3: Pt, t: number): Pt {
+  const u = 1 - t
+  const a = u * u * u
+  const b = 3 * u * u * t
+  const c = 3 * u * t * t
+  const d = t * t * t
+  return {
+    x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+    y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
+  }
+}
+
+/** 兩端都自動選邊的連線：連的是同一對（元件、塊）時歸成一組（不分方向）。 */
+function pairKey(e: ArchEdge): string | undefined {
+  const { from, to } = e
+  if (!isNodeEnd(from) || !isNodeEnd(to) || from.side || to.side) return undefined
+  return [`${from.node}:${from.part}`, `${to.node}:${to.part}`].sort().join('|')
+}
+
+/**
+ * 整張圖的連線幾何。同一對元件之間有多條自動選邊的連線（例如 A→B 與 B→A）時，
+ * 先照自動路線決定兩端的邊，再把它們在邊上錯開（0.35／0.65…），畫成平行線而不重疊。
+ */
+export function layoutEdges(nodes: ArchNode[], edges: ArchEdge[]): Map<string, EdgeGeometry> {
+  const groups = new Map<string, ArchEdge[]>()
+  for (const e of edges) {
+    const key = pairKey(e)
+    if (key) groups.set(key, [...(groups.get(key) ?? []), e])
+  }
+  const out = new Map<string, EdgeGeometry>()
+  for (const e of edges) {
+    const key = pairKey(e)
+    const group = key ? groups.get(key)! : []
+    const g =
+      group.length > 1
+        ? edgeGeometry(nodes, spread(nodes, e, group.indexOf(e), group.length))
+        : edgeGeometry(nodes, e)
+    if (g) out.set(e.id, g)
+  }
+  return out
+}
+
+/** 把第 i 條（共 n 條）連線的兩端固定在自動路線選的邊上，位置錯開。 */
+function spread(nodes: ArchNode[], e: ArchEdge, i: number, n: number): ArchEdge {
+  const base = edgeGeometry(nodes, e)
+  const from = e.from as NodeEnd
+  const to = e.to as NodeEnd
+  const sn = nodes.find((m) => m.id === from.node)
+  const tn = nodes.find((m) => m.id === to.node)
+  if (!base || !sn || !tn) return e
+  const step = Math.min(0.3, 0.8 / n)
+  const pos = 0.5 + (i - (n - 1) / 2) * step
+  return {
+    ...e,
+    from: { ...from, side: sideOfPoint(partRect(sn, from.part), base.start), pos },
+    to: { ...to, side: sideOfPoint(partRect(tn, to.part), base.end), pos },
+  }
 }
 
 /** 連線的折線點；任一端的元件不存在時回傳 undefined。 */

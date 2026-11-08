@@ -8,10 +8,11 @@ import {
   facingSide,
   fitFontSize,
   hitPart,
-  labelPoint,
+  layoutEdges,
   nearestAnchor,
   nodeAnchors,
   orthoRoute,
+  pointAlong,
   partRect,
   roundedPath,
   routePoints,
@@ -170,14 +171,15 @@ describe('路徑', () => {
     expect(roundedPath([])).toBe('')
   })
 
-  it('labelPoint 取最長一段的中點', () => {
-    expect(
-      labelPoint([
-        { x: 0, y: 0 },
-        { x: 0, y: 10 },
-        { x: 200, y: 10 },
-      ]),
-    ).toEqual({ x: 100, y: 10 })
+  it('pointAlong 依全長比例取點（標籤位置）', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 0, y: 10 },
+      { x: 200, y: 10 },
+    ]
+    expect(pointAlong(pts, 0.5)).toEqual({ x: 95, y: 10 })
+    expect(pointAlong(pts, 0)).toEqual({ x: 0, y: 0 })
+    expect(pointAlong(pts, 1)).toEqual({ x: 200, y: 10 })
   })
 })
 
@@ -186,14 +188,25 @@ describe('定位點與連線幾何', () => {
   const b = newNode('b', 400, 0)
   const acc = { ...newNode('c', 0, 300), accent: '門檻' }
 
-  it('定位點在四邊中點；主圖形與強調塊相接的邊不算', () => {
-    expect(nodeAnchors(a).map((x) => [x.side, x.pt])).toEqual([
+  it('每邊 1/4、中點、3/4 三個定位點；主圖形與強調塊相接的邊不算', () => {
+    expect(nodeAnchors(a)).toHaveLength(12)
+    expect(
+      nodeAnchors(a)
+        .filter((x) => x.side === 'right')
+        .map((x) => x.pt),
+    ).toEqual([
+      { x: 240, y: 40 },
+      { x: 240, y: 80 },
+      { x: 240, y: 120 },
+    ])
+    const mids = (n: typeof a) => nodeAnchors(n).filter((x) => x.pos === 0.5)
+    expect(mids(a).map((x) => [x.side, x.pt])).toEqual([
       ['top', { x: 120, y: 0 }],
       ['right', { x: 240, y: 80 }],
       ['bottom', { x: 120, y: 160 }],
       ['left', { x: 0, y: 80 }],
     ])
-    const sides = nodeAnchors(acc).map((x) => `${x.part}-${x.side}`)
+    const sides = mids(acc).map((x) => `${x.part}-${x.side}`)
     expect(sides).toEqual([
       'main-top',
       'main-bottom',
@@ -204,11 +217,22 @@ describe('定位點與連線幾何', () => {
     ])
   })
 
-  it('nearestAnchor 只在距離內吸附', () => {
+  it('橢圓、菱形的定位點貼著實際輪廓', () => {
+    const r = rect(0, 0, 220, 140)
+    const top = anchorPoint(r, 'top', 0.25, 'ellipse')
+    expect(top.x).toBe(55)
+    expect(top.y).toBeCloseTo(70 - 70 * Math.sqrt(0.75))
+    expect(anchorPoint(r, 'left', 0.25, 'diamond')).toEqual({ x: 55, y: 35 })
+    expect(anchorPoint(r, 'top', 0.5, 'diamond')).toEqual({ x: 110, y: 0 })
+  })
+
+  it('nearestAnchor 只在距離內吸附（含 1/4、3/4 的定位點）', () => {
     expect(nearestAnchor([a, b], { x: 245, y: 85 }, 18)).toMatchObject({
       node: 'a',
-      part: 'main',
-      side: 'right',
+      anchor: { part: 'main', side: 'right', pos: 0.5 },
+    })
+    expect(nearestAnchor([a, b], { x: 243, y: 44 }, 18)).toMatchObject({
+      anchor: { side: 'right', pos: 0.25 },
     })
     expect(nearestAnchor([a, b], { x: 300, y: 85 }, 18)).toBeUndefined()
   })
@@ -259,6 +283,40 @@ describe('定位點與連線幾何', () => {
     )!
     expect(curved.d).toMatch(/^M240 80 C/)
     expect(curved.label).toEqual({ x: 320, y: 80 })
+    // 標籤位置：25% 處
+    const quarter = edgeGeometry(
+      [a, b],
+      edge(ends[0], ends[1], { style: { ...DEFAULT_EDGE_STYLE, shape: 'straight', labelPos: 25 } }),
+    )!
+    expect(quarter.label).toEqual({ x: 280, y: 80 })
+  })
+
+  it('固定在 1/4 位置的端點', () => {
+    const g = edgeGeometry(
+      [a, b],
+      edge(
+        { node: 'a', part: 'main', side: 'right', pos: 0.25 },
+        { node: 'b', part: 'main', side: 'left', pos: 0.25 },
+      ),
+    )!
+    expect(g.start).toEqual({ x: 240, y: 40 })
+    expect(g.end).toEqual({ x: 400, y: 40 })
+  })
+
+  it('A→B 與 B→A 都自動選邊時錯開成兩條平行線', () => {
+    const ab = { ...edge({ node: 'a', part: 'main' }, { node: 'b', part: 'main' }), id: 'ab' }
+    const ba = { ...edge({ node: 'b', part: 'main' }, { node: 'a', part: 'main' }), id: 'ba' }
+    const g = layoutEdges([a, b], [ab, ba])
+    expect(g.get('ab')!.points).toEqual([
+      { x: 240, y: 56 },
+      { x: 400, y: 56 },
+    ])
+    expect(g.get('ba')!.points).toEqual([
+      { x: 400, y: 104 },
+      { x: 240, y: 104 },
+    ])
+    // 只有一條時維持原本的中線
+    expect(layoutEdges([a, b], [ab]).get('ab')!.start).toEqual({ x: 240, y: 80 })
   })
 
   it('端點元件不存在時為 undefined', () => {
@@ -388,6 +446,12 @@ describe('編輯操作', () => {
       false,
     )
     expect(sameEnd({ x: 1, y: 2 }, { x: 1, y: 2 })).toBe(true)
+    expect(
+      sameEnd(
+        { node: 'a', part: 'main', side: 'top', pos: 0.25 },
+        { node: 'a', part: 'main', side: 'top' },
+      ),
+    ).toBe(false)
     expect(sameEnd({ x: 1, y: 2 }, { node: 'a', part: 'main' })).toBe(false)
   })
 
@@ -445,7 +509,7 @@ describe('parseDoc', () => {
           edges: [
             { from: { node: 'a' }, to: { node: 'b', part: 'accent' }, route: 'weird' },
             { from: { node: 'a' }, to: { node: 'ghost' } },
-            { from: { node: 'a', side: 'top' }, to: { x: 101, y: 9 } },
+            { from: { node: 'a', side: 'top', pos: 0.25 }, to: { x: 101, y: 9 } },
           ],
         },
       },
@@ -459,7 +523,7 @@ describe('parseDoc', () => {
     expect(r.edges).toHaveLength(2)
     expect(r.edges[0]).toMatchObject({ route: 'auto', style: DEFAULT_EDGE_STYLE })
     expect(r.edges[1]).toMatchObject({
-      from: { node: 'a', part: 'main', side: 'top' },
+      from: { node: 'a', part: 'main', side: 'top', pos: 0.25 },
       to: { x: 100, y: 0 },
     })
   })

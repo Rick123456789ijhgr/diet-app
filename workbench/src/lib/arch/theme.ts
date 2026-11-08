@@ -40,6 +40,11 @@ export const DEFAULT_EDGE_STYLE: EdgeStyle = {
   dash: 'solid',
   arrow: 'end',
   shape: 'orthogonal',
+  labelSize: 16,
+  labelColor: 'auto',
+  labelBg: 'auto',
+  labelBold: false,
+  labelPos: 50,
 }
 
 /** 色票（顏色欄位的快速選項）。'none' 表示透明（只用在底色與框線）。 */
