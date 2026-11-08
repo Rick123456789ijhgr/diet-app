@@ -51,6 +51,12 @@ export const routes = [
           Component: (await import('@/pages/results/ResultsPage')).ResultsPage,
         }),
       },
+      { path: 'arch', element: <Navigate to="/arch/diagram" replace /> },
+      {
+        // 專案架構圖：純前端（存在瀏覽器），目前看的圖在 ?d= 參數
+        path: 'arch/diagram',
+        lazy: async () => ({ Component: (await import('@/pages/arch/ArchPage')).ArchPage }),
+      },
       // 舊網址（原本各自是獨立頁面）導向合併後的頁面
       ...Object.entries(OLD_M1_PATHS).map(([old, to]) => ({
         path: `m1/${old}`,

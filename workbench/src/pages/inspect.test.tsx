@@ -138,7 +138,7 @@ describe('外框', () => {
     renderAt('/m2')
     expect(await screen.findByText('條碼、發票、營養標示尚無工具。')).toBeInTheDocument()
     const rail = screen.getByRole('navigation', { name: '模組清單' })
-    expect(within(rail).getAllByRole('link')).toHaveLength(7)
+    expect(within(rail).getAllByRole('link')).toHaveLength(8)
     expect(within(rail).getByRole('link', { name: '冷啟動上傳' })).toHaveAttribute(
       'href',
       '/coldstart',
@@ -148,7 +148,7 @@ describe('外框', () => {
   it('總覽列出各模組的工具', () => {
     renderAt('/')
     expect(screen.getByText('影像前處理')).toBeInTheDocument()
-    // 模組一的三個工具（單張檢視、多張測試、實驗結果），另有冷啟動的上傳清單
-    expect(screen.getAllByText('可用')).toHaveLength(4)
+    // 模組一的三個工具（單張檢視、多張測試、實驗結果），另有冷啟動的上傳清單、專案架構圖
+    expect(screen.getAllByText('可用')).toHaveLength(5)
   })
 })
