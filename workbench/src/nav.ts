@@ -7,11 +7,13 @@ import {
   Images,
   LayoutDashboard,
   ListChecks,
+  Network,
   type LucideIcon,
   PackagePlus,
   ScanSearch,
   ScanText,
   Trophy,
+  Workflow,
 } from 'lucide-react'
 
 /** 模組內的一個工具頁；slug 為網址的第二段（/模組 id/slug）。 */
@@ -128,6 +130,24 @@ export const MODULES: Module[] = [
         icon: ListChecks,
         description: '新增上傳、上傳三種照片、人工確認並寫入產品資料庫；以條碼查產品。',
         stage: 5,
+        ready: true,
+      },
+    ],
+  },
+  {
+    id: 'arch',
+    short: '架構',
+    name: '專案架構',
+    icon: Network,
+    description: '逐層放大的專案架構圖（類似 C4 Model），可拖曳編輯並匯出成簡報樣式的圖片。',
+    tools: [
+      {
+        slug: 'diagram',
+        name: '架構圖',
+        icon: Workflow,
+        description:
+          '服務 → 元件 → 模組流程逐層點進去看；編輯模式可拖曳元件、拉線連接，匯出 PNG／SVG／JSON。',
+        stage: 2,
         ready: true,
       },
     ],

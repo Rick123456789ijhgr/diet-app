@@ -24,6 +24,13 @@ const OLD_M1_PATHS: Record<string, string> = {
  */
 export const routes = [
   {
+    // 架構圖編輯器：從檢視頁以新分頁開啟的全頁編輯介面，不套工作台外框
+    path: 'arch/edit',
+    lazy: async () => ({
+      Component: (await import('@/pages/arch/ArchEditorPage')).ArchEditorPage,
+    }),
+  },
+  {
     element: <AppShell />,
     children: [
       { index: true, element: <HomePage /> },
@@ -50,6 +57,12 @@ export const routes = [
         lazy: async () => ({
           Component: (await import('@/pages/results/ResultsPage')).ResultsPage,
         }),
+      },
+      { path: 'arch', element: <Navigate to="/arch/diagram" replace /> },
+      {
+        // 專案架構圖（只顯示成品）：純前端（存在瀏覽器），目前看的圖在 ?d= 參數；編輯器見上方 arch/edit
+        path: 'arch/diagram',
+        lazy: async () => ({ Component: (await import('@/pages/arch/ArchPage')).ArchPage }),
       },
       // 舊網址（原本各自是獨立頁面）導向合併後的頁面
       ...Object.entries(OLD_M1_PATHS).map(([old, to]) => ({
