@@ -72,7 +72,9 @@ describe('架構圖・編輯器', () => {
     expect(screen.queryByRole('navigation', { name: '模組清單' })).not.toBeInTheDocument()
     expect(screen.getByRole('complementary', { name: '屬性' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '名稱' })).toHaveValue('飲食紀錄 APP')
-    expect(screen.getByLabelText('縮放比例')).toHaveTextContent('100%')
+    // 初始縮放不超過 80%，四周留白
+    expect(screen.getByLabelText('縮放比例')).toHaveTextContent('80%')
+    expect(screen.getByRole('toolbar', { name: '工具' })).toBeInTheDocument()
   })
 
   it('改標題、復原／重做、新增與刪除元件，並存回瀏覽器', async () => {
@@ -94,7 +96,7 @@ describe('架構圖・編輯器', () => {
     await user.click(screen.getByRole('button', { name: '重做' }))
     expect(nodeBtn('品質評估')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '新增元件' }))
+    await user.click(screen.getByRole('button', { name: '新增矩形' }))
     expect(nodeBtn('新元件')).toBeInTheDocument()
     await user.keyboard('{Delete}')
     expect(within(canvas()).queryByRole('button', { name: '新元件' })).not.toBeInTheDocument()
@@ -126,6 +128,118 @@ describe('架構圖・編輯器', () => {
     expect(nodeBtn('輸入')).toBeInTheDocument()
   })
 
+  it('外觀：改形狀、底色、圓角與字級', async () => {
+    const user = userEvent.setup()
+    renderAt('/arch/edit?d=m1')
+    await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
+    fireEvent.pointerDown(nodeBtn('影像輸入'))
+    const saved = () =>
+      JSON.parse(localStorage.getItem(STORAGE_KEY)!).diagrams.m1.nodes.find(
+        (x: { id: string }) => x.id === 'in',
+      ).style
+    await user.click(within(screen.getByRole('group', { name: '底色' })).getByLabelText('#2563eb'))
+    expect(saved().fill).toBe('#2563eb')
+    const radius = screen.getByRole('spinbutton', { name: '圓角' })
+    await user.clear(radius)
+    await user.type(radius, '16')
+    expect(saved().radius).toBe(16)
+    const size = screen.getByRole('spinbutton', { name: '標題字級' })
+    await user.clear(size)
+    await user.type(size, '24')
+    expect(saved().titleSize).toBe(24)
+    // 換成橢圓：圓角與對齊只有矩形有
+    await user.click(within(screen.getByRole('group', { name: '形狀' })).getByLabelText('橢圓'))
+    expect(saved()).toMatchObject({ shape: 'ellipse', align: 'center' })
+    expect(screen.queryByRole('spinbutton', { name: '圓角' })).not.toBeInTheDocument()
+  })
+
+  it('從定位點拖到另一個元件的定位點：連線固定在這兩邊', async () => {
+    renderAt('/arch/edit?d=m1')
+    await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
+    fireEvent.pointerDown(nodeBtn('影像輸入'))
+    fireEvent.pointerUp(canvas())
+    fireEvent.pointerDown(screen.getByTestId('anchor-in-main-bottom'))
+    // 測試環境沒有版面大小：畫面座標＝畫布座標 × 0.8 ＋ 60（fitView 的退路）
+    // 「測試輸入」上緣的定位點在 (120, 580)
+    fireEvent.pointerUp(canvas(), { clientX: 120 * 0.8 + 60, clientY: 580 * 0.8 + 60 })
+    expect(screen.getByText('影像輸入（下緣）')).toBeInTheDocument()
+    expect(screen.getByText('測試輸入（上緣）')).toBeInTheDocument()
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!).diagrams.m1.edges
+    expect(saved.at(-1)).toMatchObject({
+      from: { node: 'in', part: 'main', side: 'bottom' },
+      to: { node: 'test', part: 'main', side: 'top' },
+    })
+  })
+
+  it('線條工具（L）：拉到空白處成為自由端點，Esc 回到選取', async () => {
+    const user = userEvent.setup()
+    renderAt('/arch/edit?d=m1')
+    await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
+    await user.keyboard('l')
+    expect(screen.getByRole('button', { name: '線條' })).toHaveAttribute('aria-pressed', 'true')
+    // 從「模組二」（1340, 300）的主體拉到空白處 (1800, 700)
+    fireEvent.pointerDown(nodeBtn('模組二'), { clientX: 1400 * 0.8 + 60, clientY: 380 * 0.8 + 60 })
+    fireEvent.pointerUp(canvas(), { clientX: 1803 * 0.8 + 60, clientY: 697 * 0.8 + 60 })
+    expect(screen.getByText('自由端點（1800, 700）')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('button', { name: '選取' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('「進入細部圖」與刪除固定在屬性面板最上方', async () => {
+    const user = userEvent.setup()
+    renderAt('/arch/edit')
+    await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
+    fireEvent.pointerDown(nodeBtn('Python 外掛'))
+    const panel = screen.getByRole('complementary', { name: '屬性' })
+    const drill = within(panel).getByRole('button', { name: '進入細部圖' })
+    const firstField = within(panel).getByRole('textbox', { name: '小標' })
+    // 在所有欄位之前（不用往下捲）
+    expect(
+      drill.compareDocumentPosition(firstField) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(within(panel).getByRole('button', { name: '刪除元件' })).toBeInTheDocument()
+    await user.click(drill)
+    expect(crumbs()).toEqual(['飲食紀錄 APP', 'Python 外掛'])
+  })
+
+  it('連線標籤：文字、字級、粗體、位置與顏色', async () => {
+    const user = userEvent.setup()
+    renderAt('/arch/edit')
+    await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
+    fireEvent.pointerDown(screen.getByTestId('edge-app>api'))
+    const saved = () =>
+      JSON.parse(localStorage.getItem(STORAGE_KEY)!).diagrams.system.edges.find(
+        (x: { id: string }) => x.id === 'app>api',
+      )
+    const text = screen.getByRole('textbox', { name: '文字' })
+    await user.clear(text)
+    await user.type(text, 'HTTPS')
+    const size = screen.getByRole('spinbutton', { name: '標籤字級' })
+    await user.clear(size)
+    await user.type(size, '22')
+    await user.click(screen.getByRole('radio', { name: '粗體' }))
+    screen.getByRole('slider', { name: '標籤位置' }).focus()
+    await user.keyboard('{ArrowRight}{ArrowRight}')
+    await user.click(
+      within(screen.getByRole('group', { name: '標籤文字顏色' })).getByLabelText('#d9502f'),
+    )
+    await user.click(within(screen.getByRole('group', { name: '標籤底色' })).getByLabelText('透明'))
+    expect(saved()).toMatchObject({
+      label: 'HTTPS',
+      style: {
+        labelSize: 22,
+        labelBold: true,
+        labelPos: 60,
+        labelColor: '#d9502f',
+        labelBg: 'none',
+      },
+    })
+    // 畫布上的標籤跟著變
+    const label = within(canvas()).getByText('HTTPS')
+    expect(label).toHaveAttribute('font-size', '22')
+    expect(label).toHaveAttribute('fill', '#d9502f')
+  })
+
   it('選取連線可改路線、刪除', async () => {
     const user = userEvent.setup()
     renderAt('/arch/edit?d=m1')
@@ -134,6 +248,15 @@ describe('架構圖・編輯器', () => {
     expect(screen.getByRole('radio', { name: '先垂直' })).toHaveAttribute('data-state', 'on')
     await user.click(screen.getByRole('radio', { name: '自動' }))
     expect(screen.getByRole('radio', { name: '自動' })).toHaveAttribute('data-state', 'on')
+    // 樣式：虛線、雙向箭頭、曲線（曲線時沒有「轉彎」）
+    await user.click(screen.getByRole('radio', { name: '虛線' }))
+    await user.click(screen.getByRole('radio', { name: '雙向' }))
+    await user.click(screen.getByRole('radio', { name: '曲線' }))
+    expect(screen.queryByRole('radio', { name: '先垂直' })).not.toBeInTheDocument()
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!).diagrams.m1.edges.find(
+      (x: { id: string }) => x.id === 'quality.accent>strategy',
+    )
+    expect(saved.style).toMatchObject({ dash: 'dashed', arrow: 'both', shape: 'curved' })
     await user.click(screen.getByRole('button', { name: '刪除連線' }))
     expect(screen.queryByTestId('edge-quality.accent>strategy')).not.toBeInTheDocument()
   })

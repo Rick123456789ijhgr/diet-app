@@ -1,6 +1,7 @@
 // 架構圖編輯器（/arch/edit，在新分頁開啟、不套工作台外框）：類似 IcePanel 的全頁編輯介面。
-//   ┌ 頂列：名稱・層級路徑                    復原 重做｜新增元件 匯出 匯入｜完成 ┐
-//   │ 無限畫布（點點格子）                                         │ 屬性面板 │
+//   ┌ 頂列：名稱・層級路徑                              復原 重做｜匯出 匯入｜完成 ┐
+//   │ ┌工具┐ 無限畫布（點點格子）                                 │ 屬性面板 │
+//   │ └────┘                                                       │          │
 //   └──────────────────────────────────────────────────────────────┴──────────┘
 // 文件存在 localStorage，工作台的檢視頁會即時更新。
 import {
@@ -11,10 +12,11 @@ import {
   FileCode2,
   FileJson,
   Image as ImageIcon,
+  MousePointer2,
   Network,
-  Plus,
   Redo2,
   RotateCcw,
+  Spline,
   Undo2,
   Upload,
   X,
@@ -26,25 +28,28 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { Button, Hint } from '@/components/ui/primitives'
 import { toMermaid } from '@/lib/arch/mermaid'
 import {
-  bounds,
+  type Diagram,
   type EdgeEnd,
   freeSpot,
   GRID,
+  newEdge,
   newNode,
+  type NodeShapeKind,
   parseDoc,
   pathTo,
+  SHAPES,
   snap,
   uid,
-  type Diagram,
 } from '@/lib/arch/model'
 import { sampleDoc } from '@/lib/arch/sample'
 import { ARCH } from '@/lib/arch/theme'
+import { cn } from '@/lib/cn'
 import { downloadBlob } from '@/lib/download'
 
 import { Breadcrumb } from './ArchPage'
-import { PADDING, serializeSvg, StaticDiagram, svgToPng } from './DiagramSvg'
-import { type CanvasApi, EditorCanvas, type Selection } from './EditorCanvas'
-import { DiagramInspector, EdgeInspector, NodeInspector } from './Inspector'
+import { serializeSvg, StaticDiagram, staticBox, svgToPng } from './DiagramSvg'
+import { type CanvasApi, EditorCanvas, type Selection, type Tool } from './EditorCanvas'
+import { DiagramInspector, EdgeInspector, NodeInspector, ShapeIcon } from './Inspector'
 import { useArchDoc } from './useArchDoc'
 
 /** 鍵盤事件來自輸入框時不處理快捷鍵（避免打字時刪掉元件）。 */
@@ -62,6 +67,7 @@ export function ArchEditorPage() {
   const navigate = useNavigate()
   const diagram = doc.diagrams[params.get('d') ?? ''] ?? doc.diagrams[doc.root]! // 最上層一定存在
   const [rawSelection, setSelection] = useState<Selection>(null)
+  const [tool, setTool] = useState<Tool>('select')
   const [error, setError] = useState<string | null>(null)
   const canvas = useRef<CanvasApi>(null)
   const exportSvgRef = useRef<SVGSVGElement>(null)
@@ -94,20 +100,21 @@ export function ArchEditorPage() {
     if (child && doc.diagrams[child]) go(child)
   }
 
-  function addNodeAt(p: { x: number; y: number }, exact = false) {
+  /** 新增元件：exact 時以 p 為中心（點兩下空白處），否則在 p 附近找空位（工具列）。 */
+  function addNodeAt(p: { x: number; y: number }, exact = false, shape: NodeShapeKind = 'rect') {
     const id = uid('n')
-    const pos = exact ? { x: snap(p.x - 120), y: snap(p.y - 80) } : freeSpot(diagram, p)
-    apply({ type: 'addNode', diagram: diagram.id, node: { ...newNode(id, 0, 0), ...pos } })
+    const node = newNode(id, 0, 0, shape)
+    const pos = exact
+      ? { x: snap(p.x - node.w / 2), y: snap(p.y - node.h / 2) }
+      : freeSpot(diagram, p, node)
+    apply({ type: 'addNode', diagram: diagram.id, node: { ...node, ...pos } })
     setSelection({ kind: 'node', id })
+    setTool('select')
   }
 
   function connect(from: EdgeEnd, to: EdgeEnd) {
     const id = uid('e')
-    apply({
-      type: 'addEdge',
-      diagram: diagram.id,
-      edge: { id, from, to, route: 'auto', label: '' },
-    })
+    apply({ type: 'addEdge', diagram: diagram.id, edge: newEdge(id, from, to) })
     setSelection({ kind: 'edge', id })
   }
 
@@ -120,8 +127,8 @@ export function ArchEditorPage() {
   function svgText(): { text: string; w: number; h: number } | undefined {
     const svg = exportSvgRef.current
     if (!svg) return undefined
-    const b = bounds(diagram.nodes)
-    return { text: serializeSvg(svg), w: b.w + PADDING * 2, h: b.h + PADDING * 2 }
+    const b = staticBox(diagram)
+    return { text: serializeSvg(svg), w: b.w, h: b.h }
   }
 
   async function exportPng() {
@@ -190,11 +197,19 @@ export function ArchEditorPage() {
       removeSelected()
     } else if (e.key === 'Escape') {
       const trail = pathTo(doc, diagram.id)
-      if (selection) setSelection(null)
+      if (tool !== 'select') setTool('select')
+      else if (selection) setSelection(null)
       else if (trail.length > 1) go(trail.at(-2)?.diagram.id)
     } else if (e.shiftKey && e.code === 'Digit1') {
       e.preventDefault()
       canvas.current?.fit()
+    } else if (e.shiftKey && e.code === 'Digit2') {
+      e.preventDefault()
+      canvas.current?.recenter()
+    } else if (!mod && !e.shiftKey && e.key.toLowerCase() === 'v') {
+      setTool('select')
+    } else if (!mod && !e.shiftKey && e.key.toLowerCase() === 'l') {
+      setTool('line')
     } else if (arrows[e.key] && node) {
       e.preventDefault()
       const [dx, dy] = arrows[e.key]!
@@ -250,10 +265,6 @@ export function ArchEditorPage() {
             </Button>
           </Hint>
           <span className="bg-card-border mx-1 h-5 w-px" aria-hidden />
-          <Button size="sm" onClick={() => addNodeAt(canvas.current?.center() ?? { x: 0, y: 0 })}>
-            <Plus className="size-3.5" aria-hidden />
-            新增元件
-          </Button>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <Button size="sm">
@@ -326,10 +337,11 @@ export function ArchEditorPage() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <main className="min-w-0 flex-1">
+        <main className="relative min-w-0 flex-1">
           <EditorCanvas
             diagram={diagram}
             selection={selection}
+            tool={tool}
             apiRef={canvas}
             onSelect={setSelection}
             onDragStart={checkpoint}
@@ -339,10 +351,57 @@ export function ArchEditorPage() {
             onResize={(id, w, h) =>
               apply({ type: 'updateNode', diagram: diagram.id, node: id, patch: { w, h } }, false)
             }
-            onConnect={connect}
+            onCreateEdge={connect}
+            onUpdateEdge={(id, which, end) =>
+              apply(
+                { type: 'updateEdge', diagram: diagram.id, edge: id, patch: { [which]: end } },
+                false,
+              )
+            }
             onDrill={drill}
             onAddAt={(p) => addNodeAt(p, true)}
           />
+          {/* 左側工具列：選取、線條、各種形狀（點了在畫面中央附近的空位新增） */}
+          <div
+            role="toolbar"
+            aria-label="工具"
+            aria-orientation="vertical"
+            className="bg-card shadow-card absolute top-3 left-3 flex flex-col gap-0.5 rounded-xl p-1"
+          >
+            <ToolButton
+              label="選取"
+              shortcut="V"
+              pressed={tool === 'select'}
+              onClick={() => setTool('select')}
+            >
+              <MousePointer2 className="size-[18px]" aria-hidden />
+            </ToolButton>
+            <ToolButton
+              label="線條"
+              shortcut="L"
+              pressed={tool === 'line'}
+              onClick={() => setTool(tool === 'line' ? 'select' : 'line')}
+            >
+              <Spline className="size-[18px]" aria-hidden />
+            </ToolButton>
+            <span className="bg-card-border mx-1.5 my-1 h-px" aria-hidden />
+            {SHAPES.map((sh) => (
+              <ToolButton
+                key={sh.value}
+                label={`新增${sh.label}`}
+                onClick={() =>
+                  addNodeAt(canvas.current?.center() ?? { x: 0, y: 0 }, false, sh.value)
+                }
+              >
+                <ShapeIcon shape={sh.value} />
+              </ToolButton>
+            ))}
+          </div>
+          {tool === 'line' && (
+            <p className="bg-ink text-on-ink pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-xs">
+              從任意處拖到另一處畫線；靠近定位點會自動吸附。按 Esc 或 V 結束。
+            </p>
+          )}
         </main>
         <aside
           aria-label="屬性"
@@ -380,6 +439,37 @@ export function ArchEditorPage() {
         />
       </div>
     </div>
+  )
+}
+
+function ToolButton({
+  label,
+  shortcut,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string
+  shortcut?: string
+  pressed?: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Hint text={shortcut ? `${label}（${shortcut}）` : label} side="right">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        onClick={onClick}
+        className={cn(
+          'text-ink-2 hover:bg-hover hover:text-ink focus-visible:ring-primary/40 inline-flex size-9 items-center justify-center rounded-lg focus-visible:ring-2 focus-visible:outline-none',
+          pressed && 'bg-ink text-on-ink hover:bg-ink hover:text-on-ink',
+        )}
+      >
+        {children}
+      </button>
+    </Hint>
   )
 }
 

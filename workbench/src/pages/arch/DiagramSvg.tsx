@@ -1,46 +1,51 @@
-// 架構圖的 SVG 畫法（檢視頁、編輯器、匯出共用）：元件、連線、箭頭，以及縮放到內容大小的靜態圖。
+// 架構圖的 SVG 畫法（檢視頁、編輯器、匯出共用）：元件（五種形狀）、連線（三種樣式）、箭頭，
+// 以及縮放到內容大小的靜態圖。
 import type { ReactNode, Ref, SVGProps } from 'react'
 
 import {
-  edgePoints,
+  type EdgeGeometry,
   fitFontSize,
-  labelPoint,
+  layoutEdges,
   partRect,
-  roundedPath,
   textWidth,
 } from '@/lib/arch/geometry'
-import { type ArchEdge, type ArchNode, bounds, type Diagram, hasAccent } from '@/lib/arch/model'
+import {
+  type ArchEdge,
+  type ArchNode,
+  bounds,
+  type Diagram,
+  type EdgeStyle,
+  hasAccent,
+} from '@/lib/arch/model'
 import { ARCH } from '@/lib/arch/theme'
 
-export const EDGE_WIDTH = 3
-
-/** 掛在元件外層 <g> 的屬性（含 data-* 屬性）。 */
-export type NodeGProps = SVGProps<SVGGElement> & { [key: `data-${string}`]: string | undefined }
 /** 靜態圖（檢視頁、匯出）在內容外留的邊（px）。 */
 export const PADDING = 60
 
-/** 同一頁可能同時有多張 SVG（例如編輯器＋隱藏的匯出用圖），箭頭的 id 要各自不同。 */
-export function markerIds(prefix: string) {
-  const safe = prefix.replace(/[^a-zA-Z0-9]/g, '')
-  return { arrow: `${safe}-arrow`, arrowSel: `${safe}-arrow-sel` }
+/** 掛在元件外層 <g> 的屬性（含 data-* 屬性）。 */
+export type NodeGProps = SVGProps<SVGGElement> & { [key: `data-${string}`]: string | undefined }
+
+/** 箭頭的 id：每種顏色一個（marker 的顏色無法跟著線變），前綴區分同一頁的多張 SVG。 */
+export function arrowId(prefix: string, color: string): string {
+  return `${prefix.replace(/[^a-zA-Z0-9]/g, '')}-arrow-${color.replace(/[^a-zA-Z0-9]/g, '')}`
 }
 
-export function ArrowDefs({ ids }: { ids: ReturnType<typeof markerIds> }) {
+/** 這張圖用到的所有箭頭顏色（含選取色）。 */
+export function ArrowDefs({ prefix, edges }: { prefix: string; edges: ArchEdge[] }) {
+  const colors = [...new Set([ARCH.select, ...edges.map((e) => e.style.color)])]
   return (
     <defs>
-      {[
-        [ids.arrow, ARCH.edge],
-        [ids.arrowSel, ARCH.select],
-      ].map(([id, color]) => (
+      {colors.map((color) => (
         <marker
-          key={id}
-          id={id}
+          key={color}
+          id={arrowId(prefix, color)}
           viewBox="0 0 12 12"
-          refX="11"
+          refX="10"
           refY="6"
-          markerWidth="12"
-          markerHeight="12"
-          markerUnits="userSpaceOnUse"
+          // 以線寬為單位：粗線的箭頭跟著變大
+          markerWidth="4.2"
+          markerHeight="4.2"
+          markerUnits="strokeWidth"
           orient="auto-start-reverse"
         >
           <path d="M0 0 L12 6 L0 12 Z" fill={color} />
@@ -50,42 +55,65 @@ export function ArrowDefs({ ids }: { ids: ReturnType<typeof markerIds> }) {
   )
 }
 
-/** 一條連線（折線＋箭頭＋標籤）。labelBg 為標籤底色（與畫布同色，蓋住線）。 */
+function dashArray(s: EdgeStyle): string | undefined {
+  if (s.dash === 'dashed') return `${s.width * 3} ${s.width * 2}`
+  if (s.dash === 'dotted') return `0 ${s.width * 2}`
+  return undefined
+}
+
+/** 一條連線（路徑＋箭頭＋標籤）。canvasBg 為畫布底色（標籤底色選「自動」時用它蓋住線）。 */
 export function EdgeShape({
-  diagram,
   edge: e,
-  ids,
+  geometry: g,
+  prefix,
   selected,
-  labelBg,
+  canvasBg,
 }: {
-  diagram: Diagram
   edge: ArchEdge
-  ids: ReturnType<typeof markerIds>
+  geometry: EdgeGeometry | undefined
+  prefix: string
   selected?: boolean
-  labelBg: string
+  canvasBg: string
 }) {
-  const pts = edgePoints(diagram.nodes, e)
-  if (!pts) return null
-  const lp = labelPoint(pts)
-  const lw = e.label ? textWidth(e.label, 16) + 16 : 0
+  if (!g) return null
+  const s = e.style
+  const color = selected ? ARCH.select : s.color
+  const marker = `url(#${arrowId(prefix, color)})`
+  const textColor = s.labelColor === 'auto' ? s.color : s.labelColor
+  const bg = s.labelBg === 'auto' ? canvasBg : s.labelBg
+  const lw = e.label ? textWidth(e.label, s.labelSize) + s.labelSize : 0
+  const lh = s.labelSize * 1.6
   return (
     <g>
       <path
-        d={roundedPath(pts)}
+        d={g.d}
         fill="none"
-        stroke={selected ? ARCH.select : ARCH.edge}
-        strokeWidth={EDGE_WIDTH}
+        stroke={color}
+        strokeWidth={s.width}
+        strokeDasharray={dashArray(s)}
+        strokeLinecap={s.dash === 'dotted' ? 'round' : 'butt'}
         strokeLinejoin="round"
-        markerEnd={`url(#${selected ? ids.arrowSel : ids.arrow})`}
+        markerEnd={s.arrow === 'end' || s.arrow === 'both' ? marker : undefined}
+        markerStart={s.arrow === 'start' || s.arrow === 'both' ? marker : undefined}
       />
       {e.label && (
         <g>
-          <rect x={lp.x - lw / 2} y={lp.y - 13} width={lw} height={26} rx={4} fill={labelBg} />
+          {bg !== 'none' && (
+            <rect
+              x={g.label.x - lw / 2}
+              y={g.label.y - lh / 2}
+              width={lw}
+              height={lh}
+              rx={4}
+              fill={bg}
+            />
+          )}
           <text
-            x={lp.x}
-            y={lp.y}
-            fontSize={16}
-            fill={ARCH.edgeLabel}
+            x={g.label.x}
+            y={g.label.y}
+            fontSize={s.labelSize}
+            fontWeight={s.labelBold ? 700 : 400}
+            fill={textColor}
             textAnchor="middle"
             dominantBaseline="central"
           >
@@ -97,9 +125,105 @@ export function EdgeShape({
   )
 }
 
+/** 各角圓角可不同的矩形路徑（主圖形接強調塊時，相接那側不圓角）。 */
+function roundedRect(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  [tl, tr, br, bl]: [number, number, number, number],
+): string {
+  const m = Math.min(w, h) / 2
+  const [a, b, c, d] = [tl, tr, br, bl].map((r) => Math.min(r, m)) as [
+    number,
+    number,
+    number,
+    number,
+  ]
+  return [
+    `M${x + a} ${y}`,
+    `H${x + w - b}`,
+    b ? `A${b} ${b} 0 0 1 ${x + w} ${y + b}` : '',
+    `V${y + h - c}`,
+    c ? `A${c} ${c} 0 0 1 ${x + w - c} ${y + h}` : '',
+    `H${x + d}`,
+    d ? `A${d} ${d} 0 0 1 ${x} ${y + h - d}` : '',
+    `V${y + a}`,
+    a ? `A${a} ${a} 0 0 1 ${x + a} ${y}` : '',
+    'Z',
+  ].join(' ')
+}
+
+/** 主圖形的外框（依形狀）。 */
+function MainShape({ node: n }: { node: ArchNode }) {
+  const s = n.style
+  const paint = {
+    fill: s.fill,
+    stroke: s.strokeWidth > 0 ? s.stroke : 'none',
+    strokeWidth: s.strokeWidth,
+    // 透明底色時內部也要能點選
+    pointerEvents: 'all' as const,
+  }
+  const { x, y, w, h } = n
+  switch (s.shape) {
+    case 'ellipse':
+      return <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} {...paint} />
+    case 'diamond':
+      return (
+        <polygon
+          points={`${x + w / 2},${y} ${x + w},${y + h / 2} ${x + w / 2},${y + h} ${x},${y + h / 2}`}
+          {...paint}
+        />
+      )
+    case 'hexagon': {
+      const i = Math.min(w * 0.22, h / 2)
+      return (
+        <polygon
+          points={`${x + i},${y} ${x + w - i},${y} ${x + w},${y + h / 2} ${x + w - i},${y + h} ${x + i},${y + h} ${x},${y + h / 2}`}
+          {...paint}
+        />
+      )
+    }
+    case 'cylinder': {
+      const ry = Math.min(h * 0.12, 22)
+      const rx = w / 2
+      return (
+        <g>
+          <path
+            d={`M${x} ${y + ry} A${rx} ${ry} 0 0 1 ${x + w} ${y + ry} V${y + h - ry} A${rx} ${ry} 0 0 1 ${x} ${y + h - ry} Z`}
+            {...paint}
+          />
+          {/* 頂面的下緣弧線 */}
+          <path
+            d={`M${x} ${y + ry} A${rx} ${ry} 0 0 0 ${x + w} ${y + ry}`}
+            fill="none"
+            stroke={s.strokeWidth > 0 ? s.stroke : s.textColor}
+            strokeOpacity={s.strokeWidth > 0 ? 1 : 0.35}
+            strokeWidth={Math.max(s.strokeWidth, 1)}
+          />
+        </g>
+      )
+    }
+    default: {
+      const r = s.radius
+      const corners: [number, number, number, number] = hasAccent(n) ? [r, 0, 0, r] : [r, r, r, r]
+      return <path d={roundedRect(x, y, w, h, corners)} {...paint} />
+    }
+  }
+}
+
+/** 形狀內可放文字的寬度比例（橢圓、菱形邊緣內縮）。 */
+const TEXT_WIDTH_RATIO: Record<ArchNode['style']['shape'], number> = {
+  rect: 1,
+  ellipse: 0.72,
+  diamond: 0.56,
+  cylinder: 0.9,
+  hexagon: 0.72,
+}
+
 /**
- * 一個元件（主方塊＋強調塊）。gProps 掛在外層 <g>（事件、role 等）；
- * children 畫在元件上層（編輯器的選取框與把手、檢視頁的 <title> 提示）。
+ * 一個元件（主圖形＋強調塊）。gProps 掛在外層 <g>（事件、role 等）；
+ * children 畫在元件上層（編輯器的選取框與定位點、檢視頁的 <title> 提示）。
  */
 export function NodeShape({
   node: n,
@@ -110,48 +234,64 @@ export function NodeShape({
   gProps?: NodeGProps
   children?: ReactNode
 }) {
-  // 字級依方塊高度等比縮放（參考尺寸為高 160）
-  const k = Math.min(1.3, Math.max(0.6, n.h / 160))
-  const pad = 28 * k
-  const titleSize = fitFontSize(n.title, 30 * k, n.w - pad * 2, 12)
-  const titleY = n.kicker ? n.y + n.h * 0.68 : n.y + n.h / 2 + titleSize * 0.36
+  const s = n.style
+  const left = s.shape === 'rect' && s.align === 'left'
+  const pad = left ? Math.max(16, Math.min(28, n.w * 0.12)) : 12
+  const inner = n.w * TEXT_WIDTH_RATIO[s.shape] - pad * 2
+  const titleSize = fitFontSize(n.title, s.titleSize, inner)
+  const kickerSpacing = s.kickerSize * 0.25
+  const kickerSize = n.kicker ? fitFontSize(n.kicker, s.kickerSize, inner, 8, kickerSpacing) : 0
+  // 小標＋標題當成一個區塊，在圖形內垂直置中（圓柱扣掉頂面）
+  const top = s.shape === 'cylinder' ? Math.min(n.h * 0.12, 22) : 0
+  const gap = n.kicker ? Math.round(titleSize * 0.35) : 0
+  const blockH = kickerSize + gap + titleSize
+  const blockTop = n.y + top + (n.h - top - blockH) / 2
+  const kickerY = blockTop + kickerSize * 0.85
+  const titleY = blockTop + kickerSize + gap + titleSize * 0.85
+  const tx = left ? n.x + pad : n.x + n.w / 2
+  const anchor = left ? 'start' : 'middle'
   const accent = hasAccent(n) ? partRect(n, 'accent') : null
-  const accentSize = accent ? fitFontSize(n.accent, 26 * k, accent.w - 20, 12) : 0
+  const accentSize = accent ? fitFontSize(n.accent, s.titleSize * 0.87, accent.w - 20) : 0
+  const r = s.shape === 'rect' ? Math.min(s.radius, n.h / 2) : 0
+
   return (
     <g {...gProps}>
-      <rect
-        x={n.x}
-        y={n.y}
-        width={n.w}
-        height={n.h}
-        fill={ARCH.node}
-        stroke={ARCH.nodeStroke}
-        strokeWidth={1}
-      />
+      <MainShape node={n} />
       {n.kicker && (
         <text
-          x={n.x + pad}
-          y={n.y + n.h * 0.38}
-          fontSize={20 * k}
-          letterSpacing={5 * k}
+          x={tx}
+          y={kickerY}
+          fontSize={kickerSize}
+          letterSpacing={kickerSpacing}
           fontWeight={700}
-          fill={ARCH.kicker}
+          fill={s.kickerColor}
+          textAnchor={anchor}
         >
           {n.kicker}
         </text>
       )}
-      <text x={n.x + pad} y={titleY} fontSize={titleSize} fontWeight={900} fill={ARCH.title}>
+      <text
+        x={tx}
+        y={titleY}
+        fontSize={titleSize}
+        fontWeight={900}
+        fill={s.textColor}
+        textAnchor={anchor}
+      >
         {n.title}
       </text>
       {accent && (
         <g>
-          <rect x={accent.x} y={accent.y} width={accent.w} height={accent.h} fill={ARCH.accent} />
+          <path
+            d={roundedRect(accent.x, accent.y, accent.w, accent.h, [0, r, r, 0])}
+            fill={s.accentFill}
+          />
           <text
             x={accent.x + accent.w / 2}
             y={accent.y + accent.h / 2}
             fontSize={accentSize}
             fontWeight={900}
-            fill={ARCH.accentText}
+            fill={s.accentText}
             textAnchor="middle"
             dominantBaseline="central"
           >
@@ -166,16 +306,18 @@ export function NodeShape({
 
 /** 細部圖圖示（右上角兩個疊起的方塊），表示可以點進去。 */
 export function DrillIcon({ node: n }: { node: ArchNode }) {
+  const c = n.style.kickerColor
+  const inset = n.style.shape === 'rect' ? 12 + Math.min(n.style.radius, 24) * 0.3 : n.h * 0.18
   return (
-    <g transform={`translate(${n.x + n.w - 34} ${n.y + 12})`} pointerEvents="none">
-      <rect x={7} y={2} width={13} height={13} fill="none" stroke={ARCH.kicker} strokeWidth={2} />
+    <g transform={`translate(${n.x + n.w - 22 - inset} ${n.y + inset})`} pointerEvents="none">
+      <rect x={7} y={2} width={13} height={13} fill="none" stroke={c} strokeWidth={2} />
       <rect
         x={2}
         y={7}
         width={13}
         height={13}
-        fill={ARCH.node}
-        stroke={ARCH.kicker}
+        fill={n.style.fill === 'none' ? ARCH.canvas : n.style.fill}
+        stroke={c}
         strokeWidth={2}
       />
     </g>
@@ -205,9 +347,8 @@ export function StaticDiagram({
   nodeProps?: (n: ArchNode) => NodeGProps
   nodeChildren?: (n: ArchNode) => ReactNode
 } & SVGProps<SVGSVGElement>) {
-  const b = bounds(diagram.nodes)
-  const box = { x: b.x - PADDING, y: b.y - PADDING, w: b.w + PADDING * 2, h: b.h + PADDING * 2 }
-  const ids = markerIds(idPrefix)
+  const box = staticBox(diagram)
+  const geometries = layoutEdges(diagram.nodes, diagram.edges)
   return (
     <svg
       ref={svgRef}
@@ -218,10 +359,16 @@ export function StaticDiagram({
       fontFamily={ARCH.font}
       {...svgProps}
     >
-      <ArrowDefs ids={ids} />
+      <ArrowDefs prefix={idPrefix} edges={diagram.edges} />
       {background && <rect x={box.x} y={box.y} width={box.w} height={box.h} fill={background} />}
       {diagram.edges.map((e) => (
-        <EdgeShape key={e.id} diagram={diagram} edge={e} ids={ids} labelBg={labelBg} />
+        <EdgeShape
+          key={e.id}
+          edge={e}
+          geometry={geometries.get(e.id)}
+          prefix={idPrefix}
+          canvasBg={labelBg}
+        />
       ))}
       {diagram.nodes.map((n) => (
         <NodeShape key={n.id} node={n} gProps={nodeProps?.(n)}>
@@ -230,6 +377,12 @@ export function StaticDiagram({
       ))}
     </svg>
   )
+}
+
+/** 靜態圖的範圍：內容外框外加 PADDING。 */
+export function staticBox(d: Diagram) {
+  const b = bounds(d.nodes, d.edges)
+  return { x: b.x - PADDING, y: b.y - PADDING, w: b.w + PADDING * 2, h: b.h + PADDING * 2 }
 }
 
 /** SVG 元素轉成可下載的字串。 */

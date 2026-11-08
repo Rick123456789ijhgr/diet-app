@@ -1,6 +1,7 @@
 // 預設範例：本專案自己的架構，分三層（服務 → Python 外掛的元件 → 模組一的流程）。
 // 模組一那張的排法與簡報「05 — 各模組功能實作」第 20 頁相同。座標都在 20 px 格點上。
-import type { ArchDoc, ArchEdge, ArchNode, EdgeEnd, Route } from './model'
+import type { ArchDoc, ArchEdge, ArchNode, NodeEnd, NodeStyle, Route } from './model'
+import { DEFAULT_EDGE_STYLE, DEFAULT_NODE_STYLE } from './theme'
 
 const node = (
   id: string,
@@ -8,7 +9,7 @@ const node = (
   y: number,
   kicker: string,
   title: string,
-  extra: Partial<ArchNode> = {},
+  { style, ...extra }: Partial<Omit<ArchNode, 'style'>> & { style?: Partial<NodeStyle> } = {},
 ): ArchNode => ({
   id,
   x,
@@ -21,9 +22,10 @@ const node = (
   accentW: 160,
   note: '',
   ...extra,
+  style: { ...DEFAULT_NODE_STYLE, ...style },
 })
 
-const end = (ref: string): EdgeEnd => {
+const end = (ref: string): NodeEnd => {
   const [node = ref, part] = ref.split('.')
   return { node, part: part === 'accent' ? 'accent' : 'main' }
 }
@@ -34,10 +36,11 @@ const edge = (from: string, to: string, route: Route = 'auto', label = ''): Arch
   to: end(to),
   route,
   label,
+  style: { ...DEFAULT_EDGE_STYLE },
 })
 
-/** 服務層的元件較矮較寬。 */
-const svc = { w: 260, h: 140, accentW: 140 }
+/** 服務層的元件較矮較寬、字小一點。 */
+const svc = { w: 260, h: 140, accentW: 140, style: { titleSize: 26, kickerSize: 18 } }
 
 export function sampleDoc(): ArchDoc {
   return {
@@ -64,6 +67,8 @@ export function sampleDoc(): ArchDoc {
           }),
           node('db', 1300, 0, 'DATA', '資料庫', {
             ...svc,
+            w: 220,
+            style: { ...svc.style, shape: 'cylinder', align: 'center' },
             note: 'Postgres（產品、營養、紀錄）與 MinIO（照片）。Python 只能用唯讀帳號讀 view。',
           }),
           node('workbench', 360, 260, 'DEV', '開發工作台', {
@@ -78,6 +83,7 @@ export function sampleDoc(): ArchDoc {
           }),
           node('llm', 1300, 520, 'EXTERNAL', 'LLM／VLM', {
             ...svc,
+            style: { ...svc.style, fill: '#3a4657', stroke: '#3a4657', radius: 20 },
             note: '外部模型。只在 Python 服務持有金鑰；輸出的數字不直接採用。',
           }),
         ],

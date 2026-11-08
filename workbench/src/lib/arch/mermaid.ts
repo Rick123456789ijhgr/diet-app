@@ -1,10 +1,20 @@
 // 把一張圖轉成 Mermaid flowchart 文字（可貼進 GitHub／Markdown）。
-// Mermaid 沒有「強調塊」的概念：強調塊寫進元件標籤的最後一行，接在強調塊上的連線改接元件本身。
-import { type Diagram, hasAccent } from './model'
+// - 強調塊寫進元件標籤的最後一行（Mermaid 沒有這個概念），接在強調塊上的連線改接元件本身。
+// - 形狀與線型盡量對應：橢圓→([ ])、菱形→{ }、圓柱→[( )]、六角形→{{ }}；虛線→-.->；沒有箭頭→---。
+// - 自由端點（沒接在元件上）的連線 Mermaid 無法表示，略過。
+import { type ArchEdge, type Diagram, hasAccent, isNodeEnd, type NodeShapeKind } from './model'
 
 /** Mermaid 標籤內的特殊字元改成實體碼（雙引號、直線會打斷語法）。 */
 function esc(text: string): string {
   return text.replace(/"/g, '#quot;').replace(/\|/g, '#124;').replace(/\n/g, '<br/>')
+}
+
+const BRACKETS: Record<NodeShapeKind, [string, string]> = {
+  rect: ['[', ']'],
+  ellipse: ['([', '])'],
+  diamond: ['{', '}'],
+  cylinder: ['[(', ')]'],
+  hexagon: ['{{', '}}'],
 }
 
 /** 畫面上由左到右排得比較寬時用 LR，否則 TB。 */
@@ -13,6 +23,18 @@ function direction(d: Diagram): 'LR' | 'TB' {
   const xs = d.nodes.map((n) => n.x)
   const ys = d.nodes.map((n) => n.y)
   return Math.max(...xs) - Math.min(...xs) >= Math.max(...ys) - Math.min(...ys) ? 'LR' : 'TB'
+}
+
+function arrow(e: ArchEdge): string {
+  const dashed = e.style.dash !== 'solid'
+  switch (e.style.arrow) {
+    case 'none':
+      return dashed ? '-.-' : '---'
+    case 'both':
+      return dashed ? '<-.->' : '<-->'
+    default:
+      return dashed ? '-.->' : '-->'
+  }
 }
 
 export function toMermaid(d: Diagram): string {
@@ -32,13 +54,18 @@ export function toMermaid(d: Diagram): string {
       .filter(Boolean)
       .map(esc)
       .join('<br/>')
-    lines.push(`  ${ids.get(n.id)}["${label}"]`)
+    const [open, close] = BRACKETS[n.style.shape]
+    lines.push(`  ${ids.get(n.id)}${open}"${label}"${close}`)
   }
   for (const e of d.edges) {
-    const from = ids.get(e.from.node)
-    const to = ids.get(e.to.node)
+    if (!isNodeEnd(e.from) || !isNodeEnd(e.to)) continue
+    // 只有起點箭頭：反過來寫成一般箭頭
+    const [a, b] = e.style.arrow === 'start' ? [e.to, e.from] : [e.from, e.to]
+    const from = ids.get(a.node)
+    const to = ids.get(b.node)
     if (!from || !to) continue
-    lines.push(e.label ? `  ${from} -->|"${esc(e.label)}"| ${to}` : `  ${from} --> ${to}`)
+    const link = arrow(e)
+    lines.push(e.label ? `  ${from} ${link}|"${esc(e.label)}"| ${to}` : `  ${from} ${link} ${to}`)
   }
   return `${lines.join('\n')}\n`
 }
