@@ -1,4 +1,5 @@
 // 模組一・找最佳流程（後端為 src/test/server.ts 的假實作，執行以 SSE 回應）。
+// 四個步驟一次顯示一個畫面：選擇圖片 → 確認真值 → 比較方法 → 結論。
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -14,6 +15,15 @@ beforeEach(() => {
 })
 
 const bodies = (path: string) => requests.filter((r) => r.path === path).map((r) => r.body)
+const RUN = '/workbench/v1/dev/best-flow/runs'
+const TRUTH = '/workbench/v1/dev/best-flow/runs/20261105-bestflow/truth'
+
+/** 從選擇圖片的畫面打開最近一次執行的結論。 */
+async function openLatest(user: ReturnType<typeof userEvent.setup>) {
+  renderAt('/m1/results/best')
+  await user.click(await screen.findByRole('button', { name: '查看結論' }, WAIT))
+  return screen.findByRole('list', { name: '推薦流程' }, WAIT)
+}
 
 describe('找最佳流程', () => {
   it('實驗結果預設為找最佳流程；進階收著 E1 消融與自適應策略', async () => {
@@ -33,59 +43,176 @@ describe('找最佳流程', () => {
     expect(screen.getByRole('radio', { name: /自適應策略/ })).toHaveAttribute('data-state', 'on')
   })
 
-  it('沒有執行時顯示三個步驟；上傳圖片後逐張上傳再執行，完成後顯示結果', async () => {
+  it('步驟列：一開始在選擇圖片，還沒選圖時不能往下', async () => {
+    resetBestFlow(false)
+    renderAt('/m1/results/best')
+    const steps = await screen.findByRole('list', { name: '步驟' }, WAIT)
+    expect(within(steps).getByRole('button', { name: /選擇圖片/ })).toHaveAttribute(
+      'aria-current',
+      'step',
+    )
+    expect(within(steps).getByRole('button', { name: /確認真值/ })).toBeDisabled()
+    expect(within(steps).getByRole('button', { name: /結論/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /下一步：逐張確認真值/ })).toBeDisabled()
+    // 沒有過去的執行時不顯示「查看結論」
+    expect(screen.queryByRole('button', { name: '查看結論' })).not.toBeInTheDocument()
+  })
+
+  it('上傳 → 逐張確認（帶入程式讀到的號碼、沒有條碼）→ 執行後送出真值 → 結論', async () => {
     resetBestFlow(false)
     const user = userEvent.setup()
     renderAt('/m1/results/best')
-    expect(await screen.findByText('確認真值', {}, WAIT)).toBeInTheDocument()
-    const files = [
+    await user.upload(await screen.findByLabelText('選擇圖片', {}, WAIT), [
       new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
       new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
-    ]
-    await user.upload(screen.getByLabelText('選擇圖片'), files)
-    expect(screen.getByText('已選 2 張，重新選擇')).toBeInTheDocument()
+    ])
+    expect(screen.getByRole('heading', { name: '已選 2 張' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /下一步：逐張確認真值/ }))
+
+    // 第 1 張：程式從原圖讀到的號碼預先帶入，Enter 確認並換下一張
+    const input = await screen.findByLabelText('條碼號碼', {}, WAIT)
+    await waitFor(() => expect(input).toHaveValue('4710088410108'), WAIT)
+    expect(screen.getByText('EAN-13 檢查碼正確')).toBeInTheDocument()
+    await user.keyboard('{Enter}')
+
+    // 第 2 張：標為沒有條碼
+    expect(await screen.findByText(/^第 2 張/, {}, WAIT)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '沒有條碼' }))
+    const strip = screen.getByRole('list', { name: '所有圖片' })
+    expect(within(strip).getByRole('button', { name: /a\.jpg：4710088410108/ })).toBeInTheDocument()
+    expect(within(strip).getByRole('button', { name: /b\.jpg：沒有條碼/ })).toBeInTheDocument()
+    expect(screen.getByText(/已確認/)).toHaveTextContent('已確認 2／2 張')
+
     await user.click(screen.getByRole('button', { name: '開始比較' }))
-    // 完成後切換到新的執行
     expect(await screen.findByRole('list', { name: '推薦流程' }, WAIT)).toBeInTheDocument()
+    // 每張只上傳一次（確認時讀條碼用），執行沿用同一個 image_id；真值以原檔名為 ID 送出
     expect(bodies('/workbench/v1/dev/images')).toEqual([1, 2])
-    expect(bodies('/workbench/v1/dev/best-flow/runs')).toContainEqual({
-      image_ids: ['upload-1', 'upload-2'],
-    })
+    const run = bodies(RUN)[0] as { image_ids: string[] }
+    expect([...run.image_ids].sort()).toEqual(['upload-1', 'upload-2'])
+    expect(bodies(TRUTH)).toContainEqual({ truths: { 'a.jpg': '4710088410108', 'b.jpg': '' } })
+    expect(
+      within(screen.getByRole('list', { name: '步驟' })).getByRole('button', { name: /結論/ }),
+    ).toHaveAttribute('aria-current', 'step')
   })
 
-  it('資料夾來源送出路徑；測試集被拒絕時顯示錯誤', async () => {
+  it('同名的圖片以 #2 的 ID 送出真值；沒確認的不送', async () => {
+    resetBestFlow(false)
     const user = userEvent.setup()
     renderAt('/m1/results/best')
-    await screen.findByRole('img', { name: /三種做法的成功率/ }, WAIT)
-    await user.click(screen.getByRole('radio', { name: /資料夾/ }))
+    await user.upload(await screen.findByLabelText('選擇圖片', {}, WAIT), [
+      new File(['a'], 'x.jpg', { type: 'image/jpeg' }),
+      new File(['b'], 'x.jpg', { type: 'image/jpeg' }),
+      new File(['c'], 'y.jpg', { type: 'image/jpeg' }),
+    ])
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+    await waitFor(
+      () => expect(screen.getByLabelText('條碼號碼')).toHaveValue('4710088410108'),
+      WAIT,
+    )
+    await user.keyboard('{Enter}')
+    await screen.findByText(/^第 2 張/, {}, WAIT)
+    await user.click(screen.getByRole('button', { name: '沒有條碼' }))
+    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await screen.findByRole('list', { name: '推薦流程' }, WAIT)
+    expect(bodies(TRUTH)).toContainEqual({ truths: { 'x.jpg': '4710088410108', 'x.jpg#2': '' } })
+  })
+
+  it('把原始照片改名（彈窗）：產生 Python 工具的指令', async () => {
+    const user = userEvent.setup()
+    await openLatest(user)
+    await user.click(screen.getByRole('button', { name: '把原始照片改名' }))
+    const dialog = await screen.findByRole('dialog', { name: '把原始照片改名' }, WAIT)
+    expect(within(dialog).getByText(/只改人工確認過的 0 張/)).toBeInTheDocument()
+    expect(within(dialog).getAllByText(/<照片所在的資料夾>/)).toHaveLength(2)
+    await user.type(within(dialog).getByLabelText('照片所在的資料夾'), 'D:/photos')
+    const [preview, apply] = within(dialog).getAllByText(/rename_by_truth\.py/)
+    expect(preview).toHaveTextContent(
+      String.raw`research\experiments\e1_barcode\rename_by_truth.py "D:/runs/20261105-bestflow" --folder "D:/photos"`,
+    )
+    expect(apply!.textContent).toMatch(/--folder "D:\/photos" --apply$/)
+  })
+
+  it('檔名就是條碼時預先帶入，可一次採用', async () => {
+    resetBestFlow(false)
+    const user = userEvent.setup()
+    renderAt('/m1/results/best')
+    await user.upload(await screen.findByLabelText('選擇圖片', {}, WAIT), [
+      new File(['a'], 'IMG_1.jpg', { type: 'image/jpeg' }),
+      new File(['b'], '4712612300015_2.jpg', { type: 'image/jpeg' }),
+    ])
+    expect(screen.getByText(/其中 1 張的檔名就是條碼號碼/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+    await user.click(await screen.findByRole('button', { name: /採用檔名中的號碼（1 張）/ }, WAIT))
+    expect(
+      screen.getByRole('button', { name: /4712612300015_2\.jpg：4712612300015/ }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /採用檔名中的號碼/ })).not.toBeInTheDocument()
+  })
+
+  it('輸入錯誤的號碼時提示，不能確認', async () => {
+    resetBestFlow(false)
+    const user = userEvent.setup()
+    renderAt('/m1/results/best')
+    await user.upload(await screen.findByLabelText('選擇圖片', {}, WAIT), [
+      new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+    ])
+    await user.click(screen.getByRole('button', { name: /下一步/ }))
+    const input = await screen.findByLabelText('條碼號碼', {}, WAIT)
+    await waitFor(() => expect(input).toHaveValue('4710088410108'), WAIT)
+    await user.clear(input)
+    await user.type(input, '4710088410109')
+    expect(screen.getByText('檢查碼不對，請再核對一次')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /確認，下一張/ })).toBeDisabled()
+    // 回上一步再回來，選的圖片還在
+    await user.click(screen.getByRole('button', { name: '上一步' }))
+    expect(screen.getByRole('heading', { name: '已選 1 張' })).toBeInTheDocument()
+  })
+
+  it('資料夾來源略過確認真值，直接執行；測試集被拒絕時顯示錯誤', async () => {
+    const user = userEvent.setup()
+    renderAt('/m1/results/best')
+    await user.click(await screen.findByRole('radio', { name: /伺服器上的資料夾/ }, WAIT))
     await user.type(screen.getByRole('textbox', { name: '圖片資料夾' }), 'D:/data/splits/test')
     await user.click(screen.getByRole('button', { name: '開始比較' }))
     expect(await screen.findByText('測試集已鎖定，不得讀取', {}, WAIT)).toBeInTheDocument()
-    expect(bodies('/workbench/v1/dev/best-flow/runs')).toContainEqual({
-      folder: 'D:/data/splits/test',
-      recursive: true,
-    })
+    expect(bodies(RUN)).toContainEqual({ folder: 'D:/data/splits/test', recursive: true })
+    await user.click(screen.getByRole('button', { name: '上一步' }))
+    expect(screen.getByRole('textbox', { name: '圖片資料夾' })).toHaveValue('D:/data/splits/test')
   })
 
-  it('結論：推薦流程、每一步的貢獻、比較與匯出', async () => {
+  it('過去的執行（彈窗）：打開某次執行的結論', async () => {
+    const user = userEvent.setup()
     renderAt('/m1/results/best')
-    const flow = await screen.findByRole('list', { name: '推薦流程' }, WAIT)
+    await user.click(await screen.findByRole('button', { name: '過去的執行' }, WAIT))
+    const dialog = await screen.findByRole('dialog', { name: '過去的執行' }, WAIT)
+    await user.click(within(dialog).getByRole('button', { name: /20261105-bestflow/ }))
+    expect(await screen.findByRole('list', { name: '推薦流程' }, WAIT)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('結論：推薦流程、比較、展開細節與匯出（彈窗）', async () => {
+    const user = userEvent.setup()
+    const flow = await openLatest(user)
     expect(within(flow).getAllByRole('listitem')).toHaveLength(3)
     expect(within(flow).getByText(/疊加/)).toBeInTheDocument()
-    expect(screen.getByRole('table', { name: '推薦流程每一步的貢獻' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /三種做法的成功率/ })).toBeInTheDocument()
+    await user.click(screen.getByText('每一步的貢獻'))
+    expect(screen.getByRole('table', { name: '推薦流程每一步的貢獻' })).toBeVisible()
+    await user.click(screen.getByText('三種做法的詳細數字'))
     expect(screen.getByRole('table', { name: '三種做法的比較' })).toHaveTextContent(
       '全部方法依序都試',
     )
-    expect(screen.getByText(/"rungs"/)).toBeInTheDocument()
     // 有未定的圖片：提醒成功率會偏高
     expect(screen.getByRole('alert')).toHaveTextContent('有 2 張圖片尚未確認真值')
+    await user.click(screen.getByRole('button', { name: '匯出推薦流程' }))
+    const dialog = await screen.findByRole('dialog', { name: '匯出推薦流程' }, WAIT)
+    expect(within(dialog).getByText(/"rungs"/)).toBeInTheDocument()
   })
 
-  it('真值確認：選候選、輸入號碼、標為沒有條碼、取消人工確認', async () => {
+  it('結論的真值分頁：選候選、輸入號碼、標為沒有條碼、取消人工確認', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/results/best')
-    await screen.findByRole('list', { name: '推薦流程' }, WAIT)
-    await user.click(screen.getByRole('radio', { name: /真值確認（2）/ }))
+    await openLatest(user)
+    await user.click(screen.getByRole('radio', { name: /真值（2 待確認）/ }))
     const list = screen.getByRole('list', { name: '真值確認' })
     // 預設只列未確定的 b、c
     expect(within(list).getAllByRole('listitem')).toHaveLength(2)
@@ -95,12 +222,16 @@ describe('找最佳流程', () => {
     )
     await user.click(within(list).getByRole('button', { name: /4712612300015/ }))
     await waitFor(() =>
-      expect(bodies('/workbench/v1/dev/best-flow/runs/20261105-bestflow/truth')).toContainEqual({
-        truths: { 'b.jpg': '4712612300015' },
-      }),
+      expect(bodies(TRUTH)).toContainEqual({ truths: { 'b.jpg': '4712612300015' } }),
     )
     // b 已確定，未確定只剩 c
-    await waitFor(() => expect(screen.getAllByRole('listitem')).toHaveLength(1), WAIT)
+    await waitFor(
+      () =>
+        expect(
+          within(screen.getByRole('list', { name: '真值確認' })).getAllByRole('listitem'),
+        ).toHaveLength(1),
+      WAIT,
+    )
     await user.type(screen.getByLabelText('c.jpg 的條碼'), '4710088410108')
     await user.click(screen.getByRole('button', { name: '採用' }))
     expect(await screen.findByText(/所有圖片都已確定真值/, {}, WAIT)).toBeInTheDocument()
@@ -111,18 +242,15 @@ describe('找最佳流程', () => {
     await user.click(within(rowC).getByRole('button', { name: '沒有條碼' }))
     expect(await within(rowC).findByText(/沒有條碼（人工）/, {}, WAIT)).toBeInTheDocument()
     await user.click(within(rowC).getByRole('button', { name: /取消人工確認/ }))
-    await waitFor(() =>
-      expect(bodies('/workbench/v1/dev/best-flow/runs/20261105-bestflow/truth')).toContainEqual({
-        truths: { 'c.jpg': null },
-      }),
-    )
+    await waitFor(() => expect(bodies(TRUTH)).toContainEqual({ truths: { 'c.jpg': null } }))
   })
 
-  it('改選擇準則時以查詢參數重新取得結果', async () => {
+  it('選擇準則（彈窗）：改了以查詢參數重新取得結果', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/results/best')
-    await screen.findByRole('list', { name: '推薦流程' }, WAIT)
-    const input = screen.getByLabelText('平均耗時上限（0 為不限）')
+    await openLatest(user)
+    await user.click(screen.getByRole('button', { name: /選擇準則/ }))
+    const dialog = await screen.findByRole('dialog', { name: '選擇準則' }, WAIT)
+    const input = within(dialog).getByLabelText('平均耗時上限（0 為不限）')
     await user.clear(input)
     await user.type(input, '20')
     await user.tab()
@@ -131,12 +259,13 @@ describe('找最佳流程', () => {
         '?max_mean_ms=20',
       ),
     )
+    await user.click(within(dialog).getByRole('button', { name: '改回預設' }))
+    expect(within(dialog).getByLabelText('平均耗時上限（0 為不限）')).toHaveValue(0)
   })
 
   it('單一方法：依成功率排序並顯示相對原圖的救回', async () => {
     const user = userEvent.setup()
-    renderAt('/m1/results/best')
-    await screen.findByRole('list', { name: '推薦流程' }, WAIT)
+    await openLatest(user)
     await user.click(screen.getByRole('radio', { name: /單一方法/ }))
     const rows = within(screen.getByRole('table', { name: '單一方法比較' })).getAllByRole('row')
     expect(rows[1]).toHaveTextContent('Otsu')

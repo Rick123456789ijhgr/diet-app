@@ -163,3 +163,49 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
+
+/*
+ * 回應操作的動態（只在使用者沒有要求減少動態時）：彈窗淡入、切換步驟時新畫面由右滑入。
+ * 不做進場動畫以外的裝飾性動態。
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .wb-overlay[data-state='open'] {
+    animation: wb-fade 140ms ease-out;
+  }
+  .wb-dialog[data-state='open'] {
+    animation: wb-pop 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .wb-step-forward {
+    animation: wb-step-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .wb-step-back {
+    animation: wb-step-in-back 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+@keyframes wb-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes wb-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+@keyframes wb-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes wb-step-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+}

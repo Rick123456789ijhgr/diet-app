@@ -22,6 +22,20 @@ python analyze.py runs/<資料夾> --by lighting --baseline a0_raw
 
 結果也可以在工作台「研究實驗 → E1 條碼消融」檢視（成功率、分組熱度圖、成功階、失敗影像）。
 
+## 依真值把原始照片改名
+
+工作台「找最佳流程」確認完真值後，可以把原始照片改名成條碼號碼（結論頁的「把原始照片改名」會產生指令）：
+
+```bash
+python rename_by_truth.py <執行> --folder <照片資料夾>           # 預覽
+python rename_by_truth.py <執行> --folder <照片資料夾> --apply   # 真的改名
+python rename_by_truth.py <執行> --undo                          # 依 rename_log.csv 還原
+```
+
+有條碼 → `<號碼>.jpg`（同號碼多張加 `_2`）；沒有條碼 → `沒有條碼_<原檔名>`。預設只改人工確認的，
+`--include-auto` 連程式自動推定的也改；不覆寫既有檔案。資料夾來源的執行不需要 `--folder`。
+改名後的照片再放進工作台，號碼會由檔名自動帶入。
+
 ## manifest 格式
 
 CSV（UTF-8），每列一張影像；格式定義見 `dietai.evaluation.manifest`。

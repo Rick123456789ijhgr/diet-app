@@ -6,7 +6,8 @@
 //   └────────────┘  └───────────────────────────┘ └────────┘
 //
 // Workspace 負責控制面板與標題；主檢視與讀數欄由 Split 排出（通常放在 AnalysisFrame 內）。
-import type { ReactNode } from 'react'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useId, useState, type ReactNode } from 'react'
 
 import { cn } from '@/lib/cn'
 
@@ -14,10 +15,30 @@ import { cn } from '@/lib/cn'
 export const PANEL_WIDTH = 312
 export const READOUT_WIDTH = 296
 
+/** 控制面板收起與否記在瀏覽器（每位使用者自己的偏好，所有工具頁共用）；讀不到時預設展開。 */
+const PANEL_KEY = 'wb.panelCollapsed'
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(PANEL_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeCollapsed(v: boolean) {
+  try {
+    localStorage.setItem(PANEL_KEY, v ? '1' : '0')
+  } catch {
+    // 私密視窗等情況無法儲存：只影響下次開啟時的預設
+  }
+}
+
 /**
  * 工具頁的外層版面：左側控制面板卡（panel，由 PanelSections 的段落組成）＋右側「標題列＋內容」。
  * 控制面板自行捲動（overflow-y-auto），內容區撐滿剩餘高度，整頁不捲動。
  * - title／description：頁面大標題與一行說明（過長時截斷，完整內容放在 title 屬性）。
+ * - 標題左側的按鈕可收起控制面板，讓主檢視變寬；收起時面板只是隱藏（保留輸入中的內容）。
  */
 export function Workspace({
   panel,
@@ -33,19 +54,45 @@ export function Workspace({
   aside?: ReactNode
   children: ReactNode
 }) {
+  const panelId = useId()
+  const [collapsed, setCollapsed] = useState(readCollapsed)
+  const toggle = () => {
+    writeCollapsed(!collapsed)
+    setCollapsed(!collapsed)
+  }
+  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose
   return (
     // min-h-0：flex 子項預設 min-height 為內容高度，不設的話內容會把版面撐高、內部捲動失效
     <div className="flex h-full min-h-0 gap-3 pr-3 pb-3">
       {/* 具名的 section（aria-label）成為地標，螢幕閱讀器可直接跳到控制面板 */}
       <section
+        id={panelId}
         aria-label="控制面板"
+        hidden={collapsed}
         className="bg-card shadow-card shrink-0 overflow-y-auto rounded-[20px]"
         style={{ width: PANEL_WIDTH }}
       >
         {panel}
       </section>
       <div className="flex min-w-0 flex-1 flex-col">
-        <PageHeader title={title} description={description} aside={aside} />
+        <PageHeader
+          title={title}
+          description={description}
+          aside={aside}
+          leading={
+            <button
+              type="button"
+              onClick={toggle}
+              aria-expanded={!collapsed}
+              aria-controls={panelId}
+              aria-label={collapsed ? '展開控制面板' : '收起控制面板'}
+              title={collapsed ? '展開控制面板' : '收起控制面板'}
+              className="text-muted hover:bg-card hover:text-ink focus-visible:ring-primary/40 grid size-8 shrink-0 place-items-center rounded-full focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <Icon className="size-[18px]" aria-hidden />
+            </button>
+          }
+        />
         <div className="min-h-0 flex-1">{children}</div>
       </div>
     </div>
@@ -57,13 +104,17 @@ export function PageHeader({
   title,
   description,
   aside,
+  leading,
 }: {
   title: ReactNode
   description: string
   aside?: ReactNode
+  /** 標題左側（例如收起控制面板的按鈕） */
+  leading?: ReactNode
 }) {
   return (
     <div className="flex shrink-0 items-end gap-4 px-1 pt-1 pb-3">
+      {leading && <div className="self-center">{leading}</div>}
       <div className="min-w-0 flex-1">
         <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
         <p className="text-muted mt-0.5 truncate text-[13px]" title={description}>
