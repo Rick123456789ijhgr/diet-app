@@ -71,9 +71,9 @@ test('實驗結果・E1：快速執行後顯示整體成功率與信賴區間', 
   await expect(page.getByRole('table', { name: '各實驗組的整體彙整' })).toContainText('a0_raw')
 })
 
-test('找最佳流程：上傳圖片、確認真值後顯示推薦流程', async ({ page }) => {
+test('找最佳流程：上傳圖片、逐張確認真值、比較後顯示推薦流程', async ({ page }) => {
   test.setTimeout(120_000)
-  // 檔名每次不同：結果資料夾中可能已有先前執行的同名圖片
+  // 檔名每次不同：避免與先前執行的同名圖片混淆
   const tag = Date.now()
   const [one, two] = [`gray-${tag}-1.png`, `gray-${tag}-2.png`]
   await page.goto('/m1/results/best')
@@ -81,19 +81,33 @@ test('找最佳流程：上傳圖片、確認真值後顯示推薦流程', async
     { name: one, mimeType: 'image/png', buffer: PNG },
     { name: two, mimeType: 'image/png', buffer: PNG },
   ])
+  await page.getByRole('button', { name: /下一步：逐張確認真值/ }).click()
+  // 灰色小圖讀不到條碼：看圖輸入號碼，Enter 確認並換下一張
+  await expect(page.getByText('原圖讀不到條碼')).toBeVisible({ timeout: 30_000 })
+  const input = page.getByRole('textbox', { name: '條碼號碼' })
+  await input.fill('4710088410108')
+  await input.press('Enter')
+  await expect(page.getByText(/^第 2 張/)).toBeVisible()
+  await page.getByRole('button', { name: '沒有條碼' }).click()
   await page.getByRole('button', { name: '開始比較' }).click()
-  // 灰色小圖沒有任何方法讀得到：兩張都是「未知」，尚無結論，直接帶到真值確認
+  await expect(page.getByRole('list', { name: '推薦流程' })).toContainText('原圖', {
+    timeout: 90_000,
+  })
+  await page.getByText('三種做法的詳細數字').click()
+  await expect(page.getByRole('table', { name: '三種做法的比較' })).toContainText('0／1')
+  // 人工確認的真值以原檔名為 ID 存進執行
+  await page.getByRole('radio', { name: /真值/ }).click()
+  await page.getByRole('radio', { name: /全部/ }).click()
   const list = page.getByRole('list', { name: '真值確認' })
   const row = (name: string) => list.getByRole('listitem').filter({ hasText: name })
-  await expect(row(one)).toBeVisible({ timeout: 90_000 })
-  await expect(list.getByRole('listitem')).toHaveCount(2)
-  await row(one).getByLabel(`${one} 的條碼`).fill('4710088410108')
-  await row(one).getByRole('button', { name: '採用', exact: true }).click()
-  // 確定後該列移出「未確定」
-  await expect(list.getByRole('listitem')).toHaveCount(1)
-  await row(two).getByRole('button', { name: '沒有條碼' }).click()
-  await expect(page.getByText(/所有圖片都已確定真值/)).toBeVisible()
-  await page.getByRole('radio', { name: /結論/ }).click()
-  await expect(page.getByRole('list', { name: '推薦流程' })).toContainText('原圖')
-  await expect(page.getByRole('table', { name: '三種做法的比較' })).toContainText('0／1')
+  await expect(row(one)).toContainText('採用 4710088410108（人工）')
+  await expect(row(two)).toContainText('沒有條碼（人工）')
+  // 改原始照片檔名的指令
+  await page.getByRole('button', { name: '把原始照片改名' }).click()
+  await expect(
+    page
+      .getByRole('dialog')
+      .getByText(/rename_by_truth\.py/)
+      .first(),
+  ).toBeVisible()
 })
