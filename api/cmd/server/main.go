@@ -3,6 +3,8 @@
 //
 // 環境變數：
 //   - PORT：HTTP 埠，預設 8080
+//   - HOST：監聽的位址。未設定時：開啟開發工具則只聽 127.0.0.1（開發工具沒有驗證，且能讀寫本機任意資料夾，
+//     不可對區網開放），否則聽所有網卡（容器內需要）。要在容器裡開開發工具時明確設 HOST=0.0.0.0，並自行確保埠不對外
 //   - AI_GRPC_ADDR：Python gRPC 服務位址，預設 localhost:50051
 //   - WORKBENCH_DEV_TOOLS=1：啟用開發工作台的開發工具路由（/workbench/v1/dev/*），只在本機開發時開啟
 //   - DATABASE_URL：PostgreSQL；未設定或無法連線時，登入與冷啟動上傳回 503（開發工具照常可用）
@@ -17,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -72,7 +75,7 @@ func run(logger *slog.Logger) error {
 	// TODO: 依 openapi/openapi.yaml 以 oapi-codegen 產生路由後註冊各領域 handler
 
 	srv := &http.Server{
-		Addr:              ":" + getenv("PORT", "8080"),
+		Addr:              listenAddr(os.Getenv("HOST"), getenv("PORT", "8080"), devTools),
 		Handler:           httpmw.Chain(mux, httpmw.RequestID, httpmw.AccessLog(logger), httpmw.Recover(logger)),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -126,6 +129,14 @@ func openStorage(logger *slog.Logger) (*pgstore.DB, *objstore.MinIO) {
 		return db, nil
 	}
 	return db, objects
+}
+
+// listenAddr 決定監聽位址。host 未指定時，開啟開發工具就只聽本機（見檔頭 HOST 的說明），否則聽所有網卡。
+func listenAddr(host, port string, devTools bool) string {
+	if host == "" && devTools {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func getenv(key, fallback string) string {
