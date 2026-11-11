@@ -205,6 +205,58 @@ func TestInvalidJSONIs400(t *testing.T) {
 	}
 }
 
+// 有本文的請求只接受 application/json 與 multipart：text/plain 等「簡單請求」不經 CORS 預檢，
+// 若照樣解成 JSON，任何網頁都能跨站觸發本機的開發工具。被拒絕的請求不得到達 Python。
+func TestBodyContentTypeMustBeJSONOrMultipart(t *testing.T) {
+	called := false
+	ai := &fakeAI{quality: func(*dietaiv1.CheckQualityRequest) (*dietaiv1.CheckQualityResponse, error) {
+		called = true
+		return &dietaiv1.CheckQualityResponse{}, nil
+	}}
+	url := newServer(t, ai, true).URL + "/workbench/v1/dev/quality"
+	tests := []struct {
+		name        string
+		contentType string
+		wantStatus  int
+	}{
+		{"text/plain（跨站表單可送）", "text/plain", http.StatusBadRequest},
+		{"表單編碼（跨站表單可送）", "application/x-www-form-urlencoded", http.StatusBadRequest},
+		{"沒有 Content-Type", "", http.StatusBadRequest},
+		{"application/json", "application/json", http.StatusOK},
+		{"application/json 帶 charset", "application/json; charset=utf-8", http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			called = false
+			req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(`{"image_id":"a"}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tt.wantStatus {
+				t.Fatalf("status = %d，預期 %d", resp.StatusCode, tt.wantStatus)
+			}
+			if rejected := tt.wantStatus != http.StatusOK; rejected {
+				if code := decode[api.Error](t, resp).Code; code != "INVALID_REQUEST" {
+					t.Errorf("code = %q，預期 INVALID_REQUEST", code)
+				}
+				if called {
+					t.Error("被拒絕的請求不應到達 Python")
+				}
+			} else if !called {
+				t.Error("合法的請求應到達 Python")
+			}
+		})
+	}
+}
+
 func TestUnknownPathIsJSON404(t *testing.T) {
 	resp, err := http.Get(newServer(t, &fakeAI{}, true).URL + "/workbench/v1/nope")
 	if err != nil {

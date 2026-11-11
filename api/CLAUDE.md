@@ -26,7 +26,7 @@ gen/              oapi-codegen、sqlc、buf 產生的程式碼，不手改
 - 新增資料表：先在 `db/migrations/` 新增 migration，再寫 sqlc 查詢，最後 `make gen`。
 - 呼叫 Python 一律經 `internal/platform/aiclient`（自動帶 `request_id`、預設逾時）；錯誤以 `errors.As(err, &*aiclient.Error)` 取得 Python 回傳的錯誤代碼（`Reason`）與欄位（`Field`）。
 - 由 OpenAPI 產生的路由採 strict server：handler 只做轉接，錯誤一律回傳 `error`，由統一的錯誤處理輸出 `{"code","message","field"}`（見 `internal/workbench/errors.go`）。
-- 開發工作台路由（`internal/workbench`）的開發工具只在 `WORKBENCH_DEV_TOOLS=1` 時啟用，線上部署不開。
+- 開發工作台路由（`internal/workbench`）的開發工具只在 `WORKBENCH_DEV_TOOLS=1` 時啟用，線上部署不開。開發工具沒有驗證、又能讀寫本機任意資料夾，所以開啟時伺服器預設只監聽 `127.0.0.1`（`cmd/server` 的 `listenAddr`，可用 `HOST` 覆寫）；有本文的請求只接受 `application/json` 與 multipart，擋掉不經 CORS 預檢的跨站表單。
 
 ## 指令
 

@@ -119,10 +119,27 @@ func NewHTTPHandler(svc *Service, opts Options) http.Handler {
 			writeError(w, errDevToolsOff)
 			return
 		}
+		if !allowedBodyType(r) {
+			writeError(w, &Error{http.StatusBadRequest, "INVALID_REQUEST",
+				"有本文的請求，Content-Type 必須是 application/json 或 multipart/form-data", ""})
+			return
+		}
 		limitBody(w, r, maxJSON)
 		// 包裝 ResponseWriter 以記錄標頭是否已送出（見 ResponseErrorHandlerFunc）
 		routes.ServeHTTP(&trackingWriter{ResponseWriter: w}, h.withSession(r))
 	})
+}
+
+// allowedBodyType 回報請求本文的 Content-Type 是否可接受：沒有本文一律可以；有本文時必須是
+// application/json 或 multipart/*。產生的程式碼解 JSON 時不看 Content-Type，若不擋，
+// 任何網頁都能用 text/plain 的跨站表單送出（這類「簡單請求」不經 CORS 預檢）觸發本機的開發工具；
+// application/json 的跨站請求則會先被瀏覽器的預檢擋下（本服務不回任何 CORS 標頭）。
+func allowedBodyType(r *http.Request) bool {
+	if r.Body == nil || r.Body == http.NoBody || r.ContentLength == 0 {
+		return true
+	}
+	mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	return err == nil && (mt == "application/json" || strings.HasPrefix(mt, "multipart/"))
 }
 
 // limitBody 以 http.MaxBytesReader 限制請求本文大小：multipart 上傳為 maxMultipartBytes，其餘（JSON）為 maxJSON。

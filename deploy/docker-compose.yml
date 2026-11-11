@@ -1,4 +1,6 @@
 # 本地開發：make up 一次啟動所有服務
+# 所有埠只發布到本機（127.0.0.1）：資料庫、物件儲存與 gRPC 都沒有對區網開放的理由，預設密碼也不該暴露。
+# 要從其他機器連線時，自行改成 "0.0.0.0:埠:埠" 並換掉 .env 的密碼。
 name: diet-app
 
 services:
@@ -8,7 +10,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [db-data:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
@@ -22,7 +24,7 @@ services:
     environment:
       RUSTFS_ACCESS_KEY: ${MINIO_ROOT_USER}
       RUSTFS_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-    ports: ["9000:9000", "9001:9001"]
+    ports: ["127.0.0.1:9000:9000", "127.0.0.1:9001:9001"]
     volumes: [minio-data:/data]
 
   migrate:
@@ -42,7 +44,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-    ports: ["8080:8080"]
+    ports: ["127.0.0.1:8080:8080"]
     depends_on:
       migrate: {condition: service_completed_successfully}
 
@@ -54,7 +56,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL: ${LLM_MODEL}
-    ports: ["50051:50051"]
+    ports: ["127.0.0.1:50051:50051"]
     depends_on:
       db: {condition: service_healthy}
 
