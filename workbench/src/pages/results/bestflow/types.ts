@@ -143,3 +143,13 @@ export function criteriaQuery(root: string, c: Criteria) {
 }
 
 export const DEFAULT_CRITERIA: Criteria = { minGain: 1, maxNewWrong: 0, maxMeanMs: 0 }
+
+/** 逐張確認的真值沒寫進某次執行（比較完成後的 PUT 失敗）：留著等使用者重新送出。 */
+export interface UnsavedTruths {
+  /** 哪一次執行 */
+  run: string
+  truths: Record<string, string>
+  /** 送出當時答案的指紋（BestFlow 的 answersKey），重新送出成功後記為已寫入 */
+  sentKey: string
+  error: unknown
+}

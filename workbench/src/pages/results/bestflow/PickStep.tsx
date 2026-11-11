@@ -3,6 +3,7 @@
 import { FileImage, FolderOpen, ImagePlus, Tag, Upload, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 
+import { Dialog } from '@/components/ui/Dialog'
 import { Button, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { cn } from '@/lib/cn'
@@ -79,6 +80,9 @@ function UploadArea({
   const room = MAX_UPLOADS - items.length
   const empty = items.length === 0
   const fromName = items.filter((i) => i.nameAnswer).length
+  // 已確認的答案掛在圖片上，移除圖片就一起消失：有答案時先問過
+  const answered = items.filter((i) => i.answer).length
+  const [confirmClear, setConfirmClear] = useState(false)
 
   const add = (list: FileList | null) => {
     const files = Array.from(list ?? []).filter((f) => f.type.startsWith('image/') || !f.type)
@@ -152,9 +156,41 @@ function UploadArea({
                 其中 {fromName} 張的檔名就是條碼號碼，下一步會自動帶入
               </span>
             )}
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={onClear}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-auto"
+              onClick={() => (answered > 0 ? setConfirmClear(true) : onClear())}
+            >
               全部移除
             </Button>
+            <Dialog
+              open={confirmClear}
+              onOpenChange={setConfirmClear}
+              title="全部移除？"
+              description={`已確認的 ${answered} 張真值會一起清掉，無法復原。`}
+              footer={
+                <>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmClear(false)}>
+                    取消
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      setConfirmClear(false)
+                      onClear()
+                    }}
+                  >
+                    確定全部移除
+                  </Button>
+                </>
+              }
+            >
+              <p className="text-ink-2 text-[13px] leading-relaxed">
+                只想換掉其中幾張的話，把游標移到圖片上，按右上角的 ✕ 個別移除。
+              </p>
+            </Dialog>
           </div>
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
             {items.map((it) => (

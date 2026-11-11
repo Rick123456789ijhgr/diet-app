@@ -5,6 +5,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, History, Play, RotateCcw, Square } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useBlocker } from 'react-router'
 
 import { api, unwrap } from '@/api/client'
 import { PageHeader } from '@/components/layout/Workspace'
@@ -17,11 +18,17 @@ import { truthsOf, uploadIds } from '@/lib/barcodeTruth'
 import { cn } from '@/lib/cn'
 import { progressPercent } from '@/lib/number'
 
-import { useItems, useUploads } from './bestflow/items'
+import { useItems, useUploads, type Item } from './bestflow/items'
 import { PickStep, type Source } from './bestflow/PickStep'
 import { ResultStep } from './bestflow/ResultStep'
 import { TruthStep } from './bestflow/TruthStep'
-import { criteriaQuery, DEFAULT_CRITERIA, type RunEvent, type RunList } from './bestflow/types'
+import {
+  criteriaQuery,
+  DEFAULT_CRITERIA,
+  type RunEvent,
+  type RunList,
+  type UnsavedTruths,
+} from './bestflow/types'
 import { RootInput } from './shared'
 
 const STEPS = [
@@ -36,8 +43,16 @@ const order = (s: StepId) => STEPS.findIndex((x) => x.id === s)
 /** 比較方法這一步的進度：上傳中、執行中（進度由 SSE 事件得知）、寫入真值中。 */
 type Phase = { kind: 'upload'; done: number; total: number } | { kind: 'truth' } | null
 
+/** 人工確認的答案（號碼、沒有條碼）的指紋，用來判斷「上次寫入後有沒有再改」。 */
+const answersKey = (items: readonly Item[]) =>
+  JSON.stringify(
+    items.filter((i) => i.answer && i.answer.kind !== 'skip').map((i) => [i.key, i.answer]),
+  )
+const NO_ANSWERS = answersKey([])
+
 /**
- * 找最佳流程（實驗結果頁的預設模式）。狀態都留在這裡，切換步驟（以及切到「進階」再回來）都不會遺失。
+ * 找最佳流程（實驗結果頁的預設模式）。狀態都留在這裡，切換步驟（以及切到「進階」再回來）都不會遺失；
+ * 離開實驗結果頁或重新整理則會卸載（圖片在瀏覽器裡無法保存），所以有進行中的比較或尚未寫入的答案時先攔下來問。
  */
 export function BestFlow({
   switcher,
@@ -69,7 +84,9 @@ export function BestFlow({
 
   const [phase, setPhase] = useState<Phase>(null)
   const [uploadError, setUploadError] = useState<unknown>(null)
-  const [saveError, setSaveError] = useState<unknown>(null)
+  const [unsaved, setUnsaved] = useState<UnsavedTruths | null>(null)
+  // 最近一次成功寫進執行的答案；之後沒再改的話，離開頁面不會遺失任何東西
+  const [savedKey, setSavedKey] = useState(NO_ANSWERS)
   const stopUpload = useRef(false)
   const stream = useStream<RunEvent>('/workbench/v1/dev/best-flow/runs')
   const busy = phase !== null || stream.status === 'running'
@@ -87,15 +104,30 @@ export function BestFlow({
   const runs = list.data?.best_flow_runs ?? []
 
   const answered = items.filter((i) => i.answer).length
+  const currentKey = answersKey(items)
+  const unsavedAnswers = currentKey !== savedKey && currentKey !== NO_ANSWERS
+  const leaveGuard = busy || unsavedAnswers || unsaved !== null
+
+  // 離開實驗結果頁（切到「進階」不算，這裡仍掛載）或關閉、重新整理分頁前先問
+  const blocker = useBlocker(
+    ({ nextLocation }) => leaveGuard && !nextLocation.pathname.startsWith('/m1/results'),
+  )
+  useEffect(() => {
+    if (!leaveGuard) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [leaveGuard])
   const cursorSafe = Math.min(cursor, Math.max(items.length - 1, 0))
 
   const start = async () => {
     setUploadError(null)
-    setSaveError(null)
+    setUnsaved(null)
     setDir('forward')
     setStep('run')
     let body: Record<string, unknown>
     let truths: Record<string, string> = {}
+    const sentKey = currentKey
     if (source === 'folder') {
       body = { folder, recursive, root: root || undefined }
     } else {
@@ -140,8 +172,10 @@ export function BestFlow({
             body: { truths },
           }),
         )
+        setSavedKey(sentKey)
       } catch (err) {
-        setSaveError(err)
+        // 照樣到結論，但結論頁頂部會一直提醒並可重新送出（結論此時只用了程式推定的真值）
+        setUnsaved({ run: name, truths, sentKey, error: err })
       }
       setPhase(null)
     }
@@ -153,7 +187,6 @@ export function BestFlow({
   }
 
   const openRun = (name: string) => {
-    setSaveError(null)
     setRunName(name)
     goto('result')
   }
@@ -288,7 +321,11 @@ export function BestFlow({
         root={debouncedRoot}
         criteria={criteria}
         setCriteria={setCriteria}
-        saveError={saveError}
+        unsaved={unsaved?.run === runName ? unsaved : null}
+        onSaved={() => {
+          if (unsaved) setSavedKey(unsaved.sentKey)
+          setUnsaved(null)
+        }}
       />
     ) : null
     footer = (
@@ -357,6 +394,32 @@ export function BestFlow({
           {footer}
         </footer>
       </section>
+      <Dialog
+        open={blocker.state === 'blocked'}
+        onOpenChange={(open) => {
+          if (!open) blocker.reset?.()
+        }}
+        title="要離開找最佳流程嗎？"
+        description="選好的圖片只存在這個畫面，離開後要重新選。"
+        footer={
+          <>
+            <Button size="sm" variant="ghost" onClick={() => blocker.proceed?.()}>
+              仍要離開
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => blocker.reset?.()}>
+              留在這裡
+            </Button>
+          </>
+        }
+      >
+        <ul className="text-ink-2 list-disc space-y-1 pl-5 text-[13px] leading-relaxed">
+          {busy && <li>正在進行的比較會停止，不留下結果。</li>}
+          {unsavedAnswers && <li>你確認的真值還沒寫進任何一次執行，會一起消失。</li>}
+          {unsaved && (
+            <li>有 {Object.keys(unsaved.truths).length} 張真值寫入失敗，還沒重新送出。</li>
+          )}
+        </ul>
+      </Dialog>
     </div>
   )
 }
@@ -419,7 +482,7 @@ function RunScreen({
         <p className="text-ink-2 mt-2 text-center text-[13px]">{label}</p>
       </div>
       <p className="text-muted max-w-md text-center text-xs leading-relaxed">
-        包含多尺度與疊加流程，一張圖約需數秒。可以先去看其他頁面，回來時進度還在。
+        包含多尺度與疊加流程，一張圖約需數秒。可以切到「進階」看其他結果，回來時進度還在；離開實驗結果頁會停止比較。
       </p>
     </div>
   )

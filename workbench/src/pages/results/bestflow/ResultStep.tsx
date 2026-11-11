@@ -9,13 +9,15 @@ import {
   Download,
   ListChecks,
   FilePen,
+  RotateCw,
   SlidersHorizontal,
+  TriangleAlert,
   Trophy,
   Undo2,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 
-import { api, artifactUrl, unwrap } from '@/api/client'
+import { api, ApiError, artifactUrl, unwrap } from '@/api/client'
 import { BarList } from '@/components/charts'
 import { CodeBlock } from '@/components/ConfigIO'
 import { EmptyState, Section } from '@/components/layout/Workspace'
@@ -25,7 +27,7 @@ import { Badge, Button, DraftNumberInput, Segmented } from '@/components/ui/prim
 import { withIcon } from '@/components/ui/withIcon'
 import { cn } from '@/lib/cn'
 import { parseClampedInt } from '@/lib/number'
-import { methodText } from '@/lib/text'
+import { errorText, methodText } from '@/lib/text'
 
 import {
   criteriaQuery,
@@ -38,24 +40,37 @@ import {
   type ImageRow,
   type Result,
   type Run,
+  type UnsavedTruths,
 } from './types'
+
+/** 錯誤的一行說明：後端錯誤為「代碼的中文：訊息」，其他（例如連線中斷）只有訊息。 */
+const errorMessage = (error: unknown) =>
+  error instanceof ApiError
+    ? `${errorText(error.code)}：${error.message}`
+    : error instanceof Error
+      ? error.message
+      : String(error)
 
 /**
  * 結論畫面。runName 為要看的執行；criteria 改變時以查詢參數重新取得（後端重新選擇）。
- * saveError：剛執行完送出人工真值時的錯誤（真值沒存成功，請使用者到「真值」分頁確認）。
+ * unsaved：剛執行完送出人工真值失敗時留下的那批真值；不分分頁在頂部提醒，可重新送出。
  */
 export function ResultStep({
   runName,
   root,
   criteria,
   setCriteria,
-  saveError,
+  unsaved,
+  onSaved,
 }: {
   runName: string
   root: string
   criteria: Criteria
   setCriteria: (c: Criteria) => void
-  saveError: unknown
+  /** 逐張確認的真值沒寫進這次執行；null 為沒有這種情況 */
+  unsaved: UnsavedTruths | null
+  /** 重新送出成功 */
+  onSaved: () => void
 }) {
   const qc = useQueryClient()
   const runKey = ['best-flow-run', root, runName, criteria]
@@ -103,7 +118,9 @@ export function ResultStep({
       setCriteria={setCriteria}
       onTruth={(truths) => setTruth.mutate(truths)}
       saving={setTruth.isPending}
-      saveError={setTruth.error ?? saveError}
+      saveError={setTruth.error}
+      unsaved={unsaved}
+      onResend={() => unsaved && setTruth.mutate(unsaved.truths, { onSuccess: onSaved })}
     />
   )
 }
@@ -116,6 +133,8 @@ function RunView({
   onTruth,
   saving,
   saveError,
+  unsaved,
+  onResend,
 }: {
   data: Run
   criteria: Criteria
@@ -123,6 +142,8 @@ function RunView({
   onTruth: (truths: Record<string, string | null>) => void
   saving: boolean
   saveError: unknown
+  unsaved: UnsavedTruths | null
+  onResend: () => void
 }) {
   const c = data.counts
   // 有未定的圖片又還沒有結論時，先帶到真值
@@ -156,6 +177,29 @@ function RunView({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+        {/* 不分分頁都顯示：沒寫入的話，畫面上的結論只用了程式推定的真值 */}
+        {unsaved && (
+          <div
+            role="alert"
+            aria-label="真值沒有寫入"
+            className="bg-danger-soft mb-4 rounded-2xl px-4 py-3 text-[13px]"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <TriangleAlert className="text-danger size-4 shrink-0" aria-hidden />
+              <p className="text-danger min-w-0 flex-1 font-semibold">
+                你確認的 {Object.keys(unsaved.truths).length}{' '}
+                張真值沒有寫入，下面的結論只用了程式推定的真值。
+              </p>
+              <Button size="sm" variant="primary" disabled={saving} onClick={onResend}>
+                <RotateCw className="size-3.5" aria-hidden />
+                重新送出
+              </Button>
+            </div>
+            <p className="text-muted mt-1 pl-6 text-xs break-all">
+              {errorMessage(saveError ?? unsaved.error)}
+            </p>
+          </div>
+        )}
         <p className="text-ink-2 mb-4 text-xs">
           共 {c.images} 張：已確定 {c.decided} 張（有條碼 {c.positives}、沒有條碼 {c.negatives}；
           人工 {manual}、程式推定 {c.decided - manual}）

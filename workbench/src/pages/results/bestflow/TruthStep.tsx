@@ -1,6 +1,7 @@
 // 找最佳流程・步驟 2「確認真值」：一次一張，看著大圖輸入或確認條碼號碼，Enter 確認並換下一張。
-// 預先帶入的號碼依序取自：已確認的答案 → 檔名 → 程式從原圖讀到的號碼（單張檢視同一套條碼解碼），
-// 一律要人按下確認才算數；沒確認的圖片送出時交給程式推定。
+// 預先帶入的號碼依序取自：已確認的答案 → 檔名，一律要人按下確認才算數；沒確認的圖片送出時交給程式推定。
+// 程式從原圖讀到的號碼（單張檢視同一套條碼解碼）只列為可點選的候選，不預先帶入：
+// 被評測的解碼器不能同時提供答案，否則檢查碼剛好正確的誤讀按一下 Enter 就成了真值。
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Check,
@@ -183,21 +184,21 @@ function Desk({
 }) {
   const s = useQuery(suggestion(item, upload))
   const read = s.data?.codes ?? []
-  const readOk = read.find((c) => checkCode(c).ok)
   const a = item.answer
-  // 預先帶入的號碼與來源；使用者動過輸入框（draft 不為 null）後就以輸入為準
+  // 預先帶入的號碼與來源；使用者動過輸入框（draft 不為 null）後就以輸入為準。
+  // 程式讀到的號碼不在這裡：只能由人點選候選填入（見檔頭說明）
   const prefill: { code: string; from: string } | null =
     a?.kind === 'code'
       ? { code: a.code, from: '已確認' }
       : item.nameAnswer?.kind === 'code'
         ? { code: item.nameAnswer.code, from: '來自檔名' }
-        : readOk
-          ? { code: readOk, from: '程式從原圖讀到' }
-          : null
+        : null
   const [draft, setDraft] = useState<string | null>(null)
   const value = draft ?? prefill?.code ?? ''
   const check = checkCode(value)
   const touched = draft !== null && draft !== ''
+  // 輸入框裡是點選候選填入的號碼（還沒改過）：提醒對照圖片
+  const fromRead = draft !== null && read.includes(draft)
 
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -272,6 +273,7 @@ function Desk({
           {!touched && prefill && value === prefill.code && (
             <span className="text-muted">（{prefill.from}）</span>
           )}
+          {fromRead && <span className="text-muted">（程式讀到的，請對照圖片）</span>}
         </p>
         <Button type="submit" variant="primary" className="h-11 w-full" disabled={!check.ok}>
           確認，下一張
@@ -312,8 +314,12 @@ function Desk({
                   <button
                     key={c}
                     type="button"
-                    onClick={() => setDraft(c)}
-                    title="填入這個號碼"
+                    onClick={() => {
+                      setDraft(c)
+                      // 焦點回到輸入框：對照圖片後按 Enter 確認
+                      input.current?.focus()
+                    }}
+                    title="填入這個號碼（請對照圖片再確認）"
                     className="bg-sunken hover:bg-hover focus-visible:ring-primary/40 rounded-md px-1.5 py-0.5 focus-visible:ring-2 focus-visible:outline-none"
                   >
                     {c}

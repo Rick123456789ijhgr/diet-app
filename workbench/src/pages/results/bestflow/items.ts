@@ -7,7 +7,7 @@ import { answerFromName, type Answer } from '@/lib/barcodeTruth'
 
 /** 一張選好的圖片。 */
 export interface Item {
-  /** 本頁內唯一的鍵（同名檔案也不同） */
+  /** 這次開啟工作台期間唯一的鍵（同名檔案也不同；離開頁面再回來也不重複，見 nextKey） */
   key: string
   file: File
   /** 本機預覽網址（object URL）；環境不支援時為空字串 */
@@ -24,10 +24,14 @@ const revoke = (url: string) => {
   if (url && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(url)
 }
 
+// 流水號放在模組層級而不是元件裡：鍵同時是「讀條碼建議」的查詢鍵，離開頁面後查詢快取還會留一陣子，
+// 若每次掛載都從 f1 重新編號，新選的圖片會拿到上一批圖片的號碼。
+let seq = 0
+const nextKey = () => `f${++seq}`
+
 /** 圖片清單：新增、移除、清空、設定答案；移除與卸載時釋放預覽網址。 */
 export function useItems() {
   const [items, setItems] = useState<Item[]>([])
-  const seq = useRef(0)
   // 卸載時釋放所有預覽網址；用 ref 取得最新清單，避免 effect 依賴 items 而每次更新都執行
   const latest = useRef(items)
   useEffect(() => {
@@ -37,7 +41,7 @@ export function useItems() {
 
   const add = useCallback((files: File[]) => {
     const added = files.map((file) => ({
-      key: `f${++seq.current}`,
+      key: nextKey(),
       file,
       url: objectUrl(file),
       nameAnswer: answerFromName(file.name),
