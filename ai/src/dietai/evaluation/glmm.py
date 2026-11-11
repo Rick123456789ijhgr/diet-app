@@ -1,8 +1,16 @@
 """混合效果邏輯迴歸：固定效果為前處理方法、劣化條件等，原始樣本為隨機截距（設計 9.1 節輔助方法）。
 
 模型：``logit P(y_ij = 1) = x_ij·β + u_i``，``u_i ~ N(0, σ²)``，``i`` 為原始樣本（``source_id``），
-``j`` 為該原始樣本的各變體 × 方法。同一原始樣本的結果共用 ``u_i``，因此係數的標準誤
-不會像「把變體當成獨立樣本」那樣被低估（ADR 0005 第 4、9 點）。
+``j`` 為該原始樣本的各變體 × 方法。同一原始樣本的結果共用 ``u_i``（ADR 0005 第 4、9 點）。
+
+**標準誤是以原始樣本為集群的穩健（三明治）估計**，不是模型本身的標準誤。隨機截距只描述
+「同一原始樣本」的相關；但同一張變體影像會被十幾個方法各解碼一次，這些結果在變體層還有
+額外的相關（那張圖特別糊，所有方法一起失敗），模型裡沒有對應的項。只用模型的標準誤時，
+劣化條件這類「整張變體共用」的固定效果會把同一張圖的十幾筆結果當成獨立觀測，標準誤嚴重偏小
+（模擬：真實效果為 0 時，名目 5% 的檢定有約一半顯著）。三明治估計只假設不同原始樣本之間獨立，
+原始樣本內的相關是什麼結構都成立，與設計 9.1 節「信賴區間與檢定一律以原始樣本為單位」一致。
+三明治估計靠「集群數夠多」才可靠：集群少時估計本身不穩定，一般傾向偏小（已乘上 G/(G−1) 的
+小樣本修正）。原始樣本少於 ``_FEW_CLUSTERS`` 個時結果會帶警告；主要結論仍以集群 bootstrap 為準。
 
 估計方法為**自適應 Gauss–Hermite 積分的最大概似**（同 R ``lme4::glmer`` 的 ``nAGQ > 1``）：
 每個原始樣本先以牛頓法找出 ``u_i`` 的後驗眾數與曲率，在其附近放積分點計算邊際概似；
@@ -27,13 +35,18 @@ from dietai.evaluation.manifest import SOURCE_COLUMN
 INTERCEPT = "(截距)"
 _LOG_SIGMA_RANGE = (-8.0, 4.0)  # σ 約 0.0003～55；超出時視為邊界解
 _SEPARATION_ABS = 10.0  # |係數| 超過此值（勝算比 > 2 萬倍）視為可能完全分離
+_FEW_CLUSTERS = 40  # 原始樣本少於此數時，集群穩健標準誤不穩定，結果加註警告
 
 Array = npt.NDArray[np.float64]
 
 
 @dataclass(frozen=True)
 class Coefficient:
-    """一個固定效果：估計值、標準誤、Wald 檢定，以及勝算比與其 95% 信賴區間。"""
+    """一個固定效果：估計值、標準誤、Wald 檢定，以及勝算比與其 95% 信賴區間。
+
+    ``se`` 為以原始樣本為集群的穩健標準誤，檢定與信賴區間都用它；``se_model`` 為模型本身的
+    標準誤（Hessian 反矩陣），只供對照：兩者差很多代表原始樣本內還有模型沒描述的相關。
+    """
 
     name: str
     estimate: float
@@ -43,6 +56,7 @@ class Coefficient:
     odds_ratio: float
     or_low: float
     or_high: float
+    se_model: float = math.nan
 
 
 @dataclass(frozen=True)
@@ -105,6 +119,8 @@ def fit_mixed_logit(
     # 同 glmer 的邊界解，固定 σ 後只以 β 的區塊計算標準誤
     boundary = log_sigma <= _LOG_SIGMA_RANGE[0] + 0.5
     warnings: list[str] = []
+    n_clusters = len(levels)
+    scores = model.scores(theta)
     try:
         if boundary:
 
@@ -113,15 +129,26 @@ def fit_mixed_logit(
                 return value, grad[:-1]
 
             hessian = _hessian(f_beta, theta[:-1])
+            scores = scores[:, :-1]
         else:
             hessian = _hessian(model.evaluate, theta)
-        variances = np.diag(np.linalg.inv(hessian))
-        if not np.isfinite(variances).all() or (variances <= 0).any():
-            raise np.linalg.LinAlgError
-        se = np.sqrt(variances)
+        bread = np.linalg.inv(hessian)
+        model_var = np.diag(bread)
+        # 三明治：H⁻¹·(Σ_i s_i s_iᵀ)·H⁻¹，s_i 為原始樣本 i 的分數（對數邊際概似的梯度）
+        meat = scores.T @ scores * (n_clusters / (n_clusters - 1))
+        variances = np.diag(bread @ meat @ bread)
+        for v in (model_var, variances):
+            if not np.isfinite(v).all() or (v <= 0).any():
+                raise np.linalg.LinAlgError
+        se, se_model = np.sqrt(variances), np.sqrt(model_var)
     except np.linalg.LinAlgError:
-        se = np.full(len(theta), np.nan)
+        se = se_model = np.full(len(theta), np.nan)
         warnings.append("Hessian 不是正定，標準誤無法計算")
+    if n_clusters < _FEW_CLUSTERS:
+        warnings.append(
+            f"只有 {n_clusters} 個原始樣本（少於 {_FEW_CLUSTERS}），"
+            "集群穩健標準誤不穩定，p 值僅供參考"
+        )
     if not converged:
         warnings.append(f"最佳化在 {iters} 次迭代內未收斂")
     if boundary:
@@ -132,9 +159,8 @@ def fit_mixed_logit(
         b, s = float(theta[i]), float(se[i])
         z = b / s if s > 0 else math.nan
         p = math.erfc(abs(z) / math.sqrt(2)) if math.isfinite(z) else math.nan
-        coefs.append(
-            Coefficient(name, b, s, z, p, _exp(b), _exp(b - 1.959964 * s), _exp(b + 1.959964 * s))
-        )
+        low, high = _exp(b - 1.959964 * s), _exp(b + 1.959964 * s)
+        coefs.append(Coefficient(name, b, s, z, p, _exp(b), low, high, float(se_model[i])))
         if abs(b) > _SEPARATION_ABS:
             warnings.append(f"{name} 的係數過大，可能完全分離（某分組全對或全錯），不可信")
     return MixedLogitResult(
@@ -142,7 +168,7 @@ def fit_mixed_logit(
         sigma=math.exp(log_sigma),
         log_likelihood=-value,
         n_obs=len(yv),
-        n_clusters=len(levels),
+        n_clusters=n_clusters,
         converged=converged,
         iterations=iters,
         warnings=tuple(warnings),
@@ -214,7 +240,10 @@ def mixed_logit_from_rows(
 
 
 def mixed_logit_table(result: MixedLogitResult) -> str:
-    """Markdown 表格：各固定效果的勝算比、95% 信賴區間與 p 值，表後附 σ 與警告。"""
+    """Markdown 表格：各固定效果的勝算比、95% 信賴區間與 p 值，表後附 σ 與警告。
+
+    標準誤、信賴區間與 p 值都是以原始樣本為集群的穩健估計（見模組說明）。
+    """
     head = ["固定效果", "係數", "標準誤", "勝算比", "95% CI", "p 值"]
     out = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for c in result.coefficients:
@@ -226,6 +255,7 @@ def mixed_logit_table(result: MixedLogitResult) -> str:
         "",
         f"隨機截距標準差 σ = {result.sigma:.3f}（{result.n_clusters} 個原始樣本、"
         f"{result.n_obs} 筆觀測；對數概似 {result.log_likelihood:.1f}）",
+        "標準誤、信賴區間與 p 值為以原始樣本為集群的穩健（三明治）估計。",
     ]
     out += [f"> 注意：{w}" for w in result.warnings]
     return "\n".join(out)
@@ -275,6 +305,21 @@ class _Model:
 
     def evaluate(self, theta: Array) -> tuple[float, Array]:
         """回傳（負對數概似, 對 θ 的梯度）。"""
+        log_l, scores = self._per_cluster(theta)
+        grad = scores.sum(axis=0)
+        # 在 σ 的上下界外概似是平的（log σ 被截斷）：往界外的方向梯度設為 0，
+        # BFGS 才會停在邊界上而不是一直往外走（grad 是對數概似的梯度：下界處為負＝往界外更好）
+        lo, hi = _LOG_SIGMA_RANGE
+        if (theta[-1] <= lo and grad[-1] < 0) or (theta[-1] >= hi and grad[-1] > 0):
+            grad[-1] = 0.0
+        return -float(log_l.sum()), -grad
+
+    def scores(self, theta: Array) -> Array:
+        """各原始樣本的分數：對數邊際概似對 θ 的梯度，形狀為 (原始樣本數, 參數數)。"""
+        return self._per_cluster(theta)[1]
+
+    def _per_cluster(self, theta: Array) -> tuple[Array, Array]:
+        """回傳（各原始樣本的對數邊際概似, 各原始樣本的分數）。"""
         beta = theta[:-1]
         log_sigma = float(np.clip(theta[-1], *_LOG_SIGMA_RANGE))
         var = math.exp(2 * log_sigma)
@@ -295,14 +340,11 @@ class _Model:
         # 後驗權重 π_ik：梯度為後驗期望（∂/∂β = E[Σ_j (y − p)·x]；∂/∂logσ = E[u²/σ² − 1]）
         post = np.exp(terms - log_int[:, None])
         resid = (post[self.g] * (self.y[:, None] - _expit(e))).sum(axis=1)
-        grad_beta = self.x.T @ resid
-        grad_sigma = float((post * (u**2 / var - 1.0)).sum())
-        # 在 σ 的上下界外概似是平的（log σ 被截斷）：往界外的方向梯度設為 0，
-        # BFGS 才會停在邊界上而不是一直往外走
-        lo, hi = _LOG_SIGMA_RANGE
-        if (theta[-1] <= lo and grad_sigma < 0) or (theta[-1] >= hi and grad_sigma > 0):
-            grad_sigma = 0.0
-        return -float(log_l.sum()), -np.append(grad_beta, grad_sigma)
+        score_beta = np.column_stack(
+            [self._sum(self.x[:, c] * resid) for c in range(self.x.shape[1])]
+        )
+        score_sigma = (post * (u**2 / var - 1.0)).sum(axis=1)
+        return log_l, np.column_stack([score_beta, score_sigma])
 
 
 def _logistic_start(x: Array, y: Array) -> Array:
