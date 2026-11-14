@@ -48,6 +48,10 @@ describe('flowPresets', () => {
     ])
   })
 
+  it('methodsOf：定位條碼只有一個方法', () => {
+    expect(methodsOf(preset('loc', ['locate', 'raw']).arm.ladder)).toEqual(['locate', 'raw'])
+  })
+
   it('methodsOf 展開旋轉角度；沒有角度時不能執行', () => {
     const rot = preset('rot', ['rotate', 'pipeline'], {
       angles: [90, -45],

@@ -64,6 +64,7 @@ export const RUNG_TEXT: Record<string, string> = {
   otsu: 'Otsu 二值化',
   clahe: 'CLAHE',
   rotate: '旋轉',
+  locate: '定位條碼',
   pipeline: '疊加流程',
 }
 
@@ -107,6 +108,7 @@ export const GROUP_TEXT: Record<string, string> = {
   sharpen: '銳化',
   denoise: '去雜訊',
   deskew: '旋轉校正',
+  barcode_locate: '條碼定位',
   verify: '驗證',
   zxing: '解碼器',
   label_steps: '步驟開關',
