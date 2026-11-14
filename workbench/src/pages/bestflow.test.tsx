@@ -40,6 +40,13 @@ async function toTruthStep(user: ReturnType<typeof userEvent.setup>, names: stri
   return screen.findByLabelText('條碼號碼', {}, WAIT)
 }
 
+/** 到「處理流程」選好方案（預設為第一個內建方案）後開始比較。 */
+async function startCompare(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /下一步：選擇處理流程/ }))
+  await screen.findByRole('navigation', { name: '處理流程方案' }, WAIT)
+  await user.click(await screen.findByRole('button', { name: '開始比較' }, WAIT))
+}
+
 /** 點選「程式讀到」的候選號碼填入輸入框（焦點回到輸入框，之後按 Enter 確認）。 */
 async function pickRead(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: CODE }, WAIT))
@@ -109,7 +116,7 @@ describe('找最佳流程', () => {
     expect(within(strip).getByRole('button', { name: /b\.jpg：沒有條碼/ })).toBeInTheDocument()
     expect(screen.getByText(/已確認/)).toHaveTextContent('已確認 2／2 張')
 
-    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await startCompare(user)
     expect(await screen.findByRole('list', { name: '推薦流程' }, WAIT)).toBeInTheDocument()
     // 每張只上傳一次（確認時讀條碼用），執行沿用同一個 image_id；真值以原檔名為 ID 送出
     expect(bodies('/workbench/v1/dev/images')).toEqual([1, 2])
@@ -135,7 +142,7 @@ describe('找最佳流程', () => {
     await user.keyboard('{Enter}')
     await screen.findByText(/^第 2 張/, {}, WAIT)
     await user.click(screen.getByRole('button', { name: '沒有條碼' }))
-    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await startCompare(user)
     await screen.findByRole('list', { name: '推薦流程' }, WAIT)
     expect(bodies(TRUTH)).toContainEqual({ truths: { 'x.jpg': '4710088410108', 'x.jpg#2': '' } })
   })
@@ -194,9 +201,18 @@ describe('找最佳流程', () => {
     renderAt('/m1/results/best')
     await user.click(await screen.findByRole('radio', { name: /伺服器上的資料夾/ }, WAIT))
     await user.type(screen.getByRole('textbox', { name: '圖片資料夾' }), 'D:/data/splits/test')
-    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await startCompare(user)
     expect(await screen.findByText('測試集已鎖定，不得讀取', {}, WAIT)).toBeInTheDocument()
-    expect(bodies(RUN)).toContainEqual({ folder: 'D:/data/splits/test', recursive: true })
+    expect(bodies(RUN)).toContainEqual(
+      expect.objectContaining({
+        folder: 'D:/data/splits/test',
+        recursive: true,
+        preset_id: 'all_methods',
+        arm: expect.objectContaining({ name: 'all_methods' }),
+      }),
+    )
+    await user.click(screen.getByRole('button', { name: '上一步' }))
+    expect(await screen.findByRole('navigation', { name: '處理流程方案' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '上一步' }))
     expect(screen.getByRole('textbox', { name: '圖片資料夾' })).toHaveValue('D:/data/splits/test')
   })
@@ -318,7 +334,7 @@ describe('找最佳流程：真值不遺失、不配錯', () => {
         { once: true },
       ),
     )
-    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await startCompare(user)
     // 停在「結論」分頁也看得到
     await screen.findByRole('list', { name: '推薦流程' }, WAIT)
     const alert = screen.getByRole('alert', { name: '真值沒有寫入' })
@@ -401,7 +417,7 @@ describe('找最佳流程：真值不遺失、不配錯', () => {
     const user = userEvent.setup()
     await toTruthStep(user, ['a.jpg'])
     await user.click(screen.getByRole('button', { name: '沒有條碼' }))
-    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await startCompare(user)
     await screen.findByRole('list', { name: '推薦流程' }, WAIT)
     await user.click(screen.getByRole('link', { name: /單張檢視/ }))
     await waitFor(
@@ -409,5 +425,117 @@ describe('找最佳流程：真值不遺失、不配錯', () => {
       WAIT,
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('找最佳流程：處理流程方案', () => {
+  beforeEach(() => localStorage.clear())
+
+  /** 資料夾來源走到「處理流程」。 */
+  async function toFlowStep(user: ReturnType<typeof userEvent.setup>) {
+    renderAt('/m1/results/best')
+    await user.click(await screen.findByRole('radio', { name: /伺服器上的資料夾/ }, WAIT))
+    await user.type(screen.getByRole('textbox', { name: '圖片資料夾' }), 'D:/data/f_a01')
+    await user.click(screen.getByRole('button', { name: /下一步：選擇處理流程/ }))
+    return screen.findByRole('navigation', { name: '處理流程方案' }, WAIT)
+  }
+
+  it('列出內建方案與會執行的方法；選別的方案後以它的設定執行', async () => {
+    const user = userEvent.setup()
+    const nav = await toFlowStep(user)
+    expect(within(nav).getByRole('button', { name: /全部方法/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    // 多尺度依倍率展開：原圖、灰階、二值化、多尺度 ×2、×0.5
+    const methods = screen.getByRole('region', { name: '會執行的方法' })
+    expect(within(methods).getAllByRole('listitem')).toHaveLength(5)
+    await user.click(within(nav).getByRole('button', { name: /只用原圖/ }))
+    expect(
+      within(screen.getByRole('region', { name: '會執行的方法' })).getAllByRole('listitem'),
+    ).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await screen.findByRole('list', { name: '推薦流程' }, WAIT)
+    expect(bodies(RUN).at(-1)).toMatchObject({
+      preset_id: 'raw_only',
+      arm: { name: 'raw_only', ladder: { rungs: ['raw'] } },
+    })
+  })
+
+  it('編輯內建方案：儲存後標示已修改、執行用修改後的設定；可還原預設', async () => {
+    const user = userEvent.setup()
+    await toFlowStep(user)
+    await user.click(screen.getByRole('button', { name: '編輯' }))
+    const dialog = await screen.findByRole('dialog', { name: /編輯方案：全部方法/ }, WAIT)
+    await user.click(within(dialog).getByRole('button', { name: /移除.*二值化/ }))
+    await user.click(within(dialog).getByRole('button', { name: '儲存' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('已修改，可還原')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: '會執行的方法' })).getAllByRole('listitem'),
+    ).toHaveLength(4)
+    // 修改存在瀏覽器
+    expect(localStorage.getItem('wb.bestflow.presets')).toContain('all_methods')
+
+    await user.click(screen.getByRole('button', { name: '還原預設' }))
+    expect(screen.queryByText('已修改，可還原')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: '會執行的方法' })).getAllByRole('listitem'),
+    ).toHaveLength(5)
+  })
+
+  it('編輯時名稱空白不能儲存；取消不改變方案', async () => {
+    const user = userEvent.setup()
+    await toFlowStep(user)
+    await user.click(screen.getByRole('button', { name: '編輯' }))
+    const dialog = await screen.findByRole('dialog', { name: /編輯方案/ }, WAIT)
+    await user.clear(within(dialog).getByLabelText('方案名稱'))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('方案名稱不能空白')
+    expect(within(dialog).getByRole('button', { name: '儲存' })).toBeDisabled()
+    await user.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(screen.getByRole('heading', { name: '全部方法' })).toBeInTheDocument()
+  })
+
+  it('複製成新方案、改名並加入疊加流程；自訂方案可刪除', async () => {
+    const user = userEvent.setup()
+    const nav = await toFlowStep(user)
+    await user.click(screen.getByRole('button', { name: '複製成新方案' }))
+    expect(within(nav).getByRole('button', { name: /全部方法（副本）/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    await user.click(screen.getByRole('button', { name: '編輯' }))
+    const dialog = await screen.findByRole('dialog', { name: /編輯方案/ }, WAIT)
+    const name = within(dialog).getByLabelText('方案名稱')
+    await user.clear(name)
+    await user.type(name, '我的組合')
+    await user.click(within(dialog).getByRole('button', { name: /疊加流程/ }))
+    await user.click(within(dialog).getByRole('button', { name: '新增疊加流程' }))
+    // 只有一個步驟時不能儲存
+    await user.click(within(dialog).getByRole('button', { name: '第 1 條：CLAHE' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('至少要有兩個步驟')
+    await user.click(within(dialog).getByRole('button', { name: '第 1 條：去雜訊' }))
+    await user.click(within(dialog).getByRole('button', { name: '儲存' }))
+
+    await user.click(screen.getByRole('button', { name: '開始比較' }))
+    await screen.findByRole('list', { name: '推薦流程' }, WAIT)
+    expect(bodies(RUN).at(-1)).toMatchObject({
+      preset_id: 'custom_1',
+      arm: { name: 'custom_1', ladder: { pipelines: [['clahe', 'denoise']] } },
+    })
+
+    // 結論頁可由步驟列回到處理流程
+    const steps = screen.getByRole('list', { name: '步驟' })
+    await user.click(within(steps).getByRole('button', { name: /處理流程/ }))
+    const nav2 = await screen.findByRole('navigation', { name: '處理流程方案' }, WAIT)
+    await user.click(within(nav2).getByRole('button', { name: /我的組合/ }))
+    await user.click(screen.getByRole('button', { name: '刪除' }))
+    const confirm = await screen.findByRole('dialog', { name: '要刪除這個方案嗎？' }, WAIT)
+    await user.click(within(confirm).getByRole('button', { name: '刪除' }))
+    expect(within(nav2).queryByRole('button', { name: /我的組合/ })).not.toBeInTheDocument()
+    expect(within(nav2).getByRole('button', { name: /全部方法/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
   })
 })

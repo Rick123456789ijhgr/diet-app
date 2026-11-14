@@ -1,0 +1,58 @@
+{
+  "name": "retail_formats",
+  "title": "全部方法（只收零售條碼）",
+  "description": "同「全部方法」，但只採用 EAN-13、EAN-8、UPC-A；QR code、批號條碼與斜拍誤讀出的 UPC-E 不採用。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "otsu",
+      "clahe",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "multiscale",
+      "pipeline"
+    ],
+    "scales": [
+      2.0,
+      0.5
+    ],
+    "pipelines": [
+      [
+        "denoise",
+        "binarize"
+      ],
+      [
+        "clahe",
+        "binarize"
+      ],
+      [
+        "clahe",
+        "denoise"
+      ],
+      [
+        "denoise",
+        "clahe",
+        "binarize"
+      ],
+      [
+        "deskew",
+        "denoise",
+        "binarize"
+      ]
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

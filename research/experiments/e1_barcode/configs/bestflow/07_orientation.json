@@ -1,0 +1,30 @@
+{
+  "name": "orientation",
+  "title": "方向與傾斜",
+  "description": "傾斜校正（含直放條碼約 90° 的轉正）與傾斜校正＋去噪＋二值化；zxing 內建嘗試關閉，只看前處理本身對方向的效果。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "deskew",
+      "pipeline"
+    ],
+    "pipelines": [
+      [
+        "deskew",
+        "denoise"
+      ],
+      [
+        "deskew",
+        "denoise",
+        "binarize"
+      ]
+    ],
+    "accept_formats": []
+  }
+}

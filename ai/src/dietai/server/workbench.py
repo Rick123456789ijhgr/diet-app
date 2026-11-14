@@ -276,11 +276,20 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         for event in events:
             yield workbench_pb2.StartE1RunResponse(json=convert.dumps(event))
 
+    @unary
+    def ListBestFlowPresets(
+        self, request: workbench_pb2.ListBestFlowPresetsRequest
+    ) -> workbench_pb2.ListBestFlowPresetsResponse:
+        """找最佳流程的內建方案（見 ``best_flow.presets_json``）。"""
+        return workbench_pb2.ListBestFlowPresetsResponse(
+            json=convert.dumps(best_flow.presets_json())
+        )
+
     @stream
     def StartBestFlowRun(
         self, request: workbench_pb2.StartBestFlowRunRequest
     ) -> Iterator[workbench_pb2.StartBestFlowRunResponse]:
-        """找最佳流程：對資料夾或上傳的圖片執行所有方法，逐筆回傳進度事件。
+        """找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法，逐筆回傳進度事件。
 
         上傳的圖片先由暫存區取出（找不到時回 ``IMAGE_NOT_FOUND``）。呼叫端取消時
         ``rpc.stream`` 關閉本產生器，連帶關閉 ``best_flow.start_run``，由它刪除未完成的資料夾。
@@ -295,6 +304,8 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
             recursive=request.recursive,
             limit=request.limit,
             root=request.root,
+            arm=_json_object(request.arm_json, "arm"),
+            preset_id=request.preset_id,
         )
         for event in events:
             yield workbench_pb2.StartBestFlowRunResponse(json=convert.dumps(event))

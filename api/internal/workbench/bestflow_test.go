@@ -2,6 +2,7 @@ package workbench
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ import (
 	dietaiv1 "github.com/your-org/diet-app/api/gen/proto/dietai/v1"
 )
 
-// bestFlowAI 是找最佳流程三個 RPC 的假實作，記下收到的請求。
+// bestFlowAI 是找最佳流程四個 RPC 的假實作，記下收到的請求。
 type bestFlowAI struct {
 	AIClient
 	start *dietaiv1.StartBestFlowRunRequest
@@ -25,6 +26,10 @@ func (f *bestFlowAI) StartBestFlowRun(_ context.Context, r *dietaiv1.StartBestFl
 		{Json: `{"type":"start","total":2}`},
 		{Json: `{"type":"done","name":"20261105-bestflow"}`},
 	}}, nil
+}
+
+func (f *bestFlowAI) ListBestFlowPresets(_ context.Context, _ *dietaiv1.ListBestFlowPresetsRequest, _ ...grpc.CallOption) (*dietaiv1.ListBestFlowPresetsResponse, error) {
+	return &dietaiv1.ListBestFlowPresetsResponse{Json: `{"presets":[{"id":"raw_only"}]}`}, nil
 }
 
 func (f *bestFlowAI) GetBestFlowRun(_ context.Context, r *dietaiv1.GetBestFlowRunRequest, _ ...grpc.CallOption) (*dietaiv1.GetBestFlowRunResponse, error) {
@@ -48,6 +53,35 @@ func TestStartBestFlowRunStreamsEvents(t *testing.T) {
 	if got := ai.start; strings.Join(got.GetImageIds(), ",") != "a,b" || got.GetLimit() != 10 ||
 		got.GetRoot() != "D:/runs" || got.GetFolder() != "" {
 		t.Errorf("request = %v", got)
+	}
+}
+
+func TestStartBestFlowRunPassesArm(t *testing.T) {
+	ai := &bestFlowAI{}
+	base := newServerWith(t, ai) + "/workbench/v1/dev/best-flow/runs"
+	resp := postJSON(t, base, `{"folder":"D:/x","arm":{"name":"mine","ladder":{"rungs":["raw"]}},"preset_id":"raw_only"}`)
+	sseEvents(t, resp)
+	got := ai.start
+	if got.GetPresetId() != "raw_only" || got.GetArmJson() != `{"ladder":{"rungs":["raw"]},"name":"mine"}` {
+		t.Errorf("request = %v", got)
+	}
+	// 沒送 arm 時不帶設定，由 Python 用 c0_all_methods
+	sseEvents(t, postJSON(t, base, `{"folder":"D:/x"}`))
+	if ai.start.GetArmJson() != "" || ai.start.GetPresetId() != "" {
+		t.Errorf("request = %v", ai.start)
+	}
+}
+
+func TestListBestFlowPresets(t *testing.T) {
+	base := newServerWith(t, &bestFlowAI{})
+	resp, err := http.Get(base + "/workbench/v1/dev/best-flow/presets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK || strings.TrimSpace(string(body)) != `{"presets":[{"id":"raw_only"}]}` {
+		t.Errorf("status = %d, body = %s", resp.StatusCode, body)
 	}
 }
 

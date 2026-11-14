@@ -1,0 +1,42 @@
+{
+  "name": "pipelines",
+  "title": "疊加流程",
+  "description": "原圖與設計表 6.4 的疊加流程 C-01～C-05（同一張影像依序做多種處理）。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "pipeline"
+    ],
+    "pipelines": [
+      [
+        "denoise",
+        "binarize"
+      ],
+      [
+        "clahe",
+        "binarize"
+      ],
+      [
+        "clahe",
+        "denoise"
+      ],
+      [
+        "denoise",
+        "clahe",
+        "binarize"
+      ],
+      [
+        "deskew",
+        "denoise",
+        "binarize"
+      ]
+    ],
+    "accept_formats": []
+  }
+}

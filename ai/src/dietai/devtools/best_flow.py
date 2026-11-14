@@ -6,7 +6,11 @@
     inputs/images/        上傳的圖片（資料夾來源不複製，manifest 直接指向原檔）
     methods/              run_methods 的輸出（run.json、methods.csv）
     truth.csv             採用的真值與來源（auto／manual；規則化檔名中的條碼視為 manual）
-    best_flow.json        完成標記與設定（推定所需方法數、實驗組）
+    best_flow.json        完成標記與設定（推定所需方法數、實驗組、方案代碼）
+
+執行的方法由「方案」決定：內建方案在 ``configs/bestflow/*.json``（實驗組設定再加上中文
+``title``），工作台可編輯、另存（存在瀏覽器），執行時把完整的實驗組設定送來；沒送時執行
+``c0_all_methods``。
 
 ``methods/`` 放在子資料夾，因此 E1 消融與自適應策略頁不會把它當成自己的執行。
 推定、判定與貪婪選擇一律由 ``dietai.evaluation`` 計算；路徑經 ``images.guard_path``
@@ -29,6 +33,7 @@ from dietai.devtools.e1 import E1_DIR, claim_run_dir, resolve_root
 from dietai.devtools.images import PathNotFoundError, guard_path, list_images
 from dietai.devtools.scenes import SceneError
 from dietai.evaluation import (
+    Arm,
     GreedyCriteria,
     ManifestItem,
     greedy_ladder,
@@ -58,7 +63,8 @@ from dietai.evaluation.image_names import truth_from_name, valid_code
 from dietai.evaluation.manifest import write_image
 from dietai.preprocess.types import Image, Rung
 
-ARM = "c0_all_methods"  # 所有單一方法＋多尺度＋疊加流程
+ARM = "c0_all_methods"  # 沒指定方案時：所有單一方法＋多尺度＋疊加流程
+PRESETS = "bestflow"  # configs/ 下內建方案的資料夾
 LABEL = "bestflow"
 MARKER = "best_flow.json"
 INPUTS = "inputs"
@@ -77,12 +83,16 @@ def start_run(
     recursive: bool = False,
     limit: int = 0,
     root: str = "",
+    arm: Mapping[str, Any] | None = None,
+    preset_id: str = "",
 ) -> Iterator[dict[str, Any]]:
-    """對資料夾或上傳的圖片執行所有方法，依序產生事件：
+    """對資料夾或上傳的圖片執行方案中的所有方法，依序產生事件：
 
     ``{"type": "start", "total": n}``、多個 ``{"type": "progress", "done", "total"}``、
     最後 ``{"type": "done", "name", "path"}``。``folder`` 與 ``uploads``（(名稱, 影像)）擇一；
-    ``limit`` 為 0 時用 ``MAX_IMAGES``。產生器被關閉（取消）時中止並刪除未完成的資料夾。
+    ``limit`` 為 0 時用 ``MAX_IMAGES``。``arm`` 為實驗組設定（格式同 ``configs/*.json``，
+    不合法時丟 ``SceneError``，欄位 ``arm``），``None`` 或空物件時用 ``c0_all_methods``；
+    ``preset_id`` 只寫進完成標記。產生器被關閉（取消）時中止並刪除未完成的資料夾。
     """
     if bool(folder) == bool(uploads):
         raise SceneError("請擇一提供資料夾或上傳的圖片", "folder")
@@ -91,10 +101,10 @@ def start_run(
     limit = limit or MAX_IMAGES
     if len(uploads) > limit:
         raise SceneError(f"一次最多 {limit} 張圖片", "image_ids")
+    chosen = arm_of(arm)
     paths = list_images(folder, recursive=recursive, limit=limit) if folder else []
     if folder and not paths:
         raise PathNotFoundError(f"資料夾中沒有影像：{guard_path(folder)}")
-    (arm,) = load_arms(E1_DIR / "configs", [ARM])
     out = claim_run_dir(resolve_root(root), LABEL)
 
     def discard() -> None:
@@ -114,7 +124,7 @@ def start_run(
 
     def work(progress: Callable[[int, int], None]) -> None:
         """背景執行緒：每個方法都執行，再寫出自動推定的真值與完成標記。"""
-        run_methods(manifest, [arm], out / METHODS, label=LABEL, progress=progress)
+        run_methods(manifest, [chosen], out / METHODS, label=LABEL, progress=progress)
         _, rows = read_methods(out / METHODS)
         guesses = infer_truth(rows, min_methods=DEFAULT_MIN_METHODS)
         named = names_truth(manifest.items)
@@ -124,7 +134,8 @@ def start_run(
             "source": str(guard_path(folder)) if folder else "upload",
             "recursive": recursive,
             "images": len(manifest.items),
-            "arm": ARM,
+            "arm": chosen.name,
+            "preset_id": preset_id,
             "min_methods": DEFAULT_MIN_METHODS,
             "truth_from_names": len(named),
         }
@@ -135,6 +146,60 @@ def start_run(
         for done, total in events:
             yield {"type": "progress", "done": done, "total": total}
     yield {"type": "done", "name": out.name, "path": str(out)}
+
+
+def arm_of(data: Mapping[str, Any] | None) -> Arm:
+    """由請求中的實驗組設定建立 ``Arm``；``None`` 或空物件時讀 ``c0_all_methods``。
+
+    設定不合法（未知欄位、階名或格式錯誤、疊加流程不合規則等）時丟 ``SceneError``（欄位 ``arm``）。
+    名稱省略時為 ``custom``；名稱會寫進 methods.csv，只允許英數字、底線與連字號。
+    """
+    if not data:
+        (default,) = load_arms(E1_DIR / "configs", [ARM])
+        return default
+    try:
+        arm = Arm.from_dict(dict(data), default_name="custom")
+    except (TypeError, ValueError, KeyError) as e:
+        raise SceneError(f"處理流程設定不合法：{e}", "arm") from e
+    if not _ARM_NAME.fullmatch(arm.name):
+        raise SceneError(f"方案名稱只能用英數字、底線與連字號：{arm.name}", "arm")
+    if arm.decoder not in ("zxing", "pyzbar"):
+        raise SceneError(f"沒有這種解碼器：{arm.decoder}", "arm")
+    return arm
+
+
+_ARM_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def presets_json() -> dict[str, Any]:
+    """內建方案（``configs/bestflow/*.json``，依檔名排序）。
+
+    回傳 ``{"presets": [{id, name, description, arm}]}``。檔案格式為實驗組設定再加上中文
+    ``title``；``id`` 為設定中的 ``name``，``arm`` 為補齊所有預設值的完整設定（工作台以此為
+    「還原」的目標）。設定不合法時丟 ``ValueError``（內建檔案有錯是程式問題）。
+    """
+    folder = E1_DIR / "configs" / PRESETS
+    out: list[dict[str, Any]] = []
+    for path in sorted(folder.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        title = str(data.pop("title", "") or "")
+        try:
+            arm = Arm.from_dict(data, default_name=path.stem)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"{path.name}：{e}") from e
+        out.append(
+            {
+                "id": arm.name,
+                "name": title or arm.name,
+                "description": arm.description,
+                "arm": arm.to_dict(),
+            }
+        )
+    ids = [p["id"] for p in out]
+    dup = sorted({i for i in ids if ids.count(i) > 1})
+    if dup:
+        raise ValueError(f"內建方案代碼重複：{dup}")
+    return {"presets": out}
 
 
 def _write_inputs(
