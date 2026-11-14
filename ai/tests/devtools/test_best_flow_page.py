@@ -123,6 +123,51 @@ def test_start_run_validates_before_creating_anything(e1_dir, tmp_path, dataset)
     assert not (e1_dir / "runs").exists() or not any((e1_dir / "runs").iterdir())
 
 
+def test_presets_are_valid_and_complete(e1_dir):
+    presets = best_flow.presets_json()["presets"]
+    ids = [p["id"] for p in presets]
+    assert ids[0] == "all_methods" and len(ids) == len(set(ids)) >= 5
+    for p in presets:
+        assert p["name"] and p["description"]
+        # 補齊所有預設值的完整設定，可以原樣送回 start_run
+        assert set(p["arm"]) == {"name", "description", "decoder", "zxing", "ladder"}
+        assert "binarize_block_size" in p["arm"]["ladder"]
+        assert best_flow.arm_of(p["arm"]).name == p["id"]
+    # 「全部方法」與沒指定方案時的 c0_all_methods 執行同一組方法
+    c0 = best_flow.arm_of(None)
+    assert best_flow.arm_of(presets[0]["arm"]).ladder == c0.ladder
+
+
+def test_run_with_a_custom_arm(e1_dir, dataset):
+    arm = {
+        "name": "mine",
+        "zxing": {"try_rotate": False},
+        "ladder": {"rungs": ["raw", "multiscale"], "scales": [0.5]},
+    }
+    done = _run(folder=str(dataset), recursive=True, arm=arm, preset_id="multiscale")
+    meta = best_flow.run_json(done["name"], CRITERIA)["meta"]
+    assert meta["arm"] == "mine" and meta["preset_id"] == "multiscale"
+    methods = best_flow.run_json(done["name"], CRITERIA)["result"]["methods"]
+    assert {m["arm"] for m in methods} == {"raw", "multiscale@0.5"}
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [
+        {"ladder": {"rungs": ["nope"]}},
+        {"ladder": {"pipelines": [["denoise"]]}},
+        {"unknown": 1},
+        {"name": "../x"},
+        {"decoder": "magic"},
+    ],
+)
+def test_bad_arm_is_rejected_before_creating_anything(e1_dir, dataset, arm):
+    with pytest.raises(SceneError) as e:
+        list(best_flow.start_run(folder=str(dataset), arm=arm))
+    assert e.value.field == "arm"
+    assert not (e1_dir / "runs").exists() or not any((e1_dir / "runs").iterdir())
+
+
 def test_cancel_removes_the_run(e1_dir, dataset):
     gen = best_flow.start_run(folder=str(dataset), recursive=True)
     assert next(gen)["type"] == "start"

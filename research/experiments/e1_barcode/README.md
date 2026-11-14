@@ -168,9 +168,12 @@ python make_variants.py --sources ... --out ... --conditions blur,motion,jpeg --
 ## 工作台：找最佳流程
 
 不想手寫 manifest 時，用工作台「模組一 → 找最佳流程」（`make workbench`）：上傳圖片或填資料夾，
-後端以 `c0_all_methods` 對每張圖執行所有方法（同 `run_methods.py`），再由各方法解出的號碼推定真值
+選一個「處理流程方案」，後端對每張圖執行方案中的所有方法（同 `run_methods.py`），再由各方法解出的號碼推定真值
 （至少 2 個方法讀出相同且檢查碼正確的號碼才自動採用，其餘人工確認），確認後即時以 `greedy_ladder` 選出推薦流程。
 
+- 內建方案在 `configs/bestflow/*.json`（實驗組設定再加上中文 `title`，依檔名排序；`load_arms` 不會讀子資料夾）。
+  工作台可編輯、複製成自訂方案、還原預設；修改只存在瀏覽器，執行時把完整設定送給後端，`methods/run.json`
+  會記下實際用的設定，`best_flow.json` 記下方案代碼（`preset_id`）。沒指定方案時用 `c0_all_methods`。
 - 結果存在 `runs/<時間>_bestflow/`：`inputs/`（自動產生的 manifest 與上傳的圖片）、`methods/`（`run_methods` 的輸出）、
   `truth.csv`（採用的真值與來源 auto／manual）、`best_flow.json`（完成標記）。`methods/` 在子資料夾，`analyze*.py` 與 E1／自適應頁不會列出。
 - 推定只用讀得到的圖片會偏高，未確認的圖片不納入統計，頁面會提示張數。

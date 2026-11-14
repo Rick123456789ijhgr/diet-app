@@ -175,12 +175,30 @@ func runDirOf(root, runID string) (string, error) {
 	return path.Join(strings.ReplaceAll(root, `\`, "/"), runID), nil
 }
 
-// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所有方法（folder 與 image_ids 擇一，由 Python 檢查）。
+// ListBestFlowPresets 找最佳流程的內建方案（結構由 Python 定義）。
+func (s *Service) ListBestFlowPresets(ctx context.Context) (api.FreeJson, error) {
+	resp, err := s.ai.ListBestFlowPresets(ctx, &dietaiv1.ListBestFlowPresetsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return object(resp.GetJson())
+}
+
+// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（folder 與 image_ids 擇一，由 Python 檢查）。
+// arm 省略時 Python 執行 c0_all_methods；設定內容由 Python 驗證。
 func (s *Service) StartBestFlowRun(ctx context.Context, req api.StartBestFlowRunRequest) (Events, error) {
 	r := &dietaiv1.StartBestFlowRunRequest{
 		Folder:    deref(req.Folder),
 		Recursive: deref(req.Recursive),
 		Root:      deref(req.Root),
+		PresetId:  deref(req.PresetId),
+	}
+	if req.Arm != nil {
+		body, err := json.Marshal(*req.Arm)
+		if err != nil {
+			return nil, fmt.Errorf("workbench: 編碼 arm: %w", err)
+		}
+		r.ArmJson = string(body)
 	}
 	if req.ImageIds != nil {
 		r.ImageIds = *req.ImageIds

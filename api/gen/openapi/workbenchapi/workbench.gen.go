@@ -703,13 +703,19 @@ type SetBestFlowTruthRequest struct {
 
 // StartBestFlowRunRequest folder 與 image_ids 擇一
 type StartBestFlowRunRequest struct {
+	// Arm 實驗組設定（name、description、decoder、zxing、ladder，同 configs/*.json）；省略時為 c0_all_methods
+	Arm *FreeJson `json:"arm,omitempty"`
+
 	// Folder 本機資料夾路徑；test split 已鎖定
 	Folder *string `json:"folder,omitempty"`
 
 	// ImageIds 以 POST /dev/images 上傳的暫存影像
-	ImageIds  *[]string `json:"image_ids,omitempty"`
-	Limit     *int      `json:"limit,omitempty"`
-	Recursive *bool     `json:"recursive,omitempty"`
+	ImageIds *[]string `json:"image_ids,omitempty"`
+	Limit    *int      `json:"limit,omitempty"`
+
+	// PresetId 方案代碼，只寫進紀錄
+	PresetId  *string `json:"preset_id,omitempty"`
+	Recursive *bool   `json:"recursive,omitempty"`
 
 	// Root 結果資料夾；省略時使用預設的 runs 資料夾
 	Root *string `json:"root,omitempty"`
@@ -1138,7 +1144,10 @@ type ServerInterface interface {
 	// RunBatch 資料夾批次（以 SSE 逐張回報）
 	// (POST /workbench/v1/dev/batches)
 	RunBatch(w http.ResponseWriter, r *http.Request)
-	// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
+	// ListBestFlowPresets 找最佳流程：內建的處理流程方案
+	// (GET /workbench/v1/dev/best-flow/presets)
+	ListBestFlowPresets(w http.ResponseWriter, r *http.Request)
+	// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（以 SSE 回報進度，最後一個事件為 done）
 	// (POST /workbench/v1/dev/best-flow/runs)
 	StartBestFlowRun(w http.ResponseWriter, r *http.Request)
 	// GetBestFlowRun 找最佳流程：真值表與結論
@@ -1628,6 +1637,20 @@ func (siw *ServerInterfaceWrapper) RunBatch(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RunBatch(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListBestFlowPresets operation middleware
+func (siw *ServerInterfaceWrapper) ListBestFlowPresets(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListBestFlowPresets(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2277,6 +2300,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/e1/runs", wrapper.ListE1Runs)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/e1/runs", wrapper.StartE1Run)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/e1/runs/{run_id}", wrapper.GetE1Run)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/best-flow/presets", wrapper.ListBestFlowPresets)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs", wrapper.StartBestFlowRun)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs/{run_id}", wrapper.GetBestFlowRun)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs/{run_id}/truth", wrapper.SetBestFlowTruth)
@@ -3488,6 +3512,41 @@ func (response RunBatch404JSONResponse) VisitRunBatchResponse(w http.ResponseWri
 type RunBatch503JSONResponse struct{ UnavailableJSONResponse }
 
 func (response RunBatch503JSONResponse) VisitRunBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBestFlowPresetsRequestObject struct {
+}
+
+type ListBestFlowPresetsResponseObject interface {
+	VisitListBestFlowPresetsResponse(w http.ResponseWriter) error
+}
+
+type ListBestFlowPresets200JSONResponse FreeJson
+
+func (response ListBestFlowPresets200JSONResponse) VisitListBestFlowPresetsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListBestFlowPresets503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ListBestFlowPresets503JSONResponse) VisitListBestFlowPresetsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -5000,7 +5059,10 @@ type StrictServerInterface interface {
 	// RunBatch 資料夾批次（以 SSE 逐張回報）
 	// (POST /workbench/v1/dev/batches)
 	RunBatch(ctx context.Context, request RunBatchRequestObject) (RunBatchResponseObject, error)
-	// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
+	// ListBestFlowPresets 找最佳流程：內建的處理流程方案
+	// (GET /workbench/v1/dev/best-flow/presets)
+	ListBestFlowPresets(ctx context.Context, request ListBestFlowPresetsRequestObject) (ListBestFlowPresetsResponseObject, error)
+	// StartBestFlowRun 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（以 SSE 回報進度，最後一個事件為 done）
 	// (POST /workbench/v1/dev/best-flow/runs)
 	StartBestFlowRun(ctx context.Context, request StartBestFlowRunRequestObject) (StartBestFlowRunResponseObject, error)
 	// GetBestFlowRun 找最佳流程：真值表與結論
@@ -5526,6 +5588,30 @@ func (sh *strictHandler) RunBatch(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RunBatchResponseObject); ok {
 		if err := validResponse.VisitRunBatchResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListBestFlowPresets operation middleware
+func (sh *strictHandler) ListBestFlowPresets(w http.ResponseWriter, r *http.Request) {
+	var request ListBestFlowPresetsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListBestFlowPresets(ctx, request.(ListBestFlowPresetsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListBestFlowPresets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListBestFlowPresetsResponseObject); ok {
+		if err := validResponse.VisitListBestFlowPresetsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

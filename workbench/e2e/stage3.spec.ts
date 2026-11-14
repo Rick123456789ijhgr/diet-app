@@ -89,6 +89,12 @@ test('找最佳流程：上傳圖片、逐張確認真值、比較後顯示推�
   await input.press('Enter')
   await expect(page.getByText(/^第 2 張/)).toBeVisible()
   await page.getByRole('button', { name: '沒有條碼' }).click()
+  // 處理流程：選內建的「只用原圖」方案
+  await page.getByRole('button', { name: /下一步：選擇處理流程/ }).click()
+  await page
+    .getByRole('navigation', { name: '處理流程方案' })
+    .getByRole('button', { name: /只用原圖/ })
+    .click()
   await page.getByRole('button', { name: '開始比較' }).click()
   await expect(page.getByRole('list', { name: '推薦流程' })).toContainText('原圖', {
     timeout: 90_000,

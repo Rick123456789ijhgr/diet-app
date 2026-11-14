@@ -1,0 +1,23 @@
+{
+  "name": "zxing_builtin",
+  "title": "zxing 內建嘗試＋縮小",
+  "description": "開啟 zxing 內建的 90° 旋轉、縮小與反色，搭配縮小一半與 CLAHE；20261114 的分析中最有效的組合。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": true,
+    "try_downscale": true,
+    "try_invert": true
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "multiscale",
+      "clahe"
+    ],
+    "scales": [
+      0.5,
+      0.25
+    ],
+    "accept_formats": []
+  }
+}

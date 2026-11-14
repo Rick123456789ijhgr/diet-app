@@ -19,24 +19,25 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WorkbenchService_GetConfigSchemas_FullMethodName  = "/dietai.v1.WorkbenchService/GetConfigSchemas"
-	WorkbenchService_PutImage_FullMethodName          = "/dietai.v1.WorkbenchService/PutImage"
-	WorkbenchService_Synthesize_FullMethodName        = "/dietai.v1.WorkbenchService/Synthesize"
-	WorkbenchService_Degrade_FullMethodName           = "/dietai.v1.WorkbenchService/Degrade"
-	WorkbenchService_RenderView_FullMethodName        = "/dietai.v1.WorkbenchService/RenderView"
-	WorkbenchService_GetArtifact_FullMethodName       = "/dietai.v1.WorkbenchService/GetArtifact"
-	WorkbenchService_Sweep_FullMethodName             = "/dietai.v1.WorkbenchService/Sweep"
-	WorkbenchService_RunBatch_FullMethodName          = "/dietai.v1.WorkbenchService/RunBatch"
-	WorkbenchService_ListE1Runs_FullMethodName        = "/dietai.v1.WorkbenchService/ListE1Runs"
-	WorkbenchService_GetE1Run_FullMethodName          = "/dietai.v1.WorkbenchService/GetE1Run"
-	WorkbenchService_StartE1Run_FullMethodName        = "/dietai.v1.WorkbenchService/StartE1Run"
-	WorkbenchService_StartBestFlowRun_FullMethodName  = "/dietai.v1.WorkbenchService/StartBestFlowRun"
-	WorkbenchService_GetBestFlowRun_FullMethodName    = "/dietai.v1.WorkbenchService/GetBestFlowRun"
-	WorkbenchService_SetBestFlowTruth_FullMethodName  = "/dietai.v1.WorkbenchService/SetBestFlowTruth"
-	WorkbenchService_PreviewImageNames_FullMethodName = "/dietai.v1.WorkbenchService/PreviewImageNames"
-	WorkbenchService_ApplyImageNames_FullMethodName   = "/dietai.v1.WorkbenchService/ApplyImageNames"
-	WorkbenchService_UndoImageNames_FullMethodName    = "/dietai.v1.WorkbenchService/UndoImageNames"
-	WorkbenchService_ListFolders_FullMethodName       = "/dietai.v1.WorkbenchService/ListFolders"
+	WorkbenchService_GetConfigSchemas_FullMethodName    = "/dietai.v1.WorkbenchService/GetConfigSchemas"
+	WorkbenchService_PutImage_FullMethodName            = "/dietai.v1.WorkbenchService/PutImage"
+	WorkbenchService_Synthesize_FullMethodName          = "/dietai.v1.WorkbenchService/Synthesize"
+	WorkbenchService_Degrade_FullMethodName             = "/dietai.v1.WorkbenchService/Degrade"
+	WorkbenchService_RenderView_FullMethodName          = "/dietai.v1.WorkbenchService/RenderView"
+	WorkbenchService_GetArtifact_FullMethodName         = "/dietai.v1.WorkbenchService/GetArtifact"
+	WorkbenchService_Sweep_FullMethodName               = "/dietai.v1.WorkbenchService/Sweep"
+	WorkbenchService_RunBatch_FullMethodName            = "/dietai.v1.WorkbenchService/RunBatch"
+	WorkbenchService_ListE1Runs_FullMethodName          = "/dietai.v1.WorkbenchService/ListE1Runs"
+	WorkbenchService_GetE1Run_FullMethodName            = "/dietai.v1.WorkbenchService/GetE1Run"
+	WorkbenchService_StartE1Run_FullMethodName          = "/dietai.v1.WorkbenchService/StartE1Run"
+	WorkbenchService_ListBestFlowPresets_FullMethodName = "/dietai.v1.WorkbenchService/ListBestFlowPresets"
+	WorkbenchService_StartBestFlowRun_FullMethodName    = "/dietai.v1.WorkbenchService/StartBestFlowRun"
+	WorkbenchService_GetBestFlowRun_FullMethodName      = "/dietai.v1.WorkbenchService/GetBestFlowRun"
+	WorkbenchService_SetBestFlowTruth_FullMethodName    = "/dietai.v1.WorkbenchService/SetBestFlowTruth"
+	WorkbenchService_PreviewImageNames_FullMethodName   = "/dietai.v1.WorkbenchService/PreviewImageNames"
+	WorkbenchService_ApplyImageNames_FullMethodName     = "/dietai.v1.WorkbenchService/ApplyImageNames"
+	WorkbenchService_UndoImageNames_FullMethodName      = "/dietai.v1.WorkbenchService/UndoImageNames"
+	WorkbenchService_ListFolders_FullMethodName         = "/dietai.v1.WorkbenchService/ListFolders"
 )
 
 // WorkbenchServiceClient is the client API for WorkbenchService service.
@@ -64,7 +65,9 @@ type WorkbenchServiceClient interface {
 	GetE1Run(ctx context.Context, in *GetE1RunRequest, opts ...grpc.CallOption) (*GetE1RunResponse, error)
 	// 進度＋最後結果
 	StartE1Run(ctx context.Context, in *StartE1RunRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StartE1RunResponse], error)
-	// 找最佳流程：對資料夾或上傳的圖片執行所有方法（進度＋最後結果）
+	// 找最佳流程：內建的處理流程方案（工作台可編輯、另存，修改存在瀏覽器）
+	ListBestFlowPresets(ctx context.Context, in *ListBestFlowPresetsRequest, opts ...grpc.CallOption) (*ListBestFlowPresetsResponse, error)
+	// 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（進度＋最後結果）
 	StartBestFlowRun(ctx context.Context, in *StartBestFlowRunRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StartBestFlowRunResponse], error)
 	// 真值表與結論（推薦流程、單一方法比較）
 	GetBestFlowRun(ctx context.Context, in *GetBestFlowRunRequest, opts ...grpc.CallOption) (*GetBestFlowRunResponse, error)
@@ -216,6 +219,16 @@ func (c *workbenchServiceClient) StartE1Run(ctx context.Context, in *StartE1RunR
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type WorkbenchService_StartE1RunClient = grpc.ServerStreamingClient[StartE1RunResponse]
 
+func (c *workbenchServiceClient) ListBestFlowPresets(ctx context.Context, in *ListBestFlowPresetsRequest, opts ...grpc.CallOption) (*ListBestFlowPresetsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListBestFlowPresetsResponse)
+	err := c.cc.Invoke(ctx, WorkbenchService_ListBestFlowPresets_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *workbenchServiceClient) StartBestFlowRun(ctx context.Context, in *StartBestFlowRunRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StartBestFlowRunResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &WorkbenchService_ServiceDesc.Streams[2], WorkbenchService_StartBestFlowRun_FullMethodName, cOpts...)
@@ -320,7 +333,9 @@ type WorkbenchServiceServer interface {
 	GetE1Run(context.Context, *GetE1RunRequest) (*GetE1RunResponse, error)
 	// 進度＋最後結果
 	StartE1Run(*StartE1RunRequest, grpc.ServerStreamingServer[StartE1RunResponse]) error
-	// 找最佳流程：對資料夾或上傳的圖片執行所有方法（進度＋最後結果）
+	// 找最佳流程：內建的處理流程方案（工作台可編輯、另存，修改存在瀏覽器）
+	ListBestFlowPresets(context.Context, *ListBestFlowPresetsRequest) (*ListBestFlowPresetsResponse, error)
+	// 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（進度＋最後結果）
 	StartBestFlowRun(*StartBestFlowRunRequest, grpc.ServerStreamingServer[StartBestFlowRunResponse]) error
 	// 真值表與結論（推薦流程、單一方法比較）
 	GetBestFlowRun(context.Context, *GetBestFlowRunRequest) (*GetBestFlowRunResponse, error)
@@ -376,6 +391,9 @@ func (UnimplementedWorkbenchServiceServer) GetE1Run(context.Context, *GetE1RunRe
 }
 func (UnimplementedWorkbenchServiceServer) StartE1Run(*StartE1RunRequest, grpc.ServerStreamingServer[StartE1RunResponse]) error {
 	return status.Error(codes.Unimplemented, "method StartE1Run not implemented")
+}
+func (UnimplementedWorkbenchServiceServer) ListBestFlowPresets(context.Context, *ListBestFlowPresetsRequest) (*ListBestFlowPresetsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListBestFlowPresets not implemented")
 }
 func (UnimplementedWorkbenchServiceServer) StartBestFlowRun(*StartBestFlowRunRequest, grpc.ServerStreamingServer[StartBestFlowRunResponse]) error {
 	return status.Error(codes.Unimplemented, "method StartBestFlowRun not implemented")
@@ -603,6 +621,24 @@ func _WorkbenchService_StartE1Run_Handler(srv interface{}, stream grpc.ServerStr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type WorkbenchService_StartE1RunServer = grpc.ServerStreamingServer[StartE1RunResponse]
 
+func _WorkbenchService_ListBestFlowPresets_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListBestFlowPresetsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkbenchServiceServer).ListBestFlowPresets(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkbenchService_ListBestFlowPresets_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkbenchServiceServer).ListBestFlowPresets(ctx, req.(*ListBestFlowPresetsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WorkbenchService_StartBestFlowRun_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(StartBestFlowRunRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -764,6 +800,10 @@ var WorkbenchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetE1Run",
 			Handler:    _WorkbenchService_GetE1Run_Handler,
+		},
+		{
+			MethodName: "ListBestFlowPresets",
+			Handler:    _WorkbenchService_ListBestFlowPresets_Handler,
 		},
 		{
 			MethodName: "GetBestFlowRun",

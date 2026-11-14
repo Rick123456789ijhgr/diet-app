@@ -798,12 +798,29 @@ paths:
         "503":
           $ref: "#/components/responses/Unavailable"
 
+  /workbench/v1/dev/best-flow/presets:
+    get:
+      operationId: listBestFlowPresets
+      summary: 找最佳流程：內建的處理流程方案
+      description: |
+        回傳 {"presets": [{id, name, description, arm}]}，arm 為實驗組設定（同 configs/*.json）。
+        工作台以此為預設值；修改與自訂方案存在瀏覽器，執行時以 POST /dev/best-flow/runs 的 arm 送出。
+      tags: [dev]
+      responses:
+        "200":
+          description: 方案清單（結構由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /workbench/v1/dev/best-flow/runs:
     post:
       operationId: startBestFlowRun
-      summary: 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
+      summary: 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（以 SSE 回報進度，最後一個事件為 done）
       description: |
-        folder 與 image_ids 擇一。事件依序為 start（total）、progress（done、total）、done（name、path）。
+        folder 與 image_ids 擇一；arm 省略時執行 c0_all_methods（每個方法都執行）。設定不合法時回 400（欄位 arm）。事件依序為 start（total）、progress（done、total）、done（name、path）。
         已完成的執行列在 GET /dev/e1/runs 回應的 best_flow_runs。拒絕 test split 下的路徑（SPLIT_LOCKED）。
       tags: [dev]
       requestBody:
@@ -1647,6 +1664,12 @@ components:
         root:
           type: string
           description: 結果資料夾；省略時使用預設的 runs 資料夾
+        arm:
+          $ref: "#/components/schemas/FreeJson"
+          description: 實驗組設定（name、description、decoder、zxing、ladder，同 configs/*.json）；省略時為 c0_all_methods
+        preset_id:
+          type: string
+          description: 方案代碼，只寫進紀錄
     SetBestFlowTruthRequest:
       type: object
       required: [truths]

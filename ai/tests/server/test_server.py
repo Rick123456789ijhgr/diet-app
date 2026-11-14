@@ -604,6 +604,27 @@ def test_best_flow_upload_truth_and_thumbs(wb, tmp_path, monkeypatch):
         "IMAGE_NOT_FOUND",
     )
 
+    presets = json.loads(wb.ListBestFlowPresets(workbench_pb2.ListBestFlowPresetsRequest()).json)[
+        "presets"
+    ]
+    raw_only = next(p for p in presets if p["id"] == "raw_only")
+    req = workbench_pb2.StartBestFlowRunRequest(
+        image_ids=[ref.image_id], arm_json=json.dumps(raw_only["arm"]), preset_id="raw_only"
+    )
+    events = [json.loads(m.json) for m in wb.StartBestFlowRun(req)]
+    run = json.loads(
+        wb.GetBestFlowRun(workbench_pb2.GetBestFlowRunRequest(run_dir=events[-1]["name"])).json
+    )
+    assert run["meta"]["preset_id"] == "raw_only"
+    for arm_json in ("[1]", json.dumps({"ladder": {"rungs": ["nope"]}})):
+        bad_req = workbench_pb2.StartBestFlowRunRequest(image_ids=[ref.image_id], arm_json=arm_json)
+        _expect_error(
+            lambda r=bad_req: wb.StartBestFlowRun(r).next(),
+            grpc.StatusCode.INVALID_ARGUMENT,
+            "INVALID_PARAMS",
+            "arm",
+        )
+
 
 def test_image_naming_preview_apply_undo(wb, tmp_path):
     code = "4710088410108"

@@ -72,6 +72,11 @@ class WorkbenchServiceStub:
                 request_serializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunRequest.SerializeToString,
                 response_deserializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunResponse.FromString,
                 _registered_method=True)
+        self.ListBestFlowPresets = channel.unary_unary(
+                '/dietai.v1.WorkbenchService/ListBestFlowPresets',
+                request_serializer=dietai_dot_v1_dot_workbench__pb2.ListBestFlowPresetsRequest.SerializeToString,
+                response_deserializer=dietai_dot_v1_dot_workbench__pb2.ListBestFlowPresetsResponse.FromString,
+                _registered_method=True)
         self.StartBestFlowRun = channel.unary_stream(
                 '/dietai.v1.WorkbenchService/StartBestFlowRun',
                 request_serializer=dietai_dot_v1_dot_workbench__pb2.StartBestFlowRunRequest.SerializeToString,
@@ -187,8 +192,15 @@ class WorkbenchServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListBestFlowPresets(self, request, context):
+        """找最佳流程：內建的處理流程方案（工作台可編輯、另存，修改存在瀏覽器）
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def StartBestFlowRun(self, request, context):
-        """找最佳流程：對資料夾或上傳的圖片執行所有方法（進度＋最後結果）
+        """找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（進度＋最後結果）
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -293,6 +305,11 @@ def add_WorkbenchServiceServicer_to_server(servicer, server):
                     servicer.StartE1Run,
                     request_deserializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunRequest.FromString,
                     response_serializer=dietai_dot_v1_dot_workbench__pb2.StartE1RunResponse.SerializeToString,
+            ),
+            'ListBestFlowPresets': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListBestFlowPresets,
+                    request_deserializer=dietai_dot_v1_dot_workbench__pb2.ListBestFlowPresetsRequest.FromString,
+                    response_serializer=dietai_dot_v1_dot_workbench__pb2.ListBestFlowPresetsResponse.SerializeToString,
             ),
             'StartBestFlowRun': grpc.unary_stream_rpc_method_handler(
                     servicer.StartBestFlowRun,
@@ -630,6 +647,33 @@ class WorkbenchService:
             '/dietai.v1.WorkbenchService/StartE1Run',
             dietai_dot_v1_dot_workbench__pb2.StartE1RunRequest.SerializeToString,
             dietai_dot_v1_dot_workbench__pb2.StartE1RunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListBestFlowPresets(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/dietai.v1.WorkbenchService/ListBestFlowPresets',
+            dietai_dot_v1_dot_workbench__pb2.ListBestFlowPresetsRequest.SerializeToString,
+            dietai_dot_v1_dot_workbench__pb2.ListBestFlowPresetsResponse.FromString,
             options,
             channel_credentials,
             insecure,

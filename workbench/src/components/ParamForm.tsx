@@ -21,6 +21,7 @@ export function ParamForm({
   onChange,
   invalidField,
   invalidMessage,
+  hideReset,
 }: {
   schema: ConfigClass
   overrides: ConfigOverride
@@ -28,6 +29,8 @@ export function ParamForm({
   /** 後端回報不合法的欄位（INVALID_CONFIG），標成紅色 */
   invalidField?: string
   invalidMessage?: string
+  /** 不顯示「全部還原」（覆寫以結構預設值為準，與呼叫端的「還原」目標不同時用，例如找最佳流程的方案） */
+  hideReset?: boolean
 }) {
   // 依 field.group 分組；Map 保留插入順序，所以分組與組內欄位都維持 schema 宣告的順序
   const groups = new Map<string, ConfigField[]>()
@@ -39,15 +42,17 @@ export function ParamForm({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="text-muted text-xs">
-          {changed > 0 ? `已修改 ${changed} 項` : '全部為預設值'}
-        </span>
-        <Button size="sm" variant="ghost" disabled={changed === 0} onClick={() => onChange({})}>
-          <RotateCcw className="size-3.5" aria-hidden />
-          全部還原
-        </Button>
-      </div>
+      {!hideReset && (
+        <div className="flex items-center justify-between">
+          <span className="text-muted text-xs">
+            {changed > 0 ? `已修改 ${changed} 項` : '全部為預設值'}
+          </span>
+          <Button size="sm" variant="ghost" disabled={changed === 0} onClick={() => onChange({})}>
+            <RotateCcw className="size-3.5" aria-hidden />
+            全部還原
+          </Button>
+        </div>
+      )}
       {/* 每組一個 fieldset＋legend，讓輔助技術知道欄位所屬的分組 */}
       {[...groups].map(([group, fields]) => (
         <fieldset key={group} className="space-y-3">

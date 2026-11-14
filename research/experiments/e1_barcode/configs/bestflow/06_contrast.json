@@ -1,0 +1,28 @@
+{
+  "name": "contrast",
+  "title": "對比強化",
+  "description": "針對反光、低對比：灰階、Otsu、CLAHE、銳化，以及 CLAHE＋去噪疊加。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "otsu",
+      "clahe",
+      "sharpen",
+      "pipeline"
+    ],
+    "pipelines": [
+      [
+        "clahe",
+        "denoise"
+      ]
+    ],
+    "accept_formats": []
+  }
+}

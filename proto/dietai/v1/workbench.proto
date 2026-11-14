@@ -25,7 +25,9 @@ service WorkbenchService {
   rpc GetE1Run(GetE1RunRequest) returns (GetE1RunResponse);
   // 進度＋最後結果
   rpc StartE1Run(StartE1RunRequest) returns (stream StartE1RunResponse);
-  // 找最佳流程：對資料夾或上傳的圖片執行所有方法（進度＋最後結果）
+  // 找最佳流程：內建的處理流程方案（工作台可編輯、另存，修改存在瀏覽器）
+  rpc ListBestFlowPresets(ListBestFlowPresetsRequest) returns (ListBestFlowPresetsResponse);
+  // 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（進度＋最後結果）
   rpc StartBestFlowRun(StartBestFlowRunRequest) returns (stream StartBestFlowRunResponse);
   // 真值表與結論（推薦流程、單一方法比較）
   rpc GetBestFlowRun(GetBestFlowRunRequest) returns (GetBestFlowRunResponse);
@@ -150,6 +152,13 @@ message StartE1RunResponse {
   string json = 1;
 }
 
+message ListBestFlowPresetsRequest {}
+
+// json：{"presets": [{"id", "name", "description", "arm": {...}}]}（結構由 Python 定義）
+message ListBestFlowPresetsResponse {
+  string json = 1;
+}
+
 // folder 與 image_ids 擇一；image_ids 為 PutImage 暫存的影像
 message StartBestFlowRunRequest {
   string folder = 1;
@@ -157,6 +166,10 @@ message StartBestFlowRunRequest {
   bool recursive = 3;
   int32 limit = 4; // 0 為預設上限
   string root = 5; // 結果資料夾；空字串為預設
+  // 實驗組設定 JSON（同 research/experiments/e1_barcode/configs/*.json 的格式）；
+  // 空字串＝c0_all_methods（每個方法都執行，相容舊行為）
+  string arm_json = 6;
+  string preset_id = 7; // 方案代碼，只寫進紀錄（best_flow.json）
 }
 
 message StartBestFlowRunResponse {

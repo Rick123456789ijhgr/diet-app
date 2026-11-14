@@ -1,0 +1,24 @@
+{
+  "name": "single_steps",
+  "title": "單一處理逐一比較",
+  "description": "各單一處理（灰階、二值化、Otsu、CLAHE、銳化、去噪、傾斜校正）各自執行，不含多尺度與疊加流程；看哪一種處理單獨最有效。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "otsu",
+      "clahe",
+      "sharpen",
+      "denoise",
+      "deskew"
+    ],
+    "accept_formats": []
+  }
+}

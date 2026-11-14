@@ -176,19 +176,33 @@ class StartE1RunResponse(_message.Message):
     json: str
     def __init__(self, json: _Optional[str] = ...) -> None: ...
 
+class ListBestFlowPresetsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListBestFlowPresetsResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...
+
 class StartBestFlowRunRequest(_message.Message):
-    __slots__ = ("folder", "image_ids", "recursive", "limit", "root")
+    __slots__ = ("folder", "image_ids", "recursive", "limit", "root", "arm_json", "preset_id")
     FOLDER_FIELD_NUMBER: _ClassVar[int]
     IMAGE_IDS_FIELD_NUMBER: _ClassVar[int]
     RECURSIVE_FIELD_NUMBER: _ClassVar[int]
     LIMIT_FIELD_NUMBER: _ClassVar[int]
     ROOT_FIELD_NUMBER: _ClassVar[int]
+    ARM_JSON_FIELD_NUMBER: _ClassVar[int]
+    PRESET_ID_FIELD_NUMBER: _ClassVar[int]
     folder: str
     image_ids: _containers.RepeatedScalarFieldContainer[str]
     recursive: bool
     limit: int
     root: str
-    def __init__(self, folder: _Optional[str] = ..., image_ids: _Optional[_Iterable[str]] = ..., recursive: _Optional[bool] = ..., limit: _Optional[int] = ..., root: _Optional[str] = ...) -> None: ...
+    arm_json: str
+    preset_id: str
+    def __init__(self, folder: _Optional[str] = ..., image_ids: _Optional[_Iterable[str]] = ..., recursive: _Optional[bool] = ..., limit: _Optional[int] = ..., root: _Optional[str] = ..., arm_json: _Optional[str] = ..., preset_id: _Optional[str] = ...) -> None: ...
 
 class StartBestFlowRunResponse(_message.Message):
     __slots__ = ("json",)
