@@ -83,6 +83,67 @@ def test_gradient_matches_finite_differences():
     np.testing.assert_allclose(grad, num, rtol=1e-4, atol=1e-5)
 
 
+def test_cluster_scores_sum_to_gradient():
+    """各原始樣本的分數加總就是對數概似的梯度（evaluate 回傳的是負梯度）。"""
+    x, y, groups = _simulate(n_groups=10, per=20, seed=2)
+    _, g = np.unique(groups, return_inverse=True)
+    model = _Model(x, y, g, 10, 15)
+    theta = np.array([0.1, 0.8, -0.3, 0.2])
+    scores = model.scores(theta)
+    assert scores.shape == (10, 4)
+    np.testing.assert_allclose(scores.sum(axis=0), -model.evaluate(theta)[1], rtol=1e-10)
+
+
+def _variant_level(sigma_v, n_sources=60, n_methods=15, seed=0):
+    """每個原始樣本兩個條件（各一張變體）× 多個方法；同一張變體的結果共用變體層的隨機效果。
+
+    條件與方法的真實效果都是 0。
+    """
+    rng = np.random.default_rng(seed)
+    xs, ys, gs = [], [], []
+    for s in range(n_sources):
+        u = rng.normal(0, 1.0)
+        for cond in (0.0, 1.0):
+            v = rng.normal(0, sigma_v)
+            for m in range(n_methods):
+                ys.append(float(rng.random() < 1 / (1 + math.exp(-(0.3 + u + v)))))
+                xs.append([1.0, cond, float(m % 2)])
+                gs.append(f"s{s}")
+    return np.asarray(xs), np.asarray(ys), gs
+
+
+def test_robust_se_accounts_for_variant_level_correlation():
+    """同一張變體被多個方法各解碼一次：條件這類整張變體共用的效果，模型的標準誤嚴重偏小。
+
+    只有原始樣本隨機截距的模型把同一張圖的 15 筆結果當成獨立觀測；
+    以原始樣本為集群的穩健標準誤（``se``，檢定用它）應明顯較大。型一錯誤率的模擬見 PR 說明。
+    """
+    x, y, groups = _variant_level(sigma_v=2.0)
+    cond = fit_mixed_logit(x, y, groups, [INTERCEPT, "cond", "method"]).coefficient("cond")
+    assert cond.se > 2 * cond.se_model
+    # 檢定與信賴區間用的是穩健標準誤
+    assert cond.z == pytest.approx(cond.estimate / cond.se)
+    assert cond.or_high == pytest.approx(math.exp(cond.estimate + 1.959964 * cond.se))
+
+
+def test_robust_se_matches_model_se_when_model_is_right():
+    """沒有變體層的額外相關時（模型正確），穩健與模型的標準誤應接近。"""
+    x, y, groups = _variant_level(sigma_v=0.0)
+    res = fit_mixed_logit(x, y, groups, [INTERCEPT, "cond", "method"])
+    for c in res.coefficients:
+        assert 0.7 < c.se / c.se_model < 1.3, c.name
+
+
+def test_few_clusters_warns_and_table_states_robust():
+    x, y, groups = _simulate(n_groups=12, per=30, seed=3)
+    res = fit_mixed_logit(x, y, groups, [INTERCEPT, "x1", "x2"])
+    assert any("只有 12 個原始樣本" in w for w in res.warnings)
+    assert "穩健（三明治）估計" in mixed_logit_table(res)
+    # 集群夠多時不警告
+    x, y, groups = _simulate()
+    assert fit_mixed_logit(x, y, groups, [INTERCEPT, "x1", "x2"]).warnings == ()
+
+
 def test_no_cluster_effect_hits_boundary_and_matches_logistic():
     # seed 0 的最大概似解恰在 σ = 0（其他 seed 可能因抽樣誤差得到小的正值，那也是正確的解）
     x, y, groups = _simulate(sigma=0.0, seed=0)
