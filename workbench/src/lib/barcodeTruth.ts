@@ -43,14 +43,22 @@ export function splitName(name: string): { stem: string; ext: string } {
 }
 
 /**
- * 由檔名推回答案：檔名就是合法的條碼（可接 _2、-3 之類的序號）→ 條碼；
- * 以「沒有條碼_」開頭 → 沒有條碼；其他 → null。讓改過名的圖片下次放進來就帶入號碼。
+ * 規則化檔名 `<類別>_<批次>_<序號>_<條碼|nocode>`（例如 food_b01_001_4710088410108.jpg），
+ * 由 name_images.py 產生；與後端 dietai.evaluation.image_names 相同。
+ */
+const SCHEME_NAME =
+  /^[a-z0-9]+(?:-[a-z0-9]+)*_[a-z0-9]+(?:-[a-z0-9]+)*_\d{3,6}_(\d{8}|\d{12,13}|nocode)$/
+
+/**
+ * 由檔名推回答案：規則化檔名的條碼欄、或檔名就是合法的條碼（可接 _2、-3 之類的序號）→ 條碼；
+ * 規則化檔名的 nocode、或以「沒有條碼_」開頭 → 沒有條碼；其他 → null。讓改過名的圖片下次放進來就帶入號碼。
  */
 export function answerFromName(name: string): Answer | null {
   const { stem } = splitName(name)
   if (stem.startsWith(NO_CODE_PREFIX)) return { kind: 'none' }
-  const m = /^(\d{8}|\d{12,13})(?:[_\-\s(#].*)?$/.exec(stem)
+  const m = SCHEME_NAME.exec(stem) ?? /^(\d{8}|\d{12,13})(?:[_\-\s(#].*)?$/.exec(stem)
   if (!m) return null
+  if (m[1] === 'nocode') return { kind: 'none' }
   const code = normalizeCode(m[1]!)
   return validCode(code) ? { kind: 'code', code } : null
 }

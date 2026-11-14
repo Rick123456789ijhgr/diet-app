@@ -6,7 +6,7 @@ test('架構圖：檢視頁開新分頁編輯，拖曳吸附、拉線、匯出�
   page,
   context,
 }) => {
-  await page.goto('/arch/diagram?d=m1')
+  await page.goto('/tools/arch?d=m1')
   await page.evaluate(() => localStorage.clear())
   await page.reload()
   const view = page.getByRole('group', { name: /架構圖$/ })

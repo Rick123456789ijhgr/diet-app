@@ -7,13 +7,14 @@ import {
   Images,
   LayoutDashboard,
   ListChecks,
-  Network,
   type LucideIcon,
   PackagePlus,
   ScanSearch,
   ScanText,
+  Tags,
   Trophy,
   Workflow,
+  Wrench,
 } from 'lucide-react'
 
 /** 模組內的一個工具頁；slug 為網址的第二段（/模組 id/slug）。 */
@@ -135,14 +136,24 @@ export const MODULES: Module[] = [
     ],
   },
   {
-    id: 'arch',
-    short: '架構',
-    name: '專案架構',
-    icon: Network,
-    description: '逐層放大的專案架構圖（類似 C4 Model），可拖曳編輯並匯出成簡報樣式的圖片。',
+    // 不屬於特定研究模組的工具；/tools 為按鈕總覽頁（pages/tools/ToolsHome.tsx）
+    id: 'tools',
+    short: '工具',
+    name: '通用工具',
+    icon: Wrench,
+    description: '不屬於特定模組的工具：實驗圖片批次命名、專案架構圖。',
     tools: [
       {
-        slug: 'diagram',
+        slug: 'naming',
+        name: '圖片批次命名',
+        icon: Tags,
+        description:
+          '把檔名就是條碼的實驗照片改成 <類別>_<批次>_<序號>_<條碼>；找最佳流程會直接讀檔名中的條碼當真值。',
+        stage: 3,
+        ready: true,
+      },
+      {
+        slug: 'arch',
         name: '架構圖',
         icon: Workflow,
         description:
