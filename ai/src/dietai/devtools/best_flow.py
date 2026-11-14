@@ -5,7 +5,7 @@
     inputs/manifest.csv   自動產生的 manifest（truth 全為空、split 為 dev）
     inputs/images/        上傳的圖片（資料夾來源不複製，manifest 直接指向原檔）
     methods/              run_methods 的輸出（run.json、methods.csv）
-    truth.csv             採用的真值與來源（auto／manual）
+    truth.csv             採用的真值與來源（auto／manual；規則化檔名中的條碼視為 manual）
     best_flow.json        完成標記與設定（推定所需方法數、實驗組）
 
 ``methods/`` 放在子資料夾，因此 E1 消融與自適應策略頁不會把它當成自己的執行。
@@ -18,10 +18,10 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import closing
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from dietai.devtools.background import progress_events
@@ -30,6 +30,7 @@ from dietai.devtools.images import PathNotFoundError, guard_path, list_images
 from dietai.devtools.scenes import SceneError
 from dietai.evaluation import (
     GreedyCriteria,
+    ManifestItem,
     greedy_ladder,
     load_arms,
     method_arms,
@@ -53,8 +54,8 @@ from dietai.evaluation.best_flow import (
     resolve_truths,
     write_truth,
 )
+from dietai.evaluation.image_names import truth_from_name, valid_code
 from dietai.evaluation.manifest import write_image
-from dietai.preprocess.barcode import ean13_checksum_ok
 from dietai.preprocess.types import Image, Rung
 
 ARM = "c0_all_methods"  # 所有單一方法＋多尺度＋疊加流程
@@ -116,7 +117,8 @@ def start_run(
         run_methods(manifest, [arm], out / METHODS, label=LABEL, progress=progress)
         _, rows = read_methods(out / METHODS)
         guesses = infer_truth(rows, min_methods=DEFAULT_MIN_METHODS)
-        write_truth(out, resolve_truths(guesses, {}))
+        named = names_truth(manifest.items)
+        write_truth(out, resolve_truths(guesses, named))
         marker = {
             "created": datetime.now().astimezone().isoformat(timespec="seconds"),
             "source": str(guard_path(folder)) if folder else "upload",
@@ -124,6 +126,7 @@ def start_run(
             "images": len(manifest.items),
             "arm": ARM,
             "min_methods": DEFAULT_MIN_METHODS,
+            "truth_from_names": len(named),
         }
         (out / MARKER).write_text(json.dumps(marker, ensure_ascii=False, indent=2), "utf-8")
 
@@ -161,6 +164,22 @@ def _write_inputs(
             write_image(inputs / rel, img)
             rows.append({"id": unique(name or rel), "image": rel})
     return write_manifest(inputs / "manifest.csv", [{**r, "split": "dev"} for r in rows])
+
+
+def names_truth(items: Iterable[ManifestItem]) -> dict[str, tuple[str, TruthSource]]:
+    """由規則化檔名（``food_b01_001_<條碼>.jpg``，見 ``evaluation.image_names``）取得的真值。
+
+    檔名中的條碼是人工確認過的，視同人工確認（``manual``）；檔名沒有條碼或不符合規則的
+    圖片不列入，仍走自動推定與人工確認。圖片 ID 為檔名或相對路徑（同名上傳加 ``#n``），
+    取最後一段的檔名解析。
+    """
+    out: dict[str, tuple[str, TruthSource]] = {}
+    for item in items:
+        name = PurePosixPath(re.sub(r"#\d+$", "", item.id)).name
+        truth = truth_from_name(name)
+        if truth is not None:
+            out[item.id] = (truth, TruthSource.MANUAL)
+    return out
 
 
 def list_runs_json(root: str) -> list[dict[str, str]]:
@@ -357,17 +376,8 @@ def set_truth(
             confirmed.pop(image_id, None)
             continue
         code = normalize_truth(value)
-        if code and not _valid_code(code):
+        if code and not valid_code(code):
             raise SceneError(f"{image_id} 的條碼不合法（檢查碼錯誤或位數不對）：{value}", "truths")
         confirmed[image_id] = (code, TruthSource.MANUAL)
     write_truth(folder, resolve_truths(guesses, confirmed))
     return run_json(str(folder), criteria, thumb)
-
-
-def _valid_code(code: str) -> bool:
-    """EAN-13（含補成 13 位的 UPC-A）或 EAN-8，檢查碼須正確。"""
-    if len(code) == 8 and code.isdigit():
-        # EAN-8：由左數第 1、3、5、7 位權重 3，第 2、4、6 位權重 1
-        total = sum(int(c) * (1 if i % 2 else 3) for i, c in enumerate(code[:7]))
-        return (10 - total % 10) % 10 == int(code[7])
-    return ean13_checksum_ok(code)

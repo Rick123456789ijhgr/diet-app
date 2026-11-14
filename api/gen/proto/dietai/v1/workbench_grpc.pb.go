@@ -19,20 +19,23 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WorkbenchService_GetConfigSchemas_FullMethodName = "/dietai.v1.WorkbenchService/GetConfigSchemas"
-	WorkbenchService_PutImage_FullMethodName         = "/dietai.v1.WorkbenchService/PutImage"
-	WorkbenchService_Synthesize_FullMethodName       = "/dietai.v1.WorkbenchService/Synthesize"
-	WorkbenchService_Degrade_FullMethodName          = "/dietai.v1.WorkbenchService/Degrade"
-	WorkbenchService_RenderView_FullMethodName       = "/dietai.v1.WorkbenchService/RenderView"
-	WorkbenchService_GetArtifact_FullMethodName      = "/dietai.v1.WorkbenchService/GetArtifact"
-	WorkbenchService_Sweep_FullMethodName            = "/dietai.v1.WorkbenchService/Sweep"
-	WorkbenchService_RunBatch_FullMethodName         = "/dietai.v1.WorkbenchService/RunBatch"
-	WorkbenchService_ListE1Runs_FullMethodName       = "/dietai.v1.WorkbenchService/ListE1Runs"
-	WorkbenchService_GetE1Run_FullMethodName         = "/dietai.v1.WorkbenchService/GetE1Run"
-	WorkbenchService_StartE1Run_FullMethodName       = "/dietai.v1.WorkbenchService/StartE1Run"
-	WorkbenchService_StartBestFlowRun_FullMethodName = "/dietai.v1.WorkbenchService/StartBestFlowRun"
-	WorkbenchService_GetBestFlowRun_FullMethodName   = "/dietai.v1.WorkbenchService/GetBestFlowRun"
-	WorkbenchService_SetBestFlowTruth_FullMethodName = "/dietai.v1.WorkbenchService/SetBestFlowTruth"
+	WorkbenchService_GetConfigSchemas_FullMethodName  = "/dietai.v1.WorkbenchService/GetConfigSchemas"
+	WorkbenchService_PutImage_FullMethodName          = "/dietai.v1.WorkbenchService/PutImage"
+	WorkbenchService_Synthesize_FullMethodName        = "/dietai.v1.WorkbenchService/Synthesize"
+	WorkbenchService_Degrade_FullMethodName           = "/dietai.v1.WorkbenchService/Degrade"
+	WorkbenchService_RenderView_FullMethodName        = "/dietai.v1.WorkbenchService/RenderView"
+	WorkbenchService_GetArtifact_FullMethodName       = "/dietai.v1.WorkbenchService/GetArtifact"
+	WorkbenchService_Sweep_FullMethodName             = "/dietai.v1.WorkbenchService/Sweep"
+	WorkbenchService_RunBatch_FullMethodName          = "/dietai.v1.WorkbenchService/RunBatch"
+	WorkbenchService_ListE1Runs_FullMethodName        = "/dietai.v1.WorkbenchService/ListE1Runs"
+	WorkbenchService_GetE1Run_FullMethodName          = "/dietai.v1.WorkbenchService/GetE1Run"
+	WorkbenchService_StartE1Run_FullMethodName        = "/dietai.v1.WorkbenchService/StartE1Run"
+	WorkbenchService_StartBestFlowRun_FullMethodName  = "/dietai.v1.WorkbenchService/StartBestFlowRun"
+	WorkbenchService_GetBestFlowRun_FullMethodName    = "/dietai.v1.WorkbenchService/GetBestFlowRun"
+	WorkbenchService_SetBestFlowTruth_FullMethodName  = "/dietai.v1.WorkbenchService/SetBestFlowTruth"
+	WorkbenchService_PreviewImageNames_FullMethodName = "/dietai.v1.WorkbenchService/PreviewImageNames"
+	WorkbenchService_ApplyImageNames_FullMethodName   = "/dietai.v1.WorkbenchService/ApplyImageNames"
+	WorkbenchService_UndoImageNames_FullMethodName    = "/dietai.v1.WorkbenchService/UndoImageNames"
 )
 
 // WorkbenchServiceClient is the client API for WorkbenchService service.
@@ -66,6 +69,12 @@ type WorkbenchServiceClient interface {
 	GetBestFlowRun(ctx context.Context, in *GetBestFlowRunRequest, opts ...grpc.CallOption) (*GetBestFlowRunResponse, error)
 	// 更新人工確認的真值，回傳更新後的真值表與結論
 	SetBestFlowTruth(ctx context.Context, in *SetBestFlowTruthRequest, opts ...grpc.CallOption) (*SetBestFlowTruthResponse, error)
+	// 圖片批次命名：預覽規則化檔名（不動任何檔案）
+	PreviewImageNames(ctx context.Context, in *PreviewImageNamesRequest, opts ...grpc.CallOption) (*PreviewImageNamesResponse, error)
+	// 圖片批次命名：依目前的資料夾重新規劃後改名
+	ApplyImageNames(ctx context.Context, in *ApplyImageNamesRequest, opts ...grpc.CallOption) (*ApplyImageNamesResponse, error)
+	// 圖片批次命名：依 _rename_log.csv 還原全部改名
+	UndoImageNames(ctx context.Context, in *UndoImageNamesRequest, opts ...grpc.CallOption) (*UndoImageNamesResponse, error)
 }
 
 type workbenchServiceClient struct {
@@ -243,6 +252,36 @@ func (c *workbenchServiceClient) SetBestFlowTruth(ctx context.Context, in *SetBe
 	return out, nil
 }
 
+func (c *workbenchServiceClient) PreviewImageNames(ctx context.Context, in *PreviewImageNamesRequest, opts ...grpc.CallOption) (*PreviewImageNamesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PreviewImageNamesResponse)
+	err := c.cc.Invoke(ctx, WorkbenchService_PreviewImageNames_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workbenchServiceClient) ApplyImageNames(ctx context.Context, in *ApplyImageNamesRequest, opts ...grpc.CallOption) (*ApplyImageNamesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyImageNamesResponse)
+	err := c.cc.Invoke(ctx, WorkbenchService_ApplyImageNames_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workbenchServiceClient) UndoImageNames(ctx context.Context, in *UndoImageNamesRequest, opts ...grpc.CallOption) (*UndoImageNamesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UndoImageNamesResponse)
+	err := c.cc.Invoke(ctx, WorkbenchService_UndoImageNames_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WorkbenchServiceServer is the server API for WorkbenchService service.
 // All implementations must embed UnimplementedWorkbenchServiceServer
 // for forward compatibility.
@@ -274,6 +313,12 @@ type WorkbenchServiceServer interface {
 	GetBestFlowRun(context.Context, *GetBestFlowRunRequest) (*GetBestFlowRunResponse, error)
 	// 更新人工確認的真值，回傳更新後的真值表與結論
 	SetBestFlowTruth(context.Context, *SetBestFlowTruthRequest) (*SetBestFlowTruthResponse, error)
+	// 圖片批次命名：預覽規則化檔名（不動任何檔案）
+	PreviewImageNames(context.Context, *PreviewImageNamesRequest) (*PreviewImageNamesResponse, error)
+	// 圖片批次命名：依目前的資料夾重新規劃後改名
+	ApplyImageNames(context.Context, *ApplyImageNamesRequest) (*ApplyImageNamesResponse, error)
+	// 圖片批次命名：依 _rename_log.csv 還原全部改名
+	UndoImageNames(context.Context, *UndoImageNamesRequest) (*UndoImageNamesResponse, error)
 	mustEmbedUnimplementedWorkbenchServiceServer()
 }
 
@@ -325,6 +370,15 @@ func (UnimplementedWorkbenchServiceServer) GetBestFlowRun(context.Context, *GetB
 }
 func (UnimplementedWorkbenchServiceServer) SetBestFlowTruth(context.Context, *SetBestFlowTruthRequest) (*SetBestFlowTruthResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetBestFlowTruth not implemented")
+}
+func (UnimplementedWorkbenchServiceServer) PreviewImageNames(context.Context, *PreviewImageNamesRequest) (*PreviewImageNamesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PreviewImageNames not implemented")
+}
+func (UnimplementedWorkbenchServiceServer) ApplyImageNames(context.Context, *ApplyImageNamesRequest) (*ApplyImageNamesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyImageNames not implemented")
+}
+func (UnimplementedWorkbenchServiceServer) UndoImageNames(context.Context, *UndoImageNamesRequest) (*UndoImageNamesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UndoImageNames not implemented")
 }
 func (UnimplementedWorkbenchServiceServer) mustEmbedUnimplementedWorkbenchServiceServer() {}
 func (UnimplementedWorkbenchServiceServer) testEmbeddedByValue()                          {}
@@ -578,6 +632,60 @@ func _WorkbenchService_SetBestFlowTruth_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WorkbenchService_PreviewImageNames_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PreviewImageNamesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkbenchServiceServer).PreviewImageNames(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkbenchService_PreviewImageNames_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkbenchServiceServer).PreviewImageNames(ctx, req.(*PreviewImageNamesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkbenchService_ApplyImageNames_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyImageNamesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkbenchServiceServer).ApplyImageNames(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkbenchService_ApplyImageNames_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkbenchServiceServer).ApplyImageNames(ctx, req.(*ApplyImageNamesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkbenchService_UndoImageNames_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UndoImageNamesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkbenchServiceServer).UndoImageNames(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkbenchService_UndoImageNames_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkbenchServiceServer).UndoImageNames(ctx, req.(*UndoImageNamesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WorkbenchService_ServiceDesc is the grpc.ServiceDesc for WorkbenchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -628,6 +736,18 @@ var WorkbenchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetBestFlowTruth",
 			Handler:    _WorkbenchService_SetBestFlowTruth_Handler,
+		},
+		{
+			MethodName: "PreviewImageNames",
+			Handler:    _WorkbenchService_PreviewImageNames_Handler,
+		},
+		{
+			MethodName: "ApplyImageNames",
+			Handler:    _WorkbenchService_ApplyImageNames_Handler,
+		},
+		{
+			MethodName: "UndoImageNames",
+			Handler:    _WorkbenchService_UndoImageNames_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -603,3 +603,57 @@ def test_best_flow_upload_truth_and_thumbs(wb, tmp_path, monkeypatch):
         grpc.StatusCode.NOT_FOUND,
         "IMAGE_NOT_FOUND",
     )
+
+
+def test_image_naming_preview_apply_undo(wb, tmp_path):
+    code = "4710088410108"
+    (tmp_path / f"{code}.jpg").write_bytes(b"x")
+    (tmp_path / "IMG_1.jpg").write_bytes(b"x")
+    opts = workbench_pb2.ImageNamingOptions(folder=str(tmp_path), category="f", batch="a01")
+
+    preview = json.loads(
+        wb.PreviewImageNames(workbench_pb2.PreviewImageNamesRequest(options=opts)).json
+    )
+    assert preview["counts"] == {"rename": 1, "same": 0, "skip": 1}
+    dst = {i["src"]: i["dst"] for i in preview["items"]}
+    assert dst == {f"{code}.jpg": f"f_a01_001_{code}.jpg", "IMG_1.jpg": ""}
+    assert (tmp_path / f"{code}.jpg").is_file()  # 預覽不動檔案
+
+    done = json.loads(wb.ApplyImageNames(workbench_pb2.ApplyImageNamesRequest(options=opts)).json)
+    assert done["renamed"] == 1
+    assert (tmp_path / f"f_a01_001_{code}.jpg").is_file()
+
+    undo = json.loads(
+        wb.UndoImageNames(workbench_pb2.UndoImageNamesRequest(folder=str(tmp_path))).json
+    )
+    assert undo == {"restored": 1, "problems": []}
+
+    for bad, field in (
+        (
+            workbench_pb2.ImageNamingOptions(folder=str(tmp_path), category="F", batch="a01"),
+            "category",
+        ),
+        (
+            workbench_pb2.ImageNamingOptions(
+                folder=str(tmp_path), category="f", batch="a01", order="x"
+            ),
+            "order",
+        ),
+        (workbench_pb2.ImageNamingOptions(category="f", batch="a01"), "folder"),
+    ):
+        _expect_error(
+            lambda bad=bad: wb.PreviewImageNames(
+                workbench_pb2.PreviewImageNamesRequest(options=bad)
+            ),
+            grpc.StatusCode.INVALID_ARGUMENT,
+            "INVALID_PARAMS",
+            field,
+        )
+    missing = workbench_pb2.ImageNamingOptions(
+        folder=str(tmp_path / "nope"), category="f", batch="a01"
+    )
+    _expect_error(
+        lambda: wb.PreviewImageNames(workbench_pb2.PreviewImageNamesRequest(options=missing)),
+        grpc.StatusCode.NOT_FOUND,
+        "PATH_NOT_FOUND",
+    )

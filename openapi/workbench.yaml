@@ -886,6 +886,91 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/image-naming/preview:
+    post:
+      operationId: previewImageNames
+      summary: 圖片批次命名：預覽規則化檔名（不動任何檔案）
+      description: |
+        把資料夾中「檔名就是條碼」的照片改成 <類別>_<批次>_<序號>_<條碼>（見 dietai.evaluation.image_names）。
+        回傳每個檔案的新檔名與狀態（rename、same、skip）、統計、改名後主檔名的長度、是否有可還原的紀錄。
+        拒絕 test split 下的路徑（SPLIT_LOCKED）；資料夾不存在回 PATH_NOT_FOUND。
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageNamingRequest"
+      responses:
+        "200":
+          description: 改名預覽（結構由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/image-naming/apply:
+    post:
+      operationId: applyImageNames
+      summary: 圖片批次命名：依目前的資料夾重新規劃後改名
+      description: |
+        不採用前端送來的計畫，由後端依同樣的參數重新規劃後改名；不覆寫既有檔案，每筆記在資料夾的
+        _rename_log.csv。回傳改名數（renamed）與改名後的預覽。
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageNamingRequest"
+      responses:
+        "200":
+          description: 改名數與改名後的預覽（結構由 Python 定義）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/image-naming/undo:
+    post:
+      operationId: undoImageNames
+      summary: 圖片批次命名：依 _rename_log.csv 由後往前還原全部改名
+      tags: [dev]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UndoImageNamesRequest"
+      responses:
+        "200":
+          description: 還原數（restored）與無法還原的說明（problems）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
 components:
   securitySchemes:
     sessionCookie:
@@ -1540,6 +1625,47 @@ components:
           x-go-type: map[string]*string
           additionalProperties:
             type: [string, "null"]
+
+    # ── 圖片批次命名（通用工具） ──
+    ImageNamingRequest:
+      type: object
+      required: [folder]
+      properties:
+        folder:
+          type: string
+          description: 照片所在的資料夾（本機路徑，不含子資料夾）
+        category:
+          type: string
+          description: 類別（小寫英數字與連字號），例如 f＝食物包裝、o＝其他物品
+        batch:
+          type: string
+          description: 批次（小寫英數字與連字號），例如 a01
+        start:
+          type: integer
+          minimum: 0
+          description: 第一個序號；0 表示接在本類別批次既有的最大序號之後
+        width:
+          type: integer
+          minimum: 3
+          maximum: 6
+          description: 序號位數（補零），預設 3
+        order:
+          type: string
+          enum: [mtime, name]
+          description: 編號順序：mtime＝修改時間（預設，通常即拍攝順序）、name＝原檔名
+        include_unknown:
+          type: boolean
+          description: 看不出條碼的檔名也編號（不帶條碼）
+        no_code:
+          type: string
+          description: 沒有條碼時寫在條碼欄的標記（小寫字母），預設 nocode
+    UndoImageNamesRequest:
+      type: object
+      required: [folder]
+      properties:
+        folder:
+          type: string
+          description: 照片所在的資料夾
 
     # ── 冷啟動上傳（任務書 2.6 節） ──
     SubmissionStatus:

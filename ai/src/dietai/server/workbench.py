@@ -22,7 +22,7 @@ from typing import Any
 
 import grpc
 
-from dietai.devtools import batch, best_flow, degradations, e1, sweep
+from dietai.devtools import batch, best_flow, degradations, e1, image_naming, sweep
 from dietai.devtools.configs import config_from_override
 from dietai.devtools.degradations import Degradation
 from dietai.devtools.images import decode_image, load_image
@@ -36,6 +36,7 @@ from dietai.devtools.views import (
     laplacian_heatmap,
     mask_on_small,
 )
+from dietai.evaluation.image_names import MIN_SEQ_WIDTH, NO_CODE
 from dietai.preprocess import (
     FoodConfig,
     LabelConfig,
@@ -323,6 +324,34 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         out = best_flow.set_truth(request.run_dir, updates, criteria, self._best_flow_thumb)
         return workbench_pb2.SetBestFlowTruthResponse(json=convert.dumps(out))
 
+    @unary
+    def PreviewImageNames(
+        self, request: workbench_pb2.PreviewImageNamesRequest
+    ) -> workbench_pb2.PreviewImageNamesResponse:
+        """圖片批次命名：預覽規則化檔名（見 ``image_naming.plan_json``）。"""
+        folder, options = _naming_options(request.options)
+        out = image_naming.plan_json(folder, **options)
+        return workbench_pb2.PreviewImageNamesResponse(json=convert.dumps(out))
+
+    @unary
+    def ApplyImageNames(
+        self, request: workbench_pb2.ApplyImageNamesRequest
+    ) -> workbench_pb2.ApplyImageNamesResponse:
+        """圖片批次命名：依目前的資料夾重新規劃後改名（見 ``image_naming.apply_json``）。"""
+        folder, options = _naming_options(request.options)
+        out = image_naming.apply_json(folder, **options)
+        return workbench_pb2.ApplyImageNamesResponse(json=convert.dumps(out))
+
+    @unary
+    def UndoImageNames(
+        self, request: workbench_pb2.UndoImageNamesRequest
+    ) -> workbench_pb2.UndoImageNamesResponse:
+        """圖片批次命名：依紀錄還原全部改名。"""
+        if not request.folder:
+            raise SceneError("缺少資料夾", "folder")
+        out = image_naming.undo_json(request.folder)
+        return workbench_pb2.UndoImageNamesResponse(json=convert.dumps(out))
+
     def _best_flow_thumb(self, path: str) -> str:
         """找最佳流程真值表的縮圖：依原檔路徑快取在暫存區，同一張只讀檔一次。"""
         cached = self._store.derived(f"best-flow:{path}", "thumb")
@@ -445,3 +474,21 @@ def _json_object(text: str, field: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise SceneError(f"{field} 必須是 JSON 物件", field)
     return value
+
+
+def _naming_options(o: workbench_pb2.ImageNamingOptions) -> tuple[str, dict[str, Any]]:
+    """命名參數：proto 的零值換成預設值（width 3、order mtime、no_code nocode）。"""
+    if not o.folder:
+        raise SceneError("缺少資料夾", "folder")
+    if o.order not in ("", "mtime", "name"):
+        raise SceneError(f"編號順序只能是 mtime 或 name：{o.order}", "order")
+    options: dict[str, Any] = {
+        "category": o.category,
+        "batch": o.batch,
+        "start": o.start,
+        "width": o.width or MIN_SEQ_WIDTH,
+        "order": o.order or "mtime",
+        "include_unknown": o.include_unknown,
+        "no_code": o.no_code or NO_CODE,
+    }
+    return o.folder, options

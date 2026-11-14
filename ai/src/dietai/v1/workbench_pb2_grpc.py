@@ -87,6 +87,21 @@ class WorkbenchServiceStub:
                 request_serializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthRequest.SerializeToString,
                 response_deserializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthResponse.FromString,
                 _registered_method=True)
+        self.PreviewImageNames = channel.unary_unary(
+                '/dietai.v1.WorkbenchService/PreviewImageNames',
+                request_serializer=dietai_dot_v1_dot_workbench__pb2.PreviewImageNamesRequest.SerializeToString,
+                response_deserializer=dietai_dot_v1_dot_workbench__pb2.PreviewImageNamesResponse.FromString,
+                _registered_method=True)
+        self.ApplyImageNames = channel.unary_unary(
+                '/dietai.v1.WorkbenchService/ApplyImageNames',
+                request_serializer=dietai_dot_v1_dot_workbench__pb2.ApplyImageNamesRequest.SerializeToString,
+                response_deserializer=dietai_dot_v1_dot_workbench__pb2.ApplyImageNamesResponse.FromString,
+                _registered_method=True)
+        self.UndoImageNames = channel.unary_unary(
+                '/dietai.v1.WorkbenchService/UndoImageNames',
+                request_serializer=dietai_dot_v1_dot_workbench__pb2.UndoImageNamesRequest.SerializeToString,
+                response_deserializer=dietai_dot_v1_dot_workbench__pb2.UndoImageNamesResponse.FromString,
+                _registered_method=True)
 
 
 class WorkbenchServiceServicer:
@@ -188,6 +203,27 @@ class WorkbenchServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PreviewImageNames(self, request, context):
+        """圖片批次命名：預覽規則化檔名（不動任何檔案）
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ApplyImageNames(self, request, context):
+        """圖片批次命名：依目前的資料夾重新規劃後改名
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UndoImageNames(self, request, context):
+        """圖片批次命名：依 _rename_log.csv 還原全部改名
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_WorkbenchServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -260,6 +296,21 @@ def add_WorkbenchServiceServicer_to_server(servicer, server):
                     servicer.SetBestFlowTruth,
                     request_deserializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthRequest.FromString,
                     response_serializer=dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthResponse.SerializeToString,
+            ),
+            'PreviewImageNames': grpc.unary_unary_rpc_method_handler(
+                    servicer.PreviewImageNames,
+                    request_deserializer=dietai_dot_v1_dot_workbench__pb2.PreviewImageNamesRequest.FromString,
+                    response_serializer=dietai_dot_v1_dot_workbench__pb2.PreviewImageNamesResponse.SerializeToString,
+            ),
+            'ApplyImageNames': grpc.unary_unary_rpc_method_handler(
+                    servicer.ApplyImageNames,
+                    request_deserializer=dietai_dot_v1_dot_workbench__pb2.ApplyImageNamesRequest.FromString,
+                    response_serializer=dietai_dot_v1_dot_workbench__pb2.ApplyImageNamesResponse.SerializeToString,
+            ),
+            'UndoImageNames': grpc.unary_unary_rpc_method_handler(
+                    servicer.UndoImageNames,
+                    request_deserializer=dietai_dot_v1_dot_workbench__pb2.UndoImageNamesRequest.FromString,
+                    response_serializer=dietai_dot_v1_dot_workbench__pb2.UndoImageNamesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -643,6 +694,87 @@ class WorkbenchService:
             '/dietai.v1.WorkbenchService/SetBestFlowTruth',
             dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthRequest.SerializeToString,
             dietai_dot_v1_dot_workbench__pb2.SetBestFlowTruthResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PreviewImageNames(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/dietai.v1.WorkbenchService/PreviewImageNames',
+            dietai_dot_v1_dot_workbench__pb2.PreviewImageNamesRequest.SerializeToString,
+            dietai_dot_v1_dot_workbench__pb2.PreviewImageNamesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ApplyImageNames(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/dietai.v1.WorkbenchService/ApplyImageNames',
+            dietai_dot_v1_dot_workbench__pb2.ApplyImageNamesRequest.SerializeToString,
+            dietai_dot_v1_dot_workbench__pb2.ApplyImageNamesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UndoImageNames(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/dietai.v1.WorkbenchService/UndoImageNames',
+            dietai_dot_v1_dot_workbench__pb2.UndoImageNamesRequest.SerializeToString,
+            dietai_dot_v1_dot_workbench__pb2.UndoImageNamesResponse.FromString,
             options,
             channel_credentials,
             insecure,

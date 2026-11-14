@@ -31,6 +31,12 @@ service WorkbenchService {
   rpc GetBestFlowRun(GetBestFlowRunRequest) returns (GetBestFlowRunResponse);
   // 更新人工確認的真值，回傳更新後的真值表與結論
   rpc SetBestFlowTruth(SetBestFlowTruthRequest) returns (SetBestFlowTruthResponse);
+  // 圖片批次命名：預覽規則化檔名（不動任何檔案）
+  rpc PreviewImageNames(PreviewImageNamesRequest) returns (PreviewImageNamesResponse);
+  // 圖片批次命名：依目前的資料夾重新規劃後改名
+  rpc ApplyImageNames(ApplyImageNamesRequest) returns (ApplyImageNamesResponse);
+  // 圖片批次命名：依 _rename_log.csv 還原全部改名
+  rpc UndoImageNames(UndoImageNamesRequest) returns (UndoImageNamesResponse);
 }
 
 // 暫存影像。image_id 與診斷影像的 ID 共用同一個空間，皆可由 GetArtifact 取得
@@ -178,5 +184,45 @@ message SetBestFlowTruthRequest {
 
 // 內容同 GetBestFlowRunResponse（更新後的真值表與結論）
 message SetBestFlowTruthResponse {
+  string json = 1;
+}
+
+// 圖片批次命名的參數（見 dietai.devtools.image_naming.plan）；start 0＝接在既有最大序號之後，
+// width 0＝預設 3 位，order 空字串＝mtime，no_code 空字串＝nocode
+message ImageNamingOptions {
+  string folder = 1;
+  string category = 2;
+  string batch = 3;
+  int32 start = 4;
+  int32 width = 5;
+  string order = 6;
+  bool include_unknown = 7;
+  string no_code = 8;
+}
+
+message PreviewImageNamesRequest {
+  ImageNamingOptions options = 1;
+}
+
+// json：每個檔案的新檔名與狀態、統計、主檔名長度、是否可還原
+message PreviewImageNamesResponse {
+  string json = 1;
+}
+
+message ApplyImageNamesRequest {
+  ImageNamingOptions options = 1;
+}
+
+// json：改名數（renamed）與改名後的預覽
+message ApplyImageNamesResponse {
+  string json = 1;
+}
+
+message UndoImageNamesRequest {
+  string folder = 1;
+}
+
+// json：還原數（restored）與無法還原的說明（problems）
+message UndoImageNamesResponse {
   string json = 1;
 }

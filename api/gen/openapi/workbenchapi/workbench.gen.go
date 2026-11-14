@@ -101,6 +101,24 @@ func (e ImageKind) Valid() bool {
 	}
 }
 
+// Defines values for ImageNamingRequestOrder.
+const (
+	Mtime ImageNamingRequestOrder = "mtime"
+	Name  ImageNamingRequestOrder = "name"
+)
+
+// Valid indicates whether the value is a known member of the ImageNamingRequestOrder enum.
+func (e ImageNamingRequestOrder) Valid() bool {
+	switch e {
+	case Mtime:
+		return true
+	case Name:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for NutritionIssueBasis.
 const (
 	Both       NutritionIssueBasis = "both"
@@ -446,6 +464,36 @@ type FreeJson map[string]interface{}
 // ImageKind front＝包裝正面、barcode＝條碼、label＝營養標示
 type ImageKind string
 
+// ImageNamingRequest defines model for ImageNamingRequest.
+type ImageNamingRequest struct {
+	// Batch 批次（小寫英數字與連字號），例如 a01
+	Batch *string `json:"batch,omitempty"`
+
+	// Category 類別（小寫英數字與連字號），例如 f＝食物包裝、o＝其他物品
+	Category *string `json:"category,omitempty"`
+
+	// Folder 照片所在的資料夾（本機路徑，不含子資料夾）
+	Folder string `json:"folder"`
+
+	// IncludeUnknown 看不出條碼的檔名也編號（不帶條碼）
+	IncludeUnknown *bool `json:"include_unknown,omitempty"`
+
+	// NoCode 沒有條碼時寫在條碼欄的標記（小寫字母），預設 nocode
+	NoCode *string `json:"no_code,omitempty"`
+
+	// Order 編號順序：mtime＝修改時間（預設，通常即拍攝順序）、name＝原檔名
+	Order *ImageNamingRequestOrder `json:"order,omitempty"`
+
+	// Start 第一個序號；0 表示接在本類別批次既有的最大序號之後
+	Start *int `json:"start,omitempty"`
+
+	// Width 序號位數（補零），預設 3
+	Width *int `json:"width,omitempty"`
+}
+
+// ImageNamingRequestOrder 編號順序：mtime＝修改時間（預設，通常即拍攝順序）、name＝原檔名
+type ImageNamingRequestOrder string
+
 // ImageOutput defines model for ImageOutput.
 type ImageOutput struct {
 	// ArtifactId 以 GET /dev/artifacts/{artifact_id} 取得
@@ -751,6 +799,12 @@ type SynthesizeRequest struct {
 // SynthesizeRequestScene defines model for SynthesizeRequest.Scene.
 type SynthesizeRequestScene string
 
+// UndoImageNamesRequest defines model for UndoImageNamesRequest.
+type UndoImageNamesRequest struct {
+	// Folder 照片所在的資料夾
+	Folder string `json:"folder"`
+}
+
 // User defines model for User.
 type User struct {
 	DisplayName string `json:"display_name"`
@@ -936,6 +990,15 @@ type StartE1RunJSONRequestBody = StartE1RunRequest
 // PreprocessFoodJSONRequestBody defines body for PreprocessFood for application/json ContentType.
 type PreprocessFoodJSONRequestBody = ConfigRequest
 
+// ApplyImageNamesJSONRequestBody defines body for ApplyImageNames for application/json ContentType.
+type ApplyImageNamesJSONRequestBody = ImageNamingRequest
+
+// PreviewImageNamesJSONRequestBody defines body for PreviewImageNames for application/json ContentType.
+type PreviewImageNamesJSONRequestBody = ImageNamingRequest
+
+// UndoImageNamesJSONRequestBody defines body for UndoImageNames for application/json ContentType.
+type UndoImageNamesJSONRequestBody = UndoImageNamesRequest
+
 // PutImageMultipartRequestBody defines body for PutImage for multipart/form-data ContentType.
 type PutImageMultipartRequestBody PutImageMultipartBody
 
@@ -1093,6 +1156,15 @@ type ServerInterface interface {
 	// PreprocessFood 食物照片前處理（VLM 輸入、切菜、盤緣）
 	// (POST /workbench/v1/dev/food)
 	PreprocessFood(w http.ResponseWriter, r *http.Request)
+	// ApplyImageNames 圖片批次命名：依目前的資料夾重新規劃後改名
+	// (POST /workbench/v1/dev/image-naming/apply)
+	ApplyImageNames(w http.ResponseWriter, r *http.Request)
+	// PreviewImageNames 圖片批次命名：預覽規則化檔名（不動任何檔案）
+	// (POST /workbench/v1/dev/image-naming/preview)
+	PreviewImageNames(w http.ResponseWriter, r *http.Request)
+	// UndoImageNames 圖片批次命名：依 _rename_log.csv 由後往前還原全部改名
+	// (POST /workbench/v1/dev/image-naming/undo)
+	UndoImageNames(w http.ResponseWriter, r *http.Request)
 	// PutImage 上傳並暫存影像
 	// (POST /workbench/v1/dev/images)
 	PutImage(w http.ResponseWriter, r *http.Request)
@@ -1849,6 +1921,48 @@ func (siw *ServerInterfaceWrapper) PreprocessFood(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ApplyImageNames operation middleware
+func (siw *ServerInterfaceWrapper) ApplyImageNames(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApplyImageNames(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewImageNames operation middleware
+func (siw *ServerInterfaceWrapper) PreviewImageNames(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewImageNames(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UndoImageNames operation middleware
+func (siw *ServerInterfaceWrapper) UndoImageNames(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UndoImageNames(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PutImage operation middleware
 func (siw *ServerInterfaceWrapper) PutImage(w http.ResponseWriter, r *http.Request) {
 
@@ -2124,6 +2238,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs", wrapper.StartBestFlowRun)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs/{run_id}", wrapper.GetBestFlowRun)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/workbench/v1/dev/best-flow/runs/{run_id}/truth", wrapper.SetBestFlowTruth)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/image-naming/preview", wrapper.PreviewImageNames)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/image-naming/apply", wrapper.ApplyImageNames)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/image-naming/undo", wrapper.UndoImageNames)
 
 	return m
 }
@@ -3954,6 +4071,240 @@ func (response PreprocessFood503JSONResponse) VisitPreprocessFoodResponse(w http
 	return err
 }
 
+type ApplyImageNamesRequestObject struct {
+	Body *ApplyImageNamesJSONRequestBody
+}
+
+type ApplyImageNamesResponseObject interface {
+	VisitApplyImageNamesResponse(w http.ResponseWriter) error
+}
+
+type ApplyImageNames200JSONResponse FreeJson
+
+func (response ApplyImageNames200JSONResponse) VisitApplyImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyImageNames400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ApplyImageNames400JSONResponse) VisitApplyImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyImageNames403JSONResponse struct{ SplitLockedJSONResponse }
+
+func (response ApplyImageNames403JSONResponse) VisitApplyImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyImageNames404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ApplyImageNames404JSONResponse) VisitApplyImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApplyImageNames503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ApplyImageNames503JSONResponse) VisitApplyImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewImageNamesRequestObject struct {
+	Body *PreviewImageNamesJSONRequestBody
+}
+
+type PreviewImageNamesResponseObject interface {
+	VisitPreviewImageNamesResponse(w http.ResponseWriter) error
+}
+
+type PreviewImageNames200JSONResponse FreeJson
+
+func (response PreviewImageNames200JSONResponse) VisitPreviewImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewImageNames400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response PreviewImageNames400JSONResponse) VisitPreviewImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewImageNames403JSONResponse struct{ SplitLockedJSONResponse }
+
+func (response PreviewImageNames403JSONResponse) VisitPreviewImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewImageNames404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response PreviewImageNames404JSONResponse) VisitPreviewImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PreviewImageNames503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response PreviewImageNames503JSONResponse) VisitPreviewImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoImageNamesRequestObject struct {
+	Body *UndoImageNamesJSONRequestBody
+}
+
+type UndoImageNamesResponseObject interface {
+	VisitUndoImageNamesResponse(w http.ResponseWriter) error
+}
+
+type UndoImageNames200JSONResponse FreeJson
+
+func (response UndoImageNames200JSONResponse) VisitUndoImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoImageNames400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UndoImageNames400JSONResponse) VisitUndoImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoImageNames403JSONResponse struct{ SplitLockedJSONResponse }
+
+func (response UndoImageNames403JSONResponse) VisitUndoImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoImageNames404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response UndoImageNames404JSONResponse) VisitUndoImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UndoImageNames503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response UndoImageNames503JSONResponse) VisitUndoImageNamesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PutImageRequestObject struct {
 	Body *multipart.Reader
 }
@@ -4552,6 +4903,15 @@ type StrictServerInterface interface {
 	// PreprocessFood 食物照片前處理（VLM 輸入、切菜、盤緣）
 	// (POST /workbench/v1/dev/food)
 	PreprocessFood(ctx context.Context, request PreprocessFoodRequestObject) (PreprocessFoodResponseObject, error)
+	// ApplyImageNames 圖片批次命名：依目前的資料夾重新規劃後改名
+	// (POST /workbench/v1/dev/image-naming/apply)
+	ApplyImageNames(ctx context.Context, request ApplyImageNamesRequestObject) (ApplyImageNamesResponseObject, error)
+	// PreviewImageNames 圖片批次命名：預覽規則化檔名（不動任何檔案）
+	// (POST /workbench/v1/dev/image-naming/preview)
+	PreviewImageNames(ctx context.Context, request PreviewImageNamesRequestObject) (PreviewImageNamesResponseObject, error)
+	// UndoImageNames 圖片批次命名：依 _rename_log.csv 由後往前還原全部改名
+	// (POST /workbench/v1/dev/image-naming/undo)
+	UndoImageNames(ctx context.Context, request UndoImageNamesRequestObject) (UndoImageNamesResponseObject, error)
 	// PutImage 上傳並暫存影像
 	// (POST /workbench/v1/dev/images)
 	PutImage(ctx context.Context, request PutImageRequestObject) (PutImageResponseObject, error)
@@ -5273,6 +5633,99 @@ func (sh *strictHandler) PreprocessFood(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PreprocessFoodResponseObject); ok {
 		if err := validResponse.VisitPreprocessFoodResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApplyImageNames operation middleware
+func (sh *strictHandler) ApplyImageNames(w http.ResponseWriter, r *http.Request) {
+	var request ApplyImageNamesRequestObject
+
+	var body ApplyImageNamesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApplyImageNames(ctx, request.(ApplyImageNamesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApplyImageNames")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApplyImageNamesResponseObject); ok {
+		if err := validResponse.VisitApplyImageNamesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PreviewImageNames operation middleware
+func (sh *strictHandler) PreviewImageNames(w http.ResponseWriter, r *http.Request) {
+	var request PreviewImageNamesRequestObject
+
+	var body PreviewImageNamesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PreviewImageNames(ctx, request.(PreviewImageNamesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PreviewImageNames")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PreviewImageNamesResponseObject); ok {
+		if err := validResponse.VisitPreviewImageNamesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UndoImageNames operation middleware
+func (sh *strictHandler) UndoImageNames(w http.ResponseWriter, r *http.Request) {
+	var request UndoImageNamesRequestObject
+
+	var body UndoImageNamesJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UndoImageNames(ctx, request.(UndoImageNamesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UndoImageNames")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UndoImageNamesResponseObject); ok {
+		if err := validResponse.VisitUndoImageNamesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

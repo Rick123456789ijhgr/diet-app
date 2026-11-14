@@ -233,3 +233,59 @@ class SetBestFlowTruthResponse(_message.Message):
     JSON_FIELD_NUMBER: _ClassVar[int]
     json: str
     def __init__(self, json: _Optional[str] = ...) -> None: ...
+
+class ImageNamingOptions(_message.Message):
+    __slots__ = ("folder", "category", "batch", "start", "width", "order", "include_unknown", "no_code")
+    FOLDER_FIELD_NUMBER: _ClassVar[int]
+    CATEGORY_FIELD_NUMBER: _ClassVar[int]
+    BATCH_FIELD_NUMBER: _ClassVar[int]
+    START_FIELD_NUMBER: _ClassVar[int]
+    WIDTH_FIELD_NUMBER: _ClassVar[int]
+    ORDER_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_UNKNOWN_FIELD_NUMBER: _ClassVar[int]
+    NO_CODE_FIELD_NUMBER: _ClassVar[int]
+    folder: str
+    category: str
+    batch: str
+    start: int
+    width: int
+    order: str
+    include_unknown: bool
+    no_code: str
+    def __init__(self, folder: _Optional[str] = ..., category: _Optional[str] = ..., batch: _Optional[str] = ..., start: _Optional[int] = ..., width: _Optional[int] = ..., order: _Optional[str] = ..., include_unknown: _Optional[bool] = ..., no_code: _Optional[str] = ...) -> None: ...
+
+class PreviewImageNamesRequest(_message.Message):
+    __slots__ = ("options",)
+    OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    options: ImageNamingOptions
+    def __init__(self, options: _Optional[_Union[ImageNamingOptions, _Mapping]] = ...) -> None: ...
+
+class PreviewImageNamesResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...
+
+class ApplyImageNamesRequest(_message.Message):
+    __slots__ = ("options",)
+    OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    options: ImageNamingOptions
+    def __init__(self, options: _Optional[_Union[ImageNamingOptions, _Mapping]] = ...) -> None: ...
+
+class ApplyImageNamesResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...
+
+class UndoImageNamesRequest(_message.Message):
+    __slots__ = ("folder",)
+    FOLDER_FIELD_NUMBER: _ClassVar[int]
+    folder: str
+    def __init__(self, folder: _Optional[str] = ...) -> None: ...
+
+class UndoImageNamesResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...

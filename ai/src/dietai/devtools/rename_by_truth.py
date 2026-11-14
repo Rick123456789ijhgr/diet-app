@@ -5,6 +5,8 @@
 
 - 有條碼 → ``<號碼><副檔名>``（同一個號碼有多張時加 ``_2``、``_3``…）
 - 沒有條碼 → ``沒有條碼_<原檔名>``
+- 已規則化的檔名（``food_b01_001.jpg``，見 ``evaluation.image_names``）→ 保留類別、批次、
+  序號，只把條碼接在後面（``food_b01_001_<號碼>.jpg``、``food_b01_001_nocode.jpg``）
 - 尚未確定的圖片不改；預設也不改程式自動推定的（``include_auto`` 才改）
 
 原始檔的位置：資料夾來源的執行，manifest 直接記錄原檔路徑；上傳來源的執行只有檔名
@@ -17,21 +19,19 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from dietai.devtools.best_flow import INPUTS, MARKER, resolve_run
 from dietai.devtools.images import PathNotFoundError, guard_path
+from dietai.devtools.rename_log import apply_renames, undo_renames
 from dietai.evaluation import read_manifest
 from dietai.evaluation.best_flow import TruthSource, normalize_truth, read_truth
-from dietai.preprocess.barcode import ean13_checksum_ok
+from dietai.evaluation.image_names import parse_name, valid_code
 
 LOG_FILE = "rename_log.csv"
-LOG_COLUMNS = ("time", "old", "new")
 NO_CODE_PREFIX = "沒有條碼_"
 
 # 檔名就是號碼（可接 _2、-3、" (1)" 之類的序號）
@@ -55,15 +55,11 @@ class Rename:
     note: str = ""
 
 
-def _valid(code: str) -> bool:
-    if len(code) == 8 and code.isdigit():
-        total = sum(int(c) * (1 if i % 2 else 3) for i, c in enumerate(code[:7]))
-        return (10 - total % 10) % 10 == int(code[7])
-    return ean13_checksum_ok(code)
-
-
 def code_from_name(name: str) -> str | None:
     """檔名代表的答案：合法的條碼號碼、``""``（沒有條碼）或 ``None``（看不出來）。"""
+    parsed = parse_name(name)
+    if parsed is not None:
+        return parsed.code
     stem = Path(name).stem
     if stem.startswith(NO_CODE_PREFIX):
         return ""
@@ -71,11 +67,14 @@ def code_from_name(name: str) -> str | None:
     if not m:
         return None
     code = normalize_truth(m.group(1))
-    return code if _valid(code) else None
+    return code if valid_code(code) else None
 
 
 def _target_name(name: str, truth: str) -> str:
     p = Path(name)
+    parsed = parse_name(name)
+    if parsed is not None:
+        return parsed.with_code(truth).filename(p.suffix)
     if truth:
         return f"{truth}{p.suffix.lower()}"
     return name if name.startswith(NO_CODE_PREFIX) else f"{NO_CODE_PREFIX}{name}"
@@ -167,23 +166,12 @@ def apply(run_dir: str, renames: list[Rename]) -> int:
     目標已存在時（計畫之後才出現的檔案）略過該筆，不覆寫。
     """
     run = resolve_run(run_dir)
-    log = run / LOG_FILE
-    new_log = not log.is_file()
-    done = 0
-    with log.open("a", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        if new_log:
-            writer.writerow(LOG_COLUMNS)
-        for r in renames:
-            if r.status != "rename" or r.src is None or r.dst is None:
-                continue
-            if r.dst.exists() or not r.src.is_file():
-                continue
-            r.src.rename(r.dst)
-            writer.writerow([datetime.now().isoformat(timespec="seconds"), r.src, r.dst])
-            f.flush()  # 中途出錯時，已改的都在紀錄裡，可以還原
-            done += 1
-    return done
+    pairs = [
+        (r.src, r.dst)
+        for r in renames
+        if r.status == "rename" and r.src is not None and r.dst is not None
+    ]
+    return apply_renames(run / LOG_FILE, pairs)
 
 
 def undo(run_dir: str) -> tuple[int, list[str]]:
@@ -191,25 +179,4 @@ def undo(run_dir: str) -> tuple[int, list[str]]:
 
     還原成功的紀錄會移除；無法還原的（新檔名已不存在、或舊檔名已被占用）留在紀錄裡。
     """
-    run = resolve_run(run_dir)
-    log = run / LOG_FILE
-    if not log.is_file():
-        return 0, []
-    with log.open(encoding="utf-8", newline="") as f:
-        rows = list(csv.DictReader(f))
-    kept: list[dict[str, str]] = []
-    problems: list[str] = []
-    restored = 0
-    for row in reversed(rows):
-        old, new = guard_path(row["old"]), guard_path(row["new"])
-        if new.is_file() and not old.exists():
-            new.rename(old)
-            restored += 1
-        else:
-            problems.append(f"無法還原 {new.name} → {old.name}")
-            kept.append(row)
-    with log.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=LOG_COLUMNS)
-        writer.writeheader()
-        writer.writerows(reversed(kept))
-    return restored, problems
+    return undo_renames(resolve_run(run_dir) / LOG_FILE)
