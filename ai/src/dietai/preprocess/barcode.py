@@ -19,7 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from dietai.preprocess import ops
-from dietai.preprocess.config import LadderConfig, parse_pipeline_step
+from dietai.preprocess.config import PIXEL_STEPS, LadderConfig, parse_pipeline_step
 from dietai.preprocess.decoders import DecodeHit, Decoder
 from dietai.preprocess.types import CodeFormat, Image, PreprocessWarning, Rung, StepRecord
 
@@ -148,8 +148,7 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
             yield Variant(rung, out, _IDENTITY, params)
         elif rung is Rung.PIPELINE:
             for steps in cfg.pipelines:
-                out, to_original, params = _pipeline(get_gray(), steps, cfg)
-                yield Variant(rung, out, to_original, params)
+                yield _pipeline(get_gray(), steps, cfg)
         elif rung is Rung.DESKEW:
             # 以整張灰階的梯度結構張量估計主方向（見 ``ops.estimate_skew``）；
             # 回傳值為內容被逆時針轉了幾度，所以下方以 ``-skew`` 轉回
@@ -221,16 +220,18 @@ def _rectified(
     return np.asarray(out, dtype=np.uint8), inverse
 
 
-def _located(gray: Image, cfg: LadderConfig) -> Variant:
+def _located(gray: Image, cfg: LadderConfig, pad: float | None = None) -> Variant:
     """``locate`` 階：找出條碼、各自轉正裁下，上下拼成一張影像（只解碼一次）。
 
-    找不到條碼時回傳略過的版本（不送解碼）。參數 ``boxes`` 為找到的條碼框數。
+    ``pad`` 為框的放大倍數（省略時用 ``cfg.locate_pad``）。找不到條碼時回傳略過的版本
+    （不送解碼）。參數 ``boxes`` 為找到的條碼框數。
     """
-    params: dict[str, Any] = {"pad": cfg.locate_pad, "max_width": cfg.locate_max_width}
+    pad = cfg.locate_pad if pad is None else pad
+    params: dict[str, Any] = {"pad": pad, "max_width": cfg.locate_max_width}
     quads = locate_barcodes(gray)
     if not quads:
         return Variant(Rung.LOCATE, None, _IDENTITY, {**params, "boxes": 0}, skipped=True)
-    crops = [_rectified(gray, q, cfg.locate_pad, cfg.locate_max_width) for q in quads]
+    crops = [_rectified(gray, q, pad, cfg.locate_max_width) for q in quads]
     width = max(c.shape[1] for c, _ in crops)
     parts: list[Image] = []
     regions: list[Region] = []
@@ -305,7 +306,7 @@ def _rotated(gray: Image, angle: float) -> tuple[Image, Affine]:
 
 
 # 只改像素、不改幾何的處理；單獨一階與疊加流程中的步驟共用 ``_pixel_step``
-_PIXEL_STEPS = frozenset({Rung.BINARIZE, Rung.OTSU, Rung.CLAHE, Rung.SHARPEN, Rung.DENOISE})
+_PIXEL_STEPS = PIXEL_STEPS
 
 
 def _pixel_step(gray: Image, step: Rung, cfg: LadderConfig) -> tuple[Image, dict[str, Any]]:
@@ -326,22 +327,29 @@ def _pixel_step(gray: Image, step: Rung, cfg: LadderConfig) -> tuple[Image, dict
     raise ValueError(f"不是只改像素的步驟：{step.value}")
 
 
-def _pipeline(
-    gray: Image, steps: tuple[str, ...], cfg: LadderConfig
-) -> tuple[Image, Affine, dict[str, Any]]:
-    """在同一張灰階影像上依序做 ``steps``，回傳（結果, 回推原圖的矩陣, 參數）。
+def _pipeline(gray: Image, steps: tuple[str, ...], cfg: LadderConfig) -> Variant:
+    """在同一張灰階影像上依序做 ``steps``，回傳 ``pipeline`` 階的一個版本。
 
     參數為 ``steps``（以 ``+`` 串接的步驟代碼）與各步驟的參數（鍵為 ``步驟.參數``）。
     旋轉校正依「目前的影像」估計角度，小於 ``deskew_min_deg`` 時這一步不旋轉
     （``deskew.applied`` 為 ``False``），流程其餘步驟照常執行。縮放（``multiscale:0.5``）與
     旋轉（``rotate:90``）使用步驟代碼中的參數，例如先縮小一半再轉 90°。
+    定位條碼（只能是第一步，見 ``config.check_pipeline``）之後的步驟作用在拼接後的裁切上；
+    找不到條碼時整條流程略過。
     """
     out = gray
     to_original = _IDENTITY
+    regions: tuple[Region, ...] = ()
     params: dict[str, Any] = {"steps": "+".join(str(s) for s in steps)}
     for token in steps:
         step, value = parse_pipeline_step(token)
-        if step is Rung.MULTISCALE and value is not None:
+        if step is Rung.LOCATE:
+            located = _located(out, cfg, value)
+            params.update({f"locate.{k}": v for k, v in located.params.items()})
+            if located.image is None:
+                return Variant(Rung.PIPELINE, None, _IDENTITY, params, skipped=True)
+            out, to_original, regions = located.image, located.to_original, located.regions
+        elif step is Rung.MULTISCALE and value is not None:
             out, inverse = _scaled(out, value)
             to_original = _compose(to_original, inverse)
             params["multiscale.factor"] = value
@@ -362,7 +370,7 @@ def _pipeline(
         else:
             out, step_params = _pixel_step(out, step, cfg)
             params.update({f"{step.value}.{k}": v for k, v in step_params.items()})
-    return out, to_original, params
+    return Variant(Rung.PIPELINE, out, to_original, params, regions=regions)
 
 
 def _compose(outer: Affine, inner: Affine) -> Affine:

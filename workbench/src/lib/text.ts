@@ -222,6 +222,7 @@ export function stepText(token: string): string {
   if (arg === undefined) return rungText(step)
   if (step === 'multiscale') return `縮放 ×${arg}`
   if (step === 'rotate') return `旋轉 ${arg}°`
+  if (step === 'locate') return `定位條碼（框 ×${arg}）`
   return `${rungText(step)}（${arg}）`
 }
 export const outcomeText = (o: string) => OUTCOME_TEXT[o] ?? o

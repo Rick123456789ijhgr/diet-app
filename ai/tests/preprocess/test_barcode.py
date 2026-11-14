@@ -578,3 +578,43 @@ def test_locate_max_width_shrinks_crop(ean13_img):
 def test_locate_config_rejects_invalid(kwargs):
     with pytest.raises(ValueError):
         LadderConfig(**kwargs)
+
+
+def test_pipeline_locate_then_clahe(ean13_img):
+    """疊加流程以定位條碼開頭：後續步驟作用在裁切上，結果仍回推到原圖。"""
+    img, (cx, cy) = _small_tilted(ean13_img, 30.0)
+    cfg = LadderConfig(rungs=(Rung.PIPELINE,), pipelines=(("locate:1.15", "clahe"),))
+    result = decode_with_ladder(img, NO_ROTATE, cfg)
+    assert result.success and [h.text for h in result.hits] == ["4710088410108"]
+    params = result.attempts[0].params
+    assert params["steps"] == "locate:1.15+clahe"
+    assert params["locate.pad"] == 1.15 and params["locate.boxes"] >= 1
+    hx, hy = result.hits[0].center
+    assert hx == pytest.approx(cx, abs=30) and hy == pytest.approx(cy, abs=30)
+
+
+def test_pipeline_locate_skipped_without_barcode():
+    img = np.full((600, 800), 255, dtype=np.uint8)
+    cfg = LadderConfig(rungs=(Rung.PIPELINE,), pipelines=(("locate", "clahe"),))
+    (v,) = ladder_variants(img, cfg)
+    assert v.skipped and v.image is None and v.params["locate.boxes"] == 0
+
+
+def test_pipeline_locate_is_normalized():
+    cfg = LadderConfig(pipelines=(("locate:1.80", "clahe"), ("locate", "otsu")))
+    assert cfg.pipelines == (("locate:1.8", "clahe"), ("locate", "otsu"))
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        ("clahe", "locate"),  # 不是第一步
+        ("locate", "rotate:90"),  # 之後接改幾何的步驟
+        ("locate", "multiscale:0.5"),
+        ("locate:5", "clahe"),  # 放大倍數超出範圍
+        ("locate:0.9", "clahe"),
+    ],
+)
+def test_pipeline_locate_rejects_invalid(steps):
+    with pytest.raises(ValueError):
+        LadderConfig(pipelines=(steps,))

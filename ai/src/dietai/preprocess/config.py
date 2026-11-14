@@ -212,8 +212,9 @@ DEFAULT_RUNGS: tuple[Rung, ...] = (
     Rung.SHARPEN,
 )
 
-# 疊加流程可用的步驟：只改像素的處理、旋轉校正，以及帶參數的縮放與旋轉
-# （原圖、灰階、疊加流程本身不行）
+# 疊加流程可用的步驟：只改像素的處理、旋轉校正、帶參數的縮放與旋轉，以及定位條碼
+# （原圖、灰階、疊加流程本身不行）。定位條碼只能是第一步，之後只能接只改像素的處理（見
+# ``check_pipeline``）：後續步驟作用在拼接後的裁切上。
 PIPELINE_STEPS: tuple[Rung, ...] = (
     Rung.BINARIZE,
     Rung.OTSU,
@@ -223,7 +224,14 @@ PIPELINE_STEPS: tuple[Rung, ...] = (
     Rung.DESKEW,
     Rung.MULTISCALE,
     Rung.ROTATE,
+    Rung.LOCATE,
 )
+# 只改像素、不改幾何的步驟；定位條碼之後只能接這些
+PIXEL_STEPS: frozenset[Rung] = frozenset(
+    {Rung.BINARIZE, Rung.OTSU, Rung.CLAHE, Rung.SHARPEN, Rung.DENOISE}
+)
+# 參數可省略的步驟：``locate``（沿用 ``locate_pad``）或 ``locate:1.8``（框放大 1.8 倍）
+OPTIONAL_PARAM_STEPS: frozenset[Rung] = frozenset({Rung.LOCATE})
 # 疊加流程中必須帶參數的步驟，寫成「步驟:參數」：``multiscale:0.5``（縮放倍率）、
 # ``rotate:90``（逆時針旋轉的角度）；其他步驟不帶參數
 PARAM_STEPS: frozenset[Rung] = frozenset({Rung.MULTISCALE, Rung.ROTATE})
@@ -233,14 +241,17 @@ _EXAMPLE = {Rung.MULTISCALE: "0.5", Rung.ROTATE: "90"}
 def parse_pipeline_step(token: str) -> tuple[Rung, float | None]:
     """疊加流程的一個步驟代碼 → （步驟, 參數）。不合法時丟 ``ValueError``。
 
-    ``multiscale:0.5`` 的倍率須大於 0、不等於 1；``rotate:90`` 的角度須在 (-180, 180] 且不為 0。
+    ``multiscale:0.5`` 的倍率須大於 0、不等於 1；``rotate:90`` 的角度須在 (-180, 180] 且不為 0；
+    ``locate:1.8`` 的放大倍數須在 [1, 3]（也可寫 ``locate``，沿用設定的 ``locate_pad``）。
     """
     name, sep, arg = str(token).partition(":")
     step = Rung(name)
     if step not in PIPELINE_STEPS:
         allowed = [s.value for s in PIPELINE_STEPS]
         raise ValueError(f"疊加流程不能含 {name}；可用步驟：{allowed}")
-    if step not in PARAM_STEPS:
+    if step in OPTIONAL_PARAM_STEPS and not sep:
+        return step, None
+    if step not in PARAM_STEPS and step not in OPTIONAL_PARAM_STEPS:
         if sep:
             raise ValueError(f"疊加流程步驟 {name} 不帶參數，收到 {token}")
         return step, None
@@ -252,6 +263,8 @@ def parse_pipeline_step(token: str) -> tuple[Rung, float | None]:
         raise ValueError(f"疊加流程步驟的參數須為數字，收到 {token}") from e
     if step is Rung.MULTISCALE:
         check_scale(value)
+    elif step is Rung.LOCATE:
+        check_pad(value)
     else:
         check_angle(value)
     return step, value
@@ -266,6 +279,25 @@ def check_scale(value: float) -> None:
     """縮放倍率須大於 0 且不等於 1（倍率 1 等於原圖，已由其他階涵蓋）。"""
     if not math.isfinite(value) or value <= 0 or value == 1:
         raise ValueError(f"縮放倍率須大於 0 且不等於 1，收到 {value}")
+
+
+def check_pad(value: float) -> None:
+    """定位框的放大倍數須在 [1, 3]。"""
+    if not math.isfinite(value) or not 1 <= value <= 3:
+        raise ValueError(f"定位框的放大倍數須在 1 到 3 之間，收到 {value}")
+
+
+def check_pipeline(steps: tuple[str, ...]) -> None:
+    """一條疊加流程中，定位條碼只能是第一步，之後只能接只改像素的處理。"""
+    parsed = [parse_pipeline_step(s)[0] for s in steps]
+    if Rung.LOCATE not in parsed:
+        return
+    if parsed[0] is not Rung.LOCATE or parsed.count(Rung.LOCATE) > 1:
+        raise ValueError(f"定位條碼只能是疊加流程的第一步，收到 {[str(s) for s in steps]}")
+    if any(s not in PIXEL_STEPS for s in parsed[1:]):
+        allowed = sorted(s.value for s in PIXEL_STEPS)
+        names = [str(s) for s in steps]
+        raise ValueError(f"定位條碼之後只能接只改像素的處理 {allowed}，收到 {names}")
 
 
 def check_angle(value: float) -> None:
@@ -475,6 +507,7 @@ class LadderConfig:
             names = [str(s) for s in p]
             if len(p) < 2 or len(set(p)) != len(p):
                 raise ValueError(f"疊加流程須有至少兩個不重複的步驟，收到 {names}")
+            check_pipeline(p)
         if len(set(self.pipelines)) != len(self.pipelines):
             raise ValueError("pipelines 不得重複")
         if Rung.PIPELINE in self.rungs and not self.pipelines:
