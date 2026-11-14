@@ -10,6 +10,7 @@ PR 的「待校準清單」也可由此列出。
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from typing import Any, TypeVar
@@ -211,7 +212,8 @@ DEFAULT_RUNGS: tuple[Rung, ...] = (
     Rung.SHARPEN,
 )
 
-# 疊加流程可用的步驟：只改像素的處理與旋轉校正（原圖、灰階、多尺度、疊加流程本身不行）
+# 疊加流程可用的步驟：只改像素的處理、旋轉校正，以及帶參數的縮放與旋轉
+# （原圖、灰階、疊加流程本身不行）
 PIPELINE_STEPS: tuple[Rung, ...] = (
     Rung.BINARIZE,
     Rung.OTSU,
@@ -219,7 +221,58 @@ PIPELINE_STEPS: tuple[Rung, ...] = (
     Rung.SHARPEN,
     Rung.DENOISE,
     Rung.DESKEW,
+    Rung.MULTISCALE,
+    Rung.ROTATE,
 )
+# 疊加流程中必須帶參數的步驟，寫成「步驟:參數」：``multiscale:0.5``（縮放倍率）、
+# ``rotate:90``（逆時針旋轉的角度）；其他步驟不帶參數
+PARAM_STEPS: frozenset[Rung] = frozenset({Rung.MULTISCALE, Rung.ROTATE})
+_EXAMPLE = {Rung.MULTISCALE: "0.5", Rung.ROTATE: "90"}
+
+
+def parse_pipeline_step(token: str) -> tuple[Rung, float | None]:
+    """疊加流程的一個步驟代碼 → （步驟, 參數）。不合法時丟 ``ValueError``。
+
+    ``multiscale:0.5`` 的倍率須大於 0、不等於 1；``rotate:90`` 的角度須在 (-180, 180] 且不為 0。
+    """
+    name, sep, arg = str(token).partition(":")
+    step = Rung(name)
+    if step not in PIPELINE_STEPS:
+        allowed = [s.value for s in PIPELINE_STEPS]
+        raise ValueError(f"疊加流程不能含 {name}；可用步驟：{allowed}")
+    if step not in PARAM_STEPS:
+        if sep:
+            raise ValueError(f"疊加流程步驟 {name} 不帶參數，收到 {token}")
+        return step, None
+    if not arg:
+        raise ValueError(f"疊加流程步驟 {name} 須帶參數，例如 {name}:{_EXAMPLE[step]}")
+    try:
+        value = float(arg)
+    except ValueError as e:
+        raise ValueError(f"疊加流程步驟的參數須為數字，收到 {token}") from e
+    if step is Rung.MULTISCALE:
+        check_scale(value)
+    else:
+        check_angle(value)
+    return step, value
+
+
+def pipeline_step_token(step: Rung, value: float | None = None) -> str:
+    """步驟與參數 → 正規化的步驟代碼（``denoise``、``multiscale:0.5``、``rotate:-45``）。"""
+    return step.value if value is None else f"{step.value}:{value:g}"
+
+
+def check_scale(value: float) -> None:
+    """縮放倍率須大於 0 且不等於 1（倍率 1 等於原圖，已由其他階涵蓋）。"""
+    if not math.isfinite(value) or value <= 0 or value == 1:
+        raise ValueError(f"縮放倍率須大於 0 且不等於 1，收到 {value}")
+
+
+def check_angle(value: float) -> None:
+    """旋轉角度（逆時針、度）須在 (-180, 180] 且不為 0。"""
+    if not math.isfinite(value) or not -180 < value <= 180 or value == 0:
+        raise ValueError(f"旋轉角度須在 (-180, 180] 且不為 0，收到 {value}")
+
 
 # 預設的疊加流程：實驗設計表 6.4 中適用於條碼的 C-01～C-05（去噪＝中值濾波、二值化＝自適應）。
 # 預設階梯不含 pipeline 階，上線行為不受影響；E1 以設定檔啟用。
@@ -245,15 +298,19 @@ class LadderConfig:
     （預設 ``RETAIL_FORMATS``，空 = 全部），其他格式的結果歸入 ``rejected``——例如斜拍的
     EAN-13 可能被部分掃描成另一個合法的 UPC-E，``verify_ean13`` 擋不住。
     ``pipelines`` 為 ``pipeline`` 階依序嘗試的疊加流程，每條流程是 ``PIPELINE_STEPS`` 中至少兩個
-    不重複步驟的序列（例如 ``("denoise", "binarize")``），各步驟沿用下方對應的參數。
-    這四個欄位是序列，不以 ``param()`` 宣告，工作台的條碼頁另有專用元件。
+    不重複步驟的序列（例如 ``("denoise", "binarize")``），各步驟沿用下方對應的參數；縮放與旋轉
+    步驟自帶參數（``("multiscale:0.5", "rotate:90")``，見 ``parse_pipeline_step``），正規化後
+    一般步驟為 ``Rung``、帶參數的步驟為字串。
+    ``angles`` 為 ``rotate`` 階依序嘗試的旋轉角度（逆時針、度；例如 90 把直放的條碼轉成橫的）。
+    這五個欄位是序列，不以 ``param()`` 宣告，工作台的條碼頁另有專用元件。
     由 JSON 讀入時接受字串與數字的串列。
     """
 
     rungs: tuple[Rung, ...] = DEFAULT_RUNGS
     scales: tuple[float, ...] = (2.0, 0.5)
     accept_formats: tuple[CodeFormat, ...] = RETAIL_FORMATS
-    pipelines: tuple[tuple[Rung, ...], ...] = DEFAULT_PIPELINES
+    pipelines: tuple[tuple[str, ...], ...] = DEFAULT_PIPELINES
+    angles: tuple[float, ...] = (90.0,)
     # 以下各組參數作用於對應的階（binarize、sharpen、denoise、deskew、clahe），
     # 以及疊加流程中的同名步驟；兩者都沒用到時不會被使用
     binarize_block_size: int = param(
@@ -382,17 +439,20 @@ class LadderConfig:
             raise ValueError(f"scales 每個倍率須大於 0 且不等於 1，收到 {self.scales}")
         if Rung.MULTISCALE in self.rungs and not self.scales:
             raise ValueError("啟用多尺度（multiscale）時 scales 不得為空")
+        object.__setattr__(self, "angles", tuple(float(a) for a in self.angles))
+        for a in self.angles:
+            check_angle(a)
+        if len(set(self.angles)) != len(self.angles):
+            raise ValueError(f"angles 不得重複，收到 {self.angles}")
+        if Rung.ROTATE in self.rungs and not self.angles:
+            raise ValueError("啟用旋轉（rotate）時 angles 不得為空")
         object.__setattr__(
-            self, "pipelines", tuple(tuple(Rung(s) for s in p) for p in self.pipelines)
+            self, "pipelines", tuple(tuple(_normal_step(s) for s in p) for p in self.pipelines)
         )
         for p in self.pipelines:
-            names = [s.value for s in p]
+            names = [str(s) for s in p]
             if len(p) < 2 or len(set(p)) != len(p):
                 raise ValueError(f"疊加流程須有至少兩個不重複的步驟，收到 {names}")
-            bad = [s.value for s in p if s not in PIPELINE_STEPS]
-            if bad:
-                allowed = [s.value for s in PIPELINE_STEPS]
-                raise ValueError(f"疊加流程不能含 {bad}；可用步驟：{allowed}")
         if len(set(self.pipelines)) != len(self.pipelines):
             raise ValueError("pipelines 不得重複")
         if Rung.PIPELINE in self.rungs and not self.pipelines:
@@ -410,6 +470,13 @@ class LadderConfig:
             raise ValueError("deskew_min_deg 不得為負")
         if self.min_agree < 1:
             raise ValueError(f"min_agree 至少為 1，收到 {self.min_agree}")
+
+
+def _normal_step(token: str) -> str:
+    """正規化一個疊加流程步驟：一般步驟為 ``Rung``（StrEnum，等同其字串值），帶參數的為
+    ``步驟:參數`` 字串（數字以 ``:g`` 格式化，``rotate:90.0`` 與 ``rotate:90`` 視為相同）。"""
+    step, value = parse_pipeline_step(token)
+    return step if value is None else pipeline_step_token(step, value)
 
 
 @dataclass(frozen=True)

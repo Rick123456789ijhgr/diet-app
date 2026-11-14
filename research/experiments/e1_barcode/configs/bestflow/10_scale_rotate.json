@@ -1,0 +1,40 @@
+{
+  "name": "scale_rotate",
+  "title": "縮小＋旋轉",
+  "description": "先縮小一半，再依序轉 90°、45°、-45°（另含縮小後 CLAHE）；zxing 內建嘗試關閉。對應 20261114 分析的建議：高解析度照片縮小後較好讀，直放與斜放的條碼靠旋轉救回。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "multiscale",
+      "pipeline"
+    ],
+    "scales": [
+      0.5
+    ],
+    "pipelines": [
+      [
+        "multiscale:0.5",
+        "rotate:90"
+      ],
+      [
+        "multiscale:0.5",
+        "rotate:45"
+      ],
+      [
+        "multiscale:0.5",
+        "rotate:-45"
+      ],
+      [
+        "multiscale:0.5",
+        "clahe"
+      ]
+    ],
+    "accept_formats": []
+  }
+}

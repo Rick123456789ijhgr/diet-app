@@ -180,5 +180,6 @@ class Rung(StrEnum):
     MULTISCALE = "multiscale"  # 依設定的倍率逐一縮放
     OTSU = "otsu"  # Otsu 全域二值化
     CLAHE = "clahe"  # 限制對比的自適應直方圖均衡化
+    ROTATE = "rotate"  # 依設定的角度逐一旋轉（不估計角度；與 deskew 不同）
     # 疊加流程：同一張影像依序做多種處理（LadderConfig.pipelines），每條流程各產生一個版本
     PIPELINE = "pipeline"

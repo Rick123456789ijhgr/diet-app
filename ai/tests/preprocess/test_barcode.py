@@ -12,6 +12,8 @@ from dietai.preprocess import (
     LadderConfig,
     PreprocessWarning,
     Rung,
+    ZxingConfig,
+    ZxingDecoder,
     decode_with_ladder,
     ean13_check_digit,
     ean13_checksum_ok,
@@ -403,7 +405,13 @@ def test_pipeline_deskew_below_threshold_keeps_going(ean13_img):
         {"pipelines": ((Rung.DENOISE,),)},  # 只有一步
         {"pipelines": ((Rung.DENOISE, Rung.DENOISE),)},  # 步驟重複
         {"pipelines": ((Rung.RAW, Rung.BINARIZE),)},  # 不可用的步驟
-        {"pipelines": ((Rung.MULTISCALE, Rung.BINARIZE),)},
+        {"pipelines": ((Rung.MULTISCALE, Rung.BINARIZE),)},  # 縮放要帶倍率
+        {"pipelines": (("rotate", "denoise"),)},  # 旋轉要帶角度
+        {"pipelines": (("denoise:3", "binarize"),)},  # 一般步驟不帶參數
+        {"pipelines": (("multiscale:1", "binarize"),)},  # 倍率 1 等於原圖
+        {"pipelines": (("rotate:0", "binarize"),)},
+        {"pipelines": (("rotate:abc", "binarize"),)},
+        {"pipelines": (("rotate:90", "rotate:90.0"),)},  # 正規化後重複
         {"pipelines": (("denoise", "binarize"), (Rung.DENOISE, Rung.BINARIZE))},  # 流程重複
         {"rungs": (Rung.PIPELINE,), "pipelines": ()},
         {"clahe_clip": 0.0},
@@ -421,3 +429,79 @@ def test_pipeline_config_round_trips_through_json():
     # 預設階梯不含疊加流程，上線行為不變
     assert Rung.PIPELINE not in LadderConfig().rungs
     assert len(LadderConfig().pipelines) == 5
+
+
+# ── 旋轉階（rotate）與疊加流程中的縮放、旋轉 ──
+# 關閉 zxing 內建的旋轉，才看得出旋轉階本身的效果
+NO_ROTATE = ZxingDecoder(ZxingConfig(try_rotate=False, try_downscale=False, try_invert=False))
+
+
+def test_rotate_rung_reads_vertical_barcode(ean13_img):
+    """直放的條碼：只用原圖讀不到，旋轉 90° 讀得到；四角回推到原圖（與旋轉後影像上的位置一致）。"""
+    img = np.ascontiguousarray(np.rot90(ean13_img))  # 逆時針轉 90°：條碼變成直的
+    assert not decode_with_ladder(img, NO_ROTATE, RAW_ONLY).success
+    cfg = LadderConfig(rungs=(Rung.RAW, Rung.ROTATE), angles=(90.0, -90.0))
+    result = decode_with_ladder(img, NO_ROTATE, cfg)
+    assert result.success and result.success_rung is Rung.ROTATE
+    assert result.attempts[-1].params == {"angle": 90.0}
+    # 四角在原圖（直放）的座標系：直放影像中條碼的寬高互換，x 的範圍應小於 y 的範圍
+    xs = [x for x, _ in result.hits[0].corners]
+    ys = [y for _, y in result.hits[0].corners]
+    assert max(xs) - min(xs) < max(ys) - min(ys)
+    h, w = img.shape[:2]
+    assert all(0 <= x <= w and 0 <= y <= h for x, y in result.hits[0].corners)
+
+
+@pytest.mark.parametrize("angle", [90.0, -90.0, 180.0, 30.0])
+def test_rotate_inverse_maps_back_exactly(angle):
+    """旋轉後影像上的點經 to_original 回到原圖上同一個像素（90 的倍數為精確對應）。"""
+    # 白底黑點：任意角度旋轉時擴大的畫布填白，不會被當成那個點
+    img = np.full((40, 60), 255, dtype=np.uint8)
+    img[5, 7] = 0
+    (v,) = ladder_variants(img, LadderConfig(rungs=(Rung.ROTATE,), angles=(angle,)))
+    assert v.image is not None
+    ys, xs = np.nonzero(v.image == v.image.min())
+    x, y = float(xs.mean()), float(ys.mean())
+    back = v.to_original @ np.array([x, y, 1.0])
+    tol = 0.01 if angle % 90 == 0 else 1.0
+    assert back[0] == pytest.approx(7, abs=tol) and back[1] == pytest.approx(5, abs=tol)
+    if angle % 180 == 90:
+        assert v.image.shape == (60, 40)
+
+
+def test_pipeline_scale_then_rotate(ean13_img):
+    """疊加流程：先縮小一半再轉 90°，結果等於分開做；參數記在 params。"""
+    img = np.ascontiguousarray(np.rot90(ean13_img))
+    cfg = LadderConfig(rungs=(Rung.PIPELINE,), pipelines=(("multiscale:0.5", "rotate:90"),))
+    (v,) = ladder_variants(img, cfg)
+    expected = np.rot90(ops.scale(ops.to_gray(img), 0.5))
+    np.testing.assert_array_equal(v.image, expected)
+    assert v.params["steps"] == "multiscale:0.5+rotate:90"
+    assert v.params["multiscale.factor"] == 0.5 and v.params["rotate.angle"] == 90.0
+    result = decode_with_ladder(img, NO_ROTATE, cfg)
+    assert result.success
+    h, w = img.shape[:2]
+    assert all(-2 <= x <= w + 2 and -2 <= y <= h + 2 for x, y in result.hits[0].corners)
+
+
+def test_pipeline_steps_are_normalized():
+    cfg = LadderConfig(pipelines=(("multiscale:0.50", "rotate:90.0", "denoise"),))
+    assert cfg.pipelines == (("multiscale:0.5", "rotate:90", "denoise"),)
+    assert isinstance(cfg.pipelines[0][2], Rung)
+    loaded = LadderConfig(**json.loads(json.dumps(asdict(cfg))))
+    assert loaded == cfg
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"angles": (0.0,)},
+        {"angles": (181.0,)},
+        {"angles": (-180.0,)},
+        {"angles": (90.0, 90.0)},
+        {"rungs": (Rung.ROTATE,), "angles": ()},
+    ],
+)
+def test_rotate_config_rejects_invalid(kwargs):
+    with pytest.raises(ValueError):
+        LadderConfig(**kwargs)
