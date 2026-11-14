@@ -389,6 +389,28 @@ class LadderConfig:
         calibrate=True,
         group="contrast",
     )
+    locate_pad: float = param(
+        1.4,
+        "定位框放大倍數",
+        "Locate padding",
+        "偵測到的條碼框以中心放大幾倍再裁切；條碼兩側要留白，太小會切到條碼。",
+        min=1.0,
+        max=3.0,
+        step=0.1,
+        calibrate=True,
+        group="barcode_locate",
+    )
+    locate_max_width: int = param(
+        1000,
+        "裁切寬度上限",
+        "Locate max width",
+        "轉正後的條碼比此寬時縮小到此寬度（像素）；0 為不縮小。",
+        min=0,
+        max=4000,
+        step=100,
+        calibrate=True,
+        group="barcode_locate",
+    )
     deskew_min_deg: float = param(
         3.0,
         "最小校正角度",
@@ -466,6 +488,8 @@ class LadderConfig:
             raise ValueError("須滿足 sharpen_sigma > 0、sharpen_amount ≥ 0")
         if self.clahe_clip <= 0 or self.clahe_tile < 1:
             raise ValueError("須滿足 clahe_clip > 0、clahe_tile ≥ 1")
+        if self.locate_pad < 1 or self.locate_max_width < 0:
+            raise ValueError("須滿足 locate_pad ≥ 1、locate_max_width ≥ 0")
         if self.deskew_min_deg < 0:
             raise ValueError("deskew_min_deg 不得為負")
         if self.min_agree < 1:

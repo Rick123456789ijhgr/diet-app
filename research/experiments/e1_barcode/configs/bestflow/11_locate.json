@@ -1,0 +1,33 @@
+{
+  "name": "locate",
+  "title": "定位條碼＋縮小旋轉",
+  "description": "先以 OpenCV 條碼偵測器找出條碼、轉正裁下再解碼，找不到時再試原圖、縮小一半、縮小＋轉 90°；只收零售條碼（EAN-13、EAN-8、UPC-A）。對應 20261114 分析：讀不到的照片多半是條碼太小或斜放，解碼器沒找到條碼。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "locate",
+      "raw",
+      "multiscale",
+      "pipeline"
+    ],
+    "scales": [
+      0.5
+    ],
+    "pipelines": [
+      [
+        "multiscale:0.5",
+        "rotate:90"
+      ]
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

@@ -44,6 +44,18 @@ class Variant:
     to_original: Affine
     params: Mapping[str, Any] = field(default_factory=dict)
     skipped: bool = False
+    # 拼接影像（``locate`` 階把多個裁切上下拼成一張）各段的回推矩陣；非空時每個結果依其中心
+    # 落在哪一段，改用該段的矩陣回推（見 ``_hit_affine``），``to_original`` 只是第一段的矩陣
+    regions: tuple[Region, ...] = ()
+
+
+@dataclass(frozen=True)
+class Region:
+    """拼接影像中的一段：中心 y 在 ``[top, bottom)`` 的結果以 ``to_original`` 回推原圖。"""
+
+    top: int
+    bottom: int
+    to_original: Affine
 
 
 @dataclass(frozen=True)
@@ -108,7 +120,7 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
     """依 ``cfg.rungs`` 的順序逐一產生影像版本（惰性產生，呼叫端可提早停止）。
 
     使用的設定欄位：``rungs``、``scales``、``angles``、``pipelines``、``binarize_*``、``sharpen_*``、
-    ``denoise_ksize``、``clahe_*``、``deskew_min_deg``。多尺度階每個倍率、旋轉階每個角度、
+    ``denoise_ksize``、``clahe_*``、``deskew_min_deg``、``locate_*``。多尺度階每個倍率、旋轉階每個角度、
     疊加流程階每條流程各產生一個版本。
 
     為避免每次嘗試都複製整張影像，``raw`` 階的 ``image`` 就是輸入本身、``gray`` 階與其他階
@@ -161,6 +173,95 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
             for angle in cfg.angles:
                 out, inverse = _rotated(get_gray(), angle)
                 yield Variant(rung, out, inverse, {"angle": angle})
+        elif rung is Rung.LOCATE:
+            yield _located(get_gray(), cfg)
+
+
+# ``locate`` 階拼接時，每個裁切上下各留的白邊（像素）；解碼器需要條碼外的安靜區
+_LOCATE_GAP = 20
+
+
+def locate_barcodes(gray: Image) -> list[npt.NDArray[np.float32]]:
+    """以 OpenCV 的條碼偵測器（``cv2.barcode.BarcodeDetector``，不需訓練）找出一維條碼的位置。
+
+    回傳每個條碼的四角（形狀 (4, 2)，依序相鄰、可能是斜的）；只用偵測、不用它的解碼結果
+    （實測它的解碼會誤讀，解碼仍交給階梯的解碼器）。偵測器不是執行緒安全的，每次呼叫各建一個。
+    """
+    ok, points = cv2.barcode.BarcodeDetector().detect(gray)
+    if not ok or points is None:
+        return []
+    return [np.asarray(q, dtype=np.float32).reshape(4, 2) for q in points]
+
+
+def _rectified(
+    gray: Image, quad: npt.NDArray[np.float32], pad: float, max_width: int
+) -> tuple[Image, Affine]:
+    """把斜的條碼框以中心放大 ``pad`` 倍後轉正裁下，長邊為水平；回傳（裁切, 回推原圖的矩陣）。
+
+    寬度大於 ``max_width``（非 0）時一併縮小。框外超出畫面的部分填白。
+    """
+    center = quad.mean(axis=0)
+    q = (quad - center) * pad + center
+    # 讓 q0→q1 為短邊（裁切的左邊、由下往上）、q1→q2 為長邊（上邊、由左往右）
+    if np.linalg.norm(q[0] - q[1]) > np.linalg.norm(q[1] - q[2]):
+        q = np.roll(q, -1, axis=0)
+    # 點的繞行方向須與目標相同（影像座標中為順時針），否則裁出的是鏡像，條碼讀不出來
+    a, b = q[1] - q[0], q[2] - q[1]
+    if a[0] * b[1] - a[1] * b[0] < 0:
+        q = q[[1, 0, 3, 2]]
+    width = float(np.linalg.norm(q[1] - q[2]))
+    height = float(np.linalg.norm(q[0] - q[1]))
+    s = min(1.0, max_width / width) if max_width else 1.0
+    w, h = max(round(width * s), 1), max(round(height * s), 1)
+    dst = np.array([[0, h], [0, 0], [w, 0]], dtype=np.float32)
+    m = cv2.getAffineTransform(np.ascontiguousarray(q[:3], dtype=np.float32), dst)
+    interp = cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR
+    out = cv2.warpAffine(gray, m, (w, h), flags=interp, borderValue=255)
+    inverse = np.asarray(cv2.invertAffineTransform(m), dtype=np.float64)
+    return np.asarray(out, dtype=np.uint8), inverse
+
+
+def _located(gray: Image, cfg: LadderConfig) -> Variant:
+    """``locate`` 階：找出條碼、各自轉正裁下，上下拼成一張影像（只解碼一次）。
+
+    找不到條碼時回傳略過的版本（不送解碼）。參數 ``boxes`` 為找到的條碼框數。
+    """
+    params: dict[str, Any] = {"pad": cfg.locate_pad, "max_width": cfg.locate_max_width}
+    quads = locate_barcodes(gray)
+    if not quads:
+        return Variant(Rung.LOCATE, None, _IDENTITY, {**params, "boxes": 0}, skipped=True)
+    crops = [_rectified(gray, q, cfg.locate_pad, cfg.locate_max_width) for q in quads]
+    width = max(c.shape[1] for c, _ in crops)
+    parts: list[Image] = []
+    regions: list[Region] = []
+    top = 0
+    for crop, inverse in crops:
+        h, w = crop.shape[:2]
+        block = np.full((h + 2 * _LOCATE_GAP, width), 255, dtype=np.uint8)
+        block[_LOCATE_GAP : _LOCATE_GAP + h, :w] = crop
+        # 拼接座標 → 裁切座標（往上移 top + GAP）→ 原圖
+        shift = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, -(top + _LOCATE_GAP)]])
+        regions.append(Region(top, top + block.shape[0], _compose(inverse, shift)))
+        parts.append(block)
+        top += block.shape[0]
+    return Variant(
+        Rung.LOCATE,
+        np.vstack(parts),
+        regions[0].to_original,
+        {**params, "boxes": len(quads)},
+        regions=tuple(regions),
+    )
+
+
+def _hit_affine(variant: Variant, hit: DecodeHit) -> Affine:
+    """結果回推原圖用的矩陣：拼接影像依結果中心所在的段（落在段外時取最近的段）。"""
+    if not variant.regions:
+        return variant.to_original
+    y = hit.center[1]
+    return min(
+        variant.regions,
+        key=lambda r: 0.0 if r.top <= y < r.bottom else abs((r.top + r.bottom) / 2 - y),
+    ).to_original
 
 
 def _scaled(gray: Image, factor: float) -> tuple[Image, Affine]:
@@ -300,7 +401,7 @@ def iter_attempts(
             decode_ms = (time.perf_counter() - decode_start) * 1000
             for hit in decoded:
                 # 先回推到原圖座標再分類，hits 與 rejected 的座標系才一致
-                mapped = _map_hit(hit, variant.to_original)
+                mapped = _map_hit(hit, _hit_affine(variant, hit))
                 # 兩種情況捨棄：(1) 設定了允許格式而此格式不在其中；
                 # (2) 要求驗證且為 EAN-13，但檢查碼不符
                 if (cfg.accept_formats and mapped.format not in cfg.accept_formats) or (

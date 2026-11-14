@@ -181,5 +181,7 @@ class Rung(StrEnum):
     OTSU = "otsu"  # Otsu 全域二值化
     CLAHE = "clahe"  # 限制對比的自適應直方圖均衡化
     ROTATE = "rotate"  # 依設定的角度逐一旋轉（不估計角度；與 deskew 不同）
+    # 先以 OpenCV 的條碼偵測器找出條碼位置，轉正、裁切後再解碼（找不到時略過）
+    LOCATE = "locate"
     # 疊加流程：同一張影像依序做多種處理（LadderConfig.pipelines），每條流程各產生一個版本
     PIPELINE = "pipeline"

@@ -505,3 +505,76 @@ def test_pipeline_steps_are_normalized():
 def test_rotate_config_rejects_invalid(kwargs):
     with pytest.raises(ValueError):
         LadderConfig(**kwargs)
+
+
+def _small_tilted(ean13_img: np.ndarray, angle: float) -> tuple[np.ndarray, tuple[float, float]]:
+    """把斜放的條碼貼在大白底的右下角；回傳（影像, 條碼中心）。
+
+    條碼不可再縮小：偵測器內部會先縮小整張影像，太小的條碼找不到。
+    """
+    tilted = rotate(ean13_img, angle)
+    canvas = np.full((1800, 2400) + tilted.shape[2:], 255, dtype=np.uint8)
+    y0, x0 = 1800 - tilted.shape[0] - 20, 2400 - tilted.shape[1] - 20
+    h, w = tilted.shape[:2]
+    canvas[y0 : y0 + h, x0 : x0 + w] = tilted
+    return canvas, (x0 + w / 2, y0 + h / 2)
+
+
+@pytest.mark.parametrize("angle", [30.0, -60.0, 100.0])
+def test_locate_reads_small_tilted_barcode(ean13_img, angle):
+    """斜放的小條碼：定位後轉正解碼，四角回推到原圖上條碼的位置。"""
+    img, (cx, cy) = _small_tilted(ean13_img, angle)
+    result = decode_with_ladder(img, NO_ROTATE, LadderConfig(rungs=(Rung.LOCATE,)))
+    assert result.success and result.success_rung is Rung.LOCATE
+    assert [h.text for h in result.hits] == ["4710088410108"]
+    assert result.attempts[0].params["boxes"] >= 1
+    hx, hy = result.hits[0].center
+    assert hx == pytest.approx(cx, abs=30) and hy == pytest.approx(cy, abs=30)
+
+
+def test_locate_skipped_without_barcode():
+    """找不到條碼時略過、不送解碼。"""
+    img = np.full((600, 800), 255, dtype=np.uint8)
+    (v,) = ladder_variants(img, LadderConfig(rungs=(Rung.LOCATE,)))
+    assert v.skipped and v.image is None and v.params["boxes"] == 0
+
+
+def test_locate_stacks_boxes_and_maps_each_back(ean13_img):
+    """兩個條碼：上下拼成一張影像（各段相接、不重疊），每個結果依所在的段回推到對應條碼的範圍。"""
+    h, w = ean13_img.shape[:2]
+    img = np.full((1800, 2400) + ean13_img.shape[2:], 255, dtype=np.uint8)
+    img[50 : 50 + h, 50 : 50 + w] = ean13_img
+    second = rotate(ean13_img, 90)
+    sh, sw = second.shape[:2]
+    img[850 : 850 + sh, 1700 : 1700 + sw] = second
+    areas = [(50, 50, 50 + w, 50 + h), (1700, 850, 1700 + sw, 850 + sh)]  # (x0, y0, x1, y1)
+    (v,) = ladder_variants(img, LadderConfig(rungs=(Rung.LOCATE,)))
+    assert v.image is not None and v.params["boxes"] == 2
+    bounds = [(r.top, r.bottom) for r in v.regions]
+    assert bounds[0][0] == 0 and bounds[0][1] == bounds[1][0] and bounds[1][1] == v.image.shape[0]
+    # 每一段的中心經該段的矩陣回到原圖時，落在其中一個條碼的範圍內，且兩段各對到不同條碼
+    hits = []
+    for r in v.regions:
+        x, y = r.to_original @ np.array([10.0, (r.top + r.bottom) / 2, 1.0])
+        inside = [k for k, (x0, y0, x1, y1) in enumerate(areas) if x0 <= x <= x1 and y0 <= y <= y1]
+        hits += inside
+    assert sorted(hits) == [0, 1]
+    result = decode_with_ladder(img, NO_ROTATE, LadderConfig(rungs=(Rung.LOCATE,)))
+    assert result.success
+    for hit in result.hits:
+        hx, hy = hit.center
+        assert any(x0 <= hx <= x1 and y0 <= hy <= y1 for x0, y0, x1, y1 in areas)
+
+
+def test_locate_max_width_shrinks_crop(ean13_img):
+    img, _ = _small_tilted(ean13_img, 30.0)
+    (wide,) = ladder_variants(img, LadderConfig(rungs=(Rung.LOCATE,), locate_max_width=0))
+    (narrow,) = ladder_variants(img, LadderConfig(rungs=(Rung.LOCATE,), locate_max_width=200))
+    assert wide.image is not None and narrow.image is not None
+    assert narrow.image.shape[1] == 200 < wide.image.shape[1]
+
+
+@pytest.mark.parametrize("kwargs", [{"locate_pad": 0.9}, {"locate_max_width": -1}])
+def test_locate_config_rejects_invalid(kwargs):
+    with pytest.raises(ValueError):
+        LadderConfig(**kwargs)
