@@ -171,7 +171,7 @@ export function ArchEditorPage() {
     window.close()
     setTimeout(() => {
       if (!window.closed)
-        navigate(diagram.id === doc.root ? '/arch/diagram' : `/arch/diagram?d=${diagram.id}`)
+        navigate(diagram.id === doc.root ? '/tools/arch' : `/tools/arch?d=${diagram.id}`)
     }, 150)
   }
 

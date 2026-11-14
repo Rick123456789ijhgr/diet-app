@@ -62,6 +62,22 @@ describe('檔名與答案', () => {
     expect(answerFromName('IMG_2041.jpg')).toBeNull()
   })
 
+  it('由規則化檔名推回答案（與後端 image_names 相同）', () => {
+    expect(answerFromName('food_b01_001_4710088410108.jpg')).toEqual({
+      kind: 'code',
+      code: '4710088410108',
+    })
+    expect(answerFromName('snack-bar_2026-11_0012_036000291452.png')).toEqual({
+      kind: 'code',
+      code: '0036000291452',
+    })
+    expect(answerFromName('other_b02_015_nocode.jpg')).toEqual({ kind: 'none' })
+    // 尚未帶條碼、檢查碼錯誤、大寫都不算
+    expect(answerFromName('food_b01_001.jpg')).toBeNull()
+    expect(answerFromName('food_b01_001_4710088410109.jpg')).toBeNull()
+    expect(answerFromName('Food_b01_001_4710088410108.jpg')).toBeNull()
+  })
+
   it('上傳後的圖片 ID：同名的加 #2、#3（與後端相同）', () => {
     expect(uploadIds(['a.jpg', 'b.jpg', 'a.jpg', 'a.jpg'])).toEqual([
       'a.jpg',

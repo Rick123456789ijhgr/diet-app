@@ -309,6 +309,98 @@ const json = async (request: Request) => {
   return body as Record<string, unknown>
 }
 
+// ── 圖片批次命名的假資料夾 ──
+interface NamingBody {
+  folder: string
+  category?: string
+  batch?: string
+  start?: number
+  width?: number
+  no_code?: string
+}
+let namingApplied = false
+/** 測試開始前重設假資料夾（尚未改名）。 */
+export function resetNaming() {
+  namingApplied = false
+}
+const NAMING_TOKEN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+function namingError(b: NamingBody) {
+  if (b.folder.includes('nope'))
+    return HttpResponse.json(
+      { code: 'PATH_NOT_FOUND', message: `找不到資料夾：${b.folder}` },
+      { status: 404 },
+    )
+  for (const field of ['category', 'batch'] as const) {
+    if (!NAMING_TOKEN.test(b[field] ?? '')) {
+      return HttpResponse.json(
+        {
+          code: 'INVALID_PARAMS',
+          message: `${field === 'category' ? '類別' : '批次'}只能用小寫英文字母、數字與連字號`,
+          field,
+        },
+        { status: 400 },
+      )
+    }
+  }
+  return null
+}
+function namingPlan(b: NamingBody) {
+  const seq = (n: number) => String((b.start || 1) + n - 1).padStart(b.width ?? 3, '0')
+  const name = (n: number, code: string) => `${b.category}_${b.batch}_${seq(n)}_${code}.jpg`
+  const items = namingApplied
+    ? [
+        {
+          src: name(1, '4710088410108'),
+          dst: name(1, '4710088410108'),
+          status: 'same',
+          code: '4710088410108',
+          note: '',
+        },
+        {
+          src: name(2, b.no_code ?? 'nocode'),
+          dst: name(2, b.no_code ?? 'nocode'),
+          status: 'same',
+          code: '',
+          note: '',
+        },
+      ]
+    : [
+        {
+          src: '4710088410108.jpg',
+          dst: name(1, '4710088410108'),
+          status: 'rename',
+          code: '4710088410108',
+          note: '',
+        },
+        {
+          src: '沒有條碼_IMG_1.jpg',
+          dst: name(2, b.no_code ?? 'nocode'),
+          status: 'rename',
+          code: '',
+          note: '',
+        },
+      ]
+  items.push({
+    src: 'IMG_5.jpg',
+    dst: '',
+    status: 'skip',
+    code: null as unknown as string,
+    note: '檔名看不出條碼',
+  })
+  const count = (s: string) => items.filter((i) => i.status === s).length
+  return {
+    folder: b.folder,
+    items,
+    counts: { rename: count('rename'), same: count('same'), skip: count('skip') },
+    stem_lengths: [...new Set(items.filter((i) => i.dst).map((i) => i.dst.length - 4))].sort(),
+    can_undo: namingApplied,
+    categories: { f: '食物包裝', o: '其他物品（書、用品等）' },
+  }
+}
+function namingResponse(b: NamingBody) {
+  return namingError(b) ?? HttpResponse.json(namingPlan(b))
+}
+
 /** 以 SSE 回應一串事件；error 不為空時最後送出 event: error。 */
 function sse(events: unknown[], error?: { code: string; message: string }) {
   const body =
@@ -836,6 +928,24 @@ export const handlers = [
       else bestFlowTruths[id] = v
     }
     return HttpResponse.json(bestFlowRun(bestFlowTruths))
+  }),
+  // 圖片批次命名：一個假資料夾（兩張條碼檔名、一張看不出條碼），改名後狀態變成「不變」
+  http.post('*/workbench/v1/dev/image-naming/preview', async ({ request }) =>
+    namingResponse((await json(request)) as unknown as NamingBody),
+  ),
+  http.post('*/workbench/v1/dev/image-naming/apply', async ({ request }) => {
+    const body = (await json(request)) as unknown as NamingBody
+    const bad = namingError(body)
+    if (bad) return bad
+    const renamed = namingApplied ? 0 : 2
+    namingApplied = true
+    return HttpResponse.json({ renamed, ...namingPlan(body) })
+  }),
+  http.post('*/workbench/v1/dev/image-naming/undo', async ({ request }) => {
+    await json(request)
+    const restored = namingApplied ? 2 : 0
+    namingApplied = false
+    return HttpResponse.json({ restored, problems: [] })
   }),
   http.post('*/workbench/v1/dev/images', ({ request }) => {
     // jsdom 的 File 經 undici 送出時，MSW 讀取 multipart 內容會卡住；只記錄呼叫，依順序編號

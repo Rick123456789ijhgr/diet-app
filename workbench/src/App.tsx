@@ -1,9 +1,14 @@
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
+import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'react-router'
 
 import { LoginGate } from '@/components/coldstart/LoginGate'
 import { AppShell } from '@/components/layout/AppShell'
 import { HomePage } from '@/pages/HomePage'
 import { PlaceholderPage } from '@/pages/PlaceholderPage'
+
+/** 架構圖的舊網址（/arch、/arch/diagram）導向通用工具底下的新網址，保留 ?d= 等參數。 */
+function ToArch() {
+  return <Navigate to={{ pathname: '/tools/arch', search: useLocation().search }} replace />
+}
 
 /** 模組一的舊網址 → 合併後的頁面（2026-11 從 8 頁合為單張檢視、多張測試、實驗結果 3 頁）。 */
 const OLD_M1_PATHS: Record<string, string> = {
@@ -58,12 +63,27 @@ export const routes = [
           Component: (await import('@/pages/results/ResultsPage')).ResultsPage,
         }),
       },
-      { path: 'arch', element: <Navigate to="/arch/diagram" replace /> },
+      {
+        // 通用工具：按鈕總覽頁，點了進入各工具的專屬頁面
+        path: 'tools',
+        lazy: async () => ({
+          Component: (await import('@/pages/tools/ToolsHome')).ToolsHome,
+        }),
+      },
+      {
+        // 圖片批次命名：預覽 → 改名 → 可還原（Python 的 dietai.devtools.image_naming）
+        path: 'tools/naming',
+        lazy: async () => ({
+          Component: (await import('@/pages/tools/NamingPage')).NamingPage,
+        }),
+      },
       {
         // 專案架構圖（只顯示成品）：純前端（存在瀏覽器），目前看的圖在 ?d= 參數；編輯器見上方 arch/edit
-        path: 'arch/diagram',
+        path: 'tools/arch',
         lazy: async () => ({ Component: (await import('@/pages/arch/ArchPage')).ArchPage }),
       },
+      { path: 'arch', element: <ToArch /> },
+      { path: 'arch/diagram', element: <ToArch /> },
       // 舊網址（原本各自是獨立頁面）導向合併後的頁面
       ...Object.entries(OLD_M1_PATHS).map(([old, to]) => ({
         path: `m1/${old}`,
