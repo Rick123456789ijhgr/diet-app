@@ -410,6 +410,14 @@ func canceled(r *http.Request, err error) bool {
 	return errors.As(err, &aiErr) && aiErr.Code == codes.Canceled
 }
 
+func (h *handler) ListBestFlowPresets(ctx context.Context, _ api.ListBestFlowPresetsRequestObject) (api.ListBestFlowPresetsResponseObject, error) {
+	out, err := h.svc.ListBestFlowPresets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return api.ListBestFlowPresets200JSONResponse(out), nil
+}
+
 func (h *handler) StartBestFlowRun(ctx context.Context, req api.StartBestFlowRunRequestObject) (api.StartBestFlowRunResponseObject, error) {
 	events, err := h.svc.StartBestFlowRun(ctx, *req.Body)
 	if err != nil {

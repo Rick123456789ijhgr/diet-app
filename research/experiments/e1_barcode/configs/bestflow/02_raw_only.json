@@ -1,0 +1,17 @@
+{
+  "name": "raw_only",
+  "title": "只用原圖（基準）",
+  "description": "只解碼原圖，zxing 內建嘗試關閉、不限格式；作為其他方案的比較基準。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw"
+    ],
+    "accept_formats": []
+  }
+}
