@@ -170,3 +170,22 @@ def test_criteria_of():
     assert best_flow.criteria_of(3, 1, 20.0).max_mean_ms == 20.0
     with pytest.raises(SceneError):
         best_flow.criteria_of(0, -1, 0)
+
+
+def test_scheme_filename_truth_is_manual(e1_dir, dataset):
+    """規則化檔名中的條碼（條碼機掃描過）直接當作人工確認的真值，包括讀不到的圖片。"""
+    img = read_image(next(dataset.rglob("*clean*.png")))
+    code = "4710088410108"
+    done = _run(
+        uploads=[
+            (f"food_b01_001_{code}.jpg", img),
+            ("food_b01_002_nocode.jpg", img),
+            ("food_b01_003.jpg", img),
+        ]
+    )
+    out = best_flow.run_json(done["name"], CRITERIA)
+    assert out["meta"]["truth_from_names"] == 2
+    applied = {i["id"]: i["applied"] for i in out["images"]}
+    assert applied[f"food_b01_001_{code}.jpg"] == {"truth": code, "source": "manual"}
+    assert applied["food_b01_002_nocode.jpg"] == {"truth": "", "source": "manual"}
+    assert applied["food_b01_003.jpg"] is None or applied["food_b01_003.jpg"]["source"] == "auto"

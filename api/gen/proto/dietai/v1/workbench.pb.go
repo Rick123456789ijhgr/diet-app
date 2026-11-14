@@ -1519,6 +1519,375 @@ func (x *SetBestFlowTruthResponse) GetJson() string {
 	return ""
 }
 
+// 圖片批次命名的參數（見 dietai.devtools.image_naming.plan）；start 0＝接在既有最大序號之後，
+// width 0＝預設 3 位，order 空字串＝mtime，no_code 空字串＝nocode
+type ImageNamingOptions struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Folder         string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
+	Category       string                 `protobuf:"bytes,2,opt,name=category,proto3" json:"category,omitempty"`
+	Batch          string                 `protobuf:"bytes,3,opt,name=batch,proto3" json:"batch,omitempty"`
+	Start          int32                  `protobuf:"varint,4,opt,name=start,proto3" json:"start,omitempty"`
+	Width          int32                  `protobuf:"varint,5,opt,name=width,proto3" json:"width,omitempty"`
+	Order          string                 `protobuf:"bytes,6,opt,name=order,proto3" json:"order,omitempty"`
+	IncludeUnknown bool                   `protobuf:"varint,7,opt,name=include_unknown,json=includeUnknown,proto3" json:"include_unknown,omitempty"`
+	NoCode         string                 `protobuf:"bytes,8,opt,name=no_code,json=noCode,proto3" json:"no_code,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ImageNamingOptions) Reset() {
+	*x = ImageNamingOptions{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImageNamingOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImageNamingOptions) ProtoMessage() {}
+
+func (x *ImageNamingOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImageNamingOptions.ProtoReflect.Descriptor instead.
+func (*ImageNamingOptions) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ImageNamingOptions) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *ImageNamingOptions) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *ImageNamingOptions) GetBatch() string {
+	if x != nil {
+		return x.Batch
+	}
+	return ""
+}
+
+func (x *ImageNamingOptions) GetStart() int32 {
+	if x != nil {
+		return x.Start
+	}
+	return 0
+}
+
+func (x *ImageNamingOptions) GetWidth() int32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *ImageNamingOptions) GetOrder() string {
+	if x != nil {
+		return x.Order
+	}
+	return ""
+}
+
+func (x *ImageNamingOptions) GetIncludeUnknown() bool {
+	if x != nil {
+		return x.IncludeUnknown
+	}
+	return false
+}
+
+func (x *ImageNamingOptions) GetNoCode() string {
+	if x != nil {
+		return x.NoCode
+	}
+	return ""
+}
+
+type PreviewImageNamesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Options       *ImageNamingOptions    `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreviewImageNamesRequest) Reset() {
+	*x = PreviewImageNamesRequest{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewImageNamesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewImageNamesRequest) ProtoMessage() {}
+
+func (x *PreviewImageNamesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewImageNamesRequest.ProtoReflect.Descriptor instead.
+func (*PreviewImageNamesRequest) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *PreviewImageNamesRequest) GetOptions() *ImageNamingOptions {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+// json：每個檔案的新檔名與狀態、統計、主檔名長度、是否可還原
+type PreviewImageNamesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Json          string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreviewImageNamesResponse) Reset() {
+	*x = PreviewImageNamesResponse{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewImageNamesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewImageNamesResponse) ProtoMessage() {}
+
+func (x *PreviewImageNamesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewImageNamesResponse.ProtoReflect.Descriptor instead.
+func (*PreviewImageNamesResponse) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *PreviewImageNamesResponse) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
+type ApplyImageNamesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Options       *ImageNamingOptions    `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyImageNamesRequest) Reset() {
+	*x = ApplyImageNamesRequest{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyImageNamesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyImageNamesRequest) ProtoMessage() {}
+
+func (x *ApplyImageNamesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyImageNamesRequest.ProtoReflect.Descriptor instead.
+func (*ApplyImageNamesRequest) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ApplyImageNamesRequest) GetOptions() *ImageNamingOptions {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+// json：改名數（renamed）與改名後的預覽
+type ApplyImageNamesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Json          string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApplyImageNamesResponse) Reset() {
+	*x = ApplyImageNamesResponse{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApplyImageNamesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyImageNamesResponse) ProtoMessage() {}
+
+func (x *ApplyImageNamesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyImageNamesResponse.ProtoReflect.Descriptor instead.
+func (*ApplyImageNamesResponse) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ApplyImageNamesResponse) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
+type UndoImageNamesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Folder        string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UndoImageNamesRequest) Reset() {
+	*x = UndoImageNamesRequest{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UndoImageNamesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UndoImageNamesRequest) ProtoMessage() {}
+
+func (x *UndoImageNamesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UndoImageNamesRequest.ProtoReflect.Descriptor instead.
+func (*UndoImageNamesRequest) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *UndoImageNamesRequest) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+// json：還原數（restored）與無法還原的說明（problems）
+type UndoImageNamesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Json          string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UndoImageNamesResponse) Reset() {
+	*x = UndoImageNamesResponse{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UndoImageNamesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UndoImageNamesResponse) ProtoMessage() {}
+
+func (x *UndoImageNamesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UndoImageNamesResponse.ProtoReflect.Descriptor instead.
+func (*UndoImageNamesResponse) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *UndoImageNamesResponse) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
 var File_dietai_v1_workbench_proto protoreflect.FileDescriptor
 
 const file_dietai_v1_workbench_proto_rawDesc = "" +
@@ -1614,7 +1983,29 @@ const file_dietai_v1_workbench_proto_rawDesc = "" +
 	"\rmax_new_wrong\x18\x04 \x01(\x05R\vmaxNewWrong\x12\x1e\n" +
 	"\vmax_mean_ms\x18\x05 \x01(\x01R\tmaxMeanMs\".\n" +
 	"\x18SetBestFlowTruthResponse\x12\x12\n" +
-	"\x04json\x18\x01 \x01(\tR\x04json2\xcd\b\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\"\xe2\x01\n" +
+	"\x12ImageNamingOptions\x12\x16\n" +
+	"\x06folder\x18\x01 \x01(\tR\x06folder\x12\x1a\n" +
+	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x14\n" +
+	"\x05batch\x18\x03 \x01(\tR\x05batch\x12\x14\n" +
+	"\x05start\x18\x04 \x01(\x05R\x05start\x12\x14\n" +
+	"\x05width\x18\x05 \x01(\x05R\x05width\x12\x14\n" +
+	"\x05order\x18\x06 \x01(\tR\x05order\x12'\n" +
+	"\x0finclude_unknown\x18\a \x01(\bR\x0eincludeUnknown\x12\x17\n" +
+	"\ano_code\x18\b \x01(\tR\x06noCode\"S\n" +
+	"\x18PreviewImageNamesRequest\x127\n" +
+	"\aoptions\x18\x01 \x01(\v2\x1d.dietai.v1.ImageNamingOptionsR\aoptions\"/\n" +
+	"\x19PreviewImageNamesResponse\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\"Q\n" +
+	"\x16ApplyImageNamesRequest\x127\n" +
+	"\aoptions\x18\x01 \x01(\v2\x1d.dietai.v1.ImageNamingOptionsR\aoptions\"-\n" +
+	"\x17ApplyImageNamesResponse\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\"/\n" +
+	"\x15UndoImageNamesRequest\x12\x16\n" +
+	"\x06folder\x18\x01 \x01(\tR\x06folder\",\n" +
+	"\x16UndoImageNamesResponse\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json2\xde\n" +
+	"\n" +
 	"\x10WorkbenchService\x12[\n" +
 	"\x10GetConfigSchemas\x12\".dietai.v1.GetConfigSchemasRequest\x1a#.dietai.v1.GetConfigSchemasResponse\x12C\n" +
 	"\bPutImage\x12\x1a.dietai.v1.PutImageRequest\x1a\x1b.dietai.v1.PutImageResponse\x12I\n" +
@@ -1633,7 +2024,10 @@ const file_dietai_v1_workbench_proto_rawDesc = "" +
 	"StartE1Run\x12\x1c.dietai.v1.StartE1RunRequest\x1a\x1d.dietai.v1.StartE1RunResponse0\x01\x12]\n" +
 	"\x10StartBestFlowRun\x12\".dietai.v1.StartBestFlowRunRequest\x1a#.dietai.v1.StartBestFlowRunResponse0\x01\x12U\n" +
 	"\x0eGetBestFlowRun\x12 .dietai.v1.GetBestFlowRunRequest\x1a!.dietai.v1.GetBestFlowRunResponse\x12[\n" +
-	"\x10SetBestFlowTruth\x12\".dietai.v1.SetBestFlowTruthRequest\x1a#.dietai.v1.SetBestFlowTruthResponseB?Z=github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1b\x06proto3"
+	"\x10SetBestFlowTruth\x12\".dietai.v1.SetBestFlowTruthRequest\x1a#.dietai.v1.SetBestFlowTruthResponse\x12^\n" +
+	"\x11PreviewImageNames\x12#.dietai.v1.PreviewImageNamesRequest\x1a$.dietai.v1.PreviewImageNamesResponse\x12X\n" +
+	"\x0fApplyImageNames\x12!.dietai.v1.ApplyImageNamesRequest\x1a\".dietai.v1.ApplyImageNamesResponse\x12U\n" +
+	"\x0eUndoImageNames\x12 .dietai.v1.UndoImageNamesRequest\x1a!.dietai.v1.UndoImageNamesResponseB?Z=github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1b\x06proto3"
 
 var (
 	file_dietai_v1_workbench_proto_rawDescOnce sync.Once
@@ -1647,76 +2041,91 @@ func file_dietai_v1_workbench_proto_rawDescGZIP() []byte {
 	return file_dietai_v1_workbench_proto_rawDescData
 }
 
-var file_dietai_v1_workbench_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_dietai_v1_workbench_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_dietai_v1_workbench_proto_goTypes = []any{
-	(*ImageRef)(nil),                 // 0: dietai.v1.ImageRef
-	(*GetConfigSchemasRequest)(nil),  // 1: dietai.v1.GetConfigSchemasRequest
-	(*GetConfigSchemasResponse)(nil), // 2: dietai.v1.GetConfigSchemasResponse
-	(*PutImageRequest)(nil),          // 3: dietai.v1.PutImageRequest
-	(*PutImageResponse)(nil),         // 4: dietai.v1.PutImageResponse
-	(*SynthesizeRequest)(nil),        // 5: dietai.v1.SynthesizeRequest
-	(*SynthesizeResponse)(nil),       // 6: dietai.v1.SynthesizeResponse
-	(*DegradeRequest)(nil),           // 7: dietai.v1.DegradeRequest
-	(*DegradeResponse)(nil),          // 8: dietai.v1.DegradeResponse
-	(*RenderViewRequest)(nil),        // 9: dietai.v1.RenderViewRequest
-	(*RenderViewResponse)(nil),       // 10: dietai.v1.RenderViewResponse
-	(*GetArtifactRequest)(nil),       // 11: dietai.v1.GetArtifactRequest
-	(*GetArtifactResponse)(nil),      // 12: dietai.v1.GetArtifactResponse
-	(*SweepRequest)(nil),             // 13: dietai.v1.SweepRequest
-	(*SweepResponse)(nil),            // 14: dietai.v1.SweepResponse
-	(*RunBatchRequest)(nil),          // 15: dietai.v1.RunBatchRequest
-	(*RunBatchResponse)(nil),         // 16: dietai.v1.RunBatchResponse
-	(*ListE1RunsRequest)(nil),        // 17: dietai.v1.ListE1RunsRequest
-	(*ListE1RunsResponse)(nil),       // 18: dietai.v1.ListE1RunsResponse
-	(*GetE1RunRequest)(nil),          // 19: dietai.v1.GetE1RunRequest
-	(*GetE1RunResponse)(nil),         // 20: dietai.v1.GetE1RunResponse
-	(*StartE1RunRequest)(nil),        // 21: dietai.v1.StartE1RunRequest
-	(*StartE1RunResponse)(nil),       // 22: dietai.v1.StartE1RunResponse
-	(*StartBestFlowRunRequest)(nil),  // 23: dietai.v1.StartBestFlowRunRequest
-	(*StartBestFlowRunResponse)(nil), // 24: dietai.v1.StartBestFlowRunResponse
-	(*GetBestFlowRunRequest)(nil),    // 25: dietai.v1.GetBestFlowRunRequest
-	(*GetBestFlowRunResponse)(nil),   // 26: dietai.v1.GetBestFlowRunResponse
-	(*SetBestFlowTruthRequest)(nil),  // 27: dietai.v1.SetBestFlowTruthRequest
-	(*SetBestFlowTruthResponse)(nil), // 28: dietai.v1.SetBestFlowTruthResponse
+	(*ImageRef)(nil),                  // 0: dietai.v1.ImageRef
+	(*GetConfigSchemasRequest)(nil),   // 1: dietai.v1.GetConfigSchemasRequest
+	(*GetConfigSchemasResponse)(nil),  // 2: dietai.v1.GetConfigSchemasResponse
+	(*PutImageRequest)(nil),           // 3: dietai.v1.PutImageRequest
+	(*PutImageResponse)(nil),          // 4: dietai.v1.PutImageResponse
+	(*SynthesizeRequest)(nil),         // 5: dietai.v1.SynthesizeRequest
+	(*SynthesizeResponse)(nil),        // 6: dietai.v1.SynthesizeResponse
+	(*DegradeRequest)(nil),            // 7: dietai.v1.DegradeRequest
+	(*DegradeResponse)(nil),           // 8: dietai.v1.DegradeResponse
+	(*RenderViewRequest)(nil),         // 9: dietai.v1.RenderViewRequest
+	(*RenderViewResponse)(nil),        // 10: dietai.v1.RenderViewResponse
+	(*GetArtifactRequest)(nil),        // 11: dietai.v1.GetArtifactRequest
+	(*GetArtifactResponse)(nil),       // 12: dietai.v1.GetArtifactResponse
+	(*SweepRequest)(nil),              // 13: dietai.v1.SweepRequest
+	(*SweepResponse)(nil),             // 14: dietai.v1.SweepResponse
+	(*RunBatchRequest)(nil),           // 15: dietai.v1.RunBatchRequest
+	(*RunBatchResponse)(nil),          // 16: dietai.v1.RunBatchResponse
+	(*ListE1RunsRequest)(nil),         // 17: dietai.v1.ListE1RunsRequest
+	(*ListE1RunsResponse)(nil),        // 18: dietai.v1.ListE1RunsResponse
+	(*GetE1RunRequest)(nil),           // 19: dietai.v1.GetE1RunRequest
+	(*GetE1RunResponse)(nil),          // 20: dietai.v1.GetE1RunResponse
+	(*StartE1RunRequest)(nil),         // 21: dietai.v1.StartE1RunRequest
+	(*StartE1RunResponse)(nil),        // 22: dietai.v1.StartE1RunResponse
+	(*StartBestFlowRunRequest)(nil),   // 23: dietai.v1.StartBestFlowRunRequest
+	(*StartBestFlowRunResponse)(nil),  // 24: dietai.v1.StartBestFlowRunResponse
+	(*GetBestFlowRunRequest)(nil),     // 25: dietai.v1.GetBestFlowRunRequest
+	(*GetBestFlowRunResponse)(nil),    // 26: dietai.v1.GetBestFlowRunResponse
+	(*SetBestFlowTruthRequest)(nil),   // 27: dietai.v1.SetBestFlowTruthRequest
+	(*SetBestFlowTruthResponse)(nil),  // 28: dietai.v1.SetBestFlowTruthResponse
+	(*ImageNamingOptions)(nil),        // 29: dietai.v1.ImageNamingOptions
+	(*PreviewImageNamesRequest)(nil),  // 30: dietai.v1.PreviewImageNamesRequest
+	(*PreviewImageNamesResponse)(nil), // 31: dietai.v1.PreviewImageNamesResponse
+	(*ApplyImageNamesRequest)(nil),    // 32: dietai.v1.ApplyImageNamesRequest
+	(*ApplyImageNamesResponse)(nil),   // 33: dietai.v1.ApplyImageNamesResponse
+	(*UndoImageNamesRequest)(nil),     // 34: dietai.v1.UndoImageNamesRequest
+	(*UndoImageNamesResponse)(nil),    // 35: dietai.v1.UndoImageNamesResponse
 }
 var file_dietai_v1_workbench_proto_depIdxs = []int32{
 	0,  // 0: dietai.v1.PutImageResponse.image:type_name -> dietai.v1.ImageRef
 	0,  // 1: dietai.v1.SynthesizeResponse.image:type_name -> dietai.v1.ImageRef
 	0,  // 2: dietai.v1.DegradeResponse.image:type_name -> dietai.v1.ImageRef
 	0,  // 3: dietai.v1.RenderViewResponse.image:type_name -> dietai.v1.ImageRef
-	1,  // 4: dietai.v1.WorkbenchService.GetConfigSchemas:input_type -> dietai.v1.GetConfigSchemasRequest
-	3,  // 5: dietai.v1.WorkbenchService.PutImage:input_type -> dietai.v1.PutImageRequest
-	5,  // 6: dietai.v1.WorkbenchService.Synthesize:input_type -> dietai.v1.SynthesizeRequest
-	7,  // 7: dietai.v1.WorkbenchService.Degrade:input_type -> dietai.v1.DegradeRequest
-	9,  // 8: dietai.v1.WorkbenchService.RenderView:input_type -> dietai.v1.RenderViewRequest
-	11, // 9: dietai.v1.WorkbenchService.GetArtifact:input_type -> dietai.v1.GetArtifactRequest
-	13, // 10: dietai.v1.WorkbenchService.Sweep:input_type -> dietai.v1.SweepRequest
-	15, // 11: dietai.v1.WorkbenchService.RunBatch:input_type -> dietai.v1.RunBatchRequest
-	17, // 12: dietai.v1.WorkbenchService.ListE1Runs:input_type -> dietai.v1.ListE1RunsRequest
-	19, // 13: dietai.v1.WorkbenchService.GetE1Run:input_type -> dietai.v1.GetE1RunRequest
-	21, // 14: dietai.v1.WorkbenchService.StartE1Run:input_type -> dietai.v1.StartE1RunRequest
-	23, // 15: dietai.v1.WorkbenchService.StartBestFlowRun:input_type -> dietai.v1.StartBestFlowRunRequest
-	25, // 16: dietai.v1.WorkbenchService.GetBestFlowRun:input_type -> dietai.v1.GetBestFlowRunRequest
-	27, // 17: dietai.v1.WorkbenchService.SetBestFlowTruth:input_type -> dietai.v1.SetBestFlowTruthRequest
-	2,  // 18: dietai.v1.WorkbenchService.GetConfigSchemas:output_type -> dietai.v1.GetConfigSchemasResponse
-	4,  // 19: dietai.v1.WorkbenchService.PutImage:output_type -> dietai.v1.PutImageResponse
-	6,  // 20: dietai.v1.WorkbenchService.Synthesize:output_type -> dietai.v1.SynthesizeResponse
-	8,  // 21: dietai.v1.WorkbenchService.Degrade:output_type -> dietai.v1.DegradeResponse
-	10, // 22: dietai.v1.WorkbenchService.RenderView:output_type -> dietai.v1.RenderViewResponse
-	12, // 23: dietai.v1.WorkbenchService.GetArtifact:output_type -> dietai.v1.GetArtifactResponse
-	14, // 24: dietai.v1.WorkbenchService.Sweep:output_type -> dietai.v1.SweepResponse
-	16, // 25: dietai.v1.WorkbenchService.RunBatch:output_type -> dietai.v1.RunBatchResponse
-	18, // 26: dietai.v1.WorkbenchService.ListE1Runs:output_type -> dietai.v1.ListE1RunsResponse
-	20, // 27: dietai.v1.WorkbenchService.GetE1Run:output_type -> dietai.v1.GetE1RunResponse
-	22, // 28: dietai.v1.WorkbenchService.StartE1Run:output_type -> dietai.v1.StartE1RunResponse
-	24, // 29: dietai.v1.WorkbenchService.StartBestFlowRun:output_type -> dietai.v1.StartBestFlowRunResponse
-	26, // 30: dietai.v1.WorkbenchService.GetBestFlowRun:output_type -> dietai.v1.GetBestFlowRunResponse
-	28, // 31: dietai.v1.WorkbenchService.SetBestFlowTruth:output_type -> dietai.v1.SetBestFlowTruthResponse
-	18, // [18:32] is the sub-list for method output_type
-	4,  // [4:18] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	29, // 4: dietai.v1.PreviewImageNamesRequest.options:type_name -> dietai.v1.ImageNamingOptions
+	29, // 5: dietai.v1.ApplyImageNamesRequest.options:type_name -> dietai.v1.ImageNamingOptions
+	1,  // 6: dietai.v1.WorkbenchService.GetConfigSchemas:input_type -> dietai.v1.GetConfigSchemasRequest
+	3,  // 7: dietai.v1.WorkbenchService.PutImage:input_type -> dietai.v1.PutImageRequest
+	5,  // 8: dietai.v1.WorkbenchService.Synthesize:input_type -> dietai.v1.SynthesizeRequest
+	7,  // 9: dietai.v1.WorkbenchService.Degrade:input_type -> dietai.v1.DegradeRequest
+	9,  // 10: dietai.v1.WorkbenchService.RenderView:input_type -> dietai.v1.RenderViewRequest
+	11, // 11: dietai.v1.WorkbenchService.GetArtifact:input_type -> dietai.v1.GetArtifactRequest
+	13, // 12: dietai.v1.WorkbenchService.Sweep:input_type -> dietai.v1.SweepRequest
+	15, // 13: dietai.v1.WorkbenchService.RunBatch:input_type -> dietai.v1.RunBatchRequest
+	17, // 14: dietai.v1.WorkbenchService.ListE1Runs:input_type -> dietai.v1.ListE1RunsRequest
+	19, // 15: dietai.v1.WorkbenchService.GetE1Run:input_type -> dietai.v1.GetE1RunRequest
+	21, // 16: dietai.v1.WorkbenchService.StartE1Run:input_type -> dietai.v1.StartE1RunRequest
+	23, // 17: dietai.v1.WorkbenchService.StartBestFlowRun:input_type -> dietai.v1.StartBestFlowRunRequest
+	25, // 18: dietai.v1.WorkbenchService.GetBestFlowRun:input_type -> dietai.v1.GetBestFlowRunRequest
+	27, // 19: dietai.v1.WorkbenchService.SetBestFlowTruth:input_type -> dietai.v1.SetBestFlowTruthRequest
+	30, // 20: dietai.v1.WorkbenchService.PreviewImageNames:input_type -> dietai.v1.PreviewImageNamesRequest
+	32, // 21: dietai.v1.WorkbenchService.ApplyImageNames:input_type -> dietai.v1.ApplyImageNamesRequest
+	34, // 22: dietai.v1.WorkbenchService.UndoImageNames:input_type -> dietai.v1.UndoImageNamesRequest
+	2,  // 23: dietai.v1.WorkbenchService.GetConfigSchemas:output_type -> dietai.v1.GetConfigSchemasResponse
+	4,  // 24: dietai.v1.WorkbenchService.PutImage:output_type -> dietai.v1.PutImageResponse
+	6,  // 25: dietai.v1.WorkbenchService.Synthesize:output_type -> dietai.v1.SynthesizeResponse
+	8,  // 26: dietai.v1.WorkbenchService.Degrade:output_type -> dietai.v1.DegradeResponse
+	10, // 27: dietai.v1.WorkbenchService.RenderView:output_type -> dietai.v1.RenderViewResponse
+	12, // 28: dietai.v1.WorkbenchService.GetArtifact:output_type -> dietai.v1.GetArtifactResponse
+	14, // 29: dietai.v1.WorkbenchService.Sweep:output_type -> dietai.v1.SweepResponse
+	16, // 30: dietai.v1.WorkbenchService.RunBatch:output_type -> dietai.v1.RunBatchResponse
+	18, // 31: dietai.v1.WorkbenchService.ListE1Runs:output_type -> dietai.v1.ListE1RunsResponse
+	20, // 32: dietai.v1.WorkbenchService.GetE1Run:output_type -> dietai.v1.GetE1RunResponse
+	22, // 33: dietai.v1.WorkbenchService.StartE1Run:output_type -> dietai.v1.StartE1RunResponse
+	24, // 34: dietai.v1.WorkbenchService.StartBestFlowRun:output_type -> dietai.v1.StartBestFlowRunResponse
+	26, // 35: dietai.v1.WorkbenchService.GetBestFlowRun:output_type -> dietai.v1.GetBestFlowRunResponse
+	28, // 36: dietai.v1.WorkbenchService.SetBestFlowTruth:output_type -> dietai.v1.SetBestFlowTruthResponse
+	31, // 37: dietai.v1.WorkbenchService.PreviewImageNames:output_type -> dietai.v1.PreviewImageNamesResponse
+	33, // 38: dietai.v1.WorkbenchService.ApplyImageNames:output_type -> dietai.v1.ApplyImageNamesResponse
+	35, // 39: dietai.v1.WorkbenchService.UndoImageNames:output_type -> dietai.v1.UndoImageNamesResponse
+	23, // [23:40] is the sub-list for method output_type
+	6,  // [6:23] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_dietai_v1_workbench_proto_init() }
@@ -1730,7 +2139,7 @@ func file_dietai_v1_workbench_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_dietai_v1_workbench_proto_rawDesc), len(file_dietai_v1_workbench_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

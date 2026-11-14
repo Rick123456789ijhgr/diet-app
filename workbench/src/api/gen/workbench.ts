@@ -511,6 +511,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workbench/v1/dev/image-naming/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 圖片批次命名：預覽規則化檔名（不動任何檔案）
+         * @description 把資料夾中「檔名就是條碼」的照片改成 <類別>_<批次>_<序號>_<條碼>（見 dietai.evaluation.image_names）。
+         *     回傳每個檔案的新檔名與狀態（rename、same、skip）、統計、改名後主檔名的長度、是否有可還原的紀錄。
+         *     拒絕 test split 下的路徑（SPLIT_LOCKED）；資料夾不存在回 PATH_NOT_FOUND。
+         */
+        post: operations["previewImageNames"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/dev/image-naming/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 圖片批次命名：依目前的資料夾重新規劃後改名
+         * @description 不採用前端送來的計畫，由後端依同樣的參數重新規劃後改名；不覆寫既有檔案，每筆記在資料夾的
+         *     _rename_log.csv。回傳改名數（renamed）與改名後的預覽。
+         */
+        post: operations["applyImageNames"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workbench/v1/dev/image-naming/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 圖片批次命名：依 _rename_log.csv 由後往前還原全部改名 */
+        post: operations["undoImageNames"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -785,6 +845,31 @@ export interface components {
             truths: {
                 [key: string]: string | null;
             };
+        };
+        ImageNamingRequest: {
+            /** @description 照片所在的資料夾（本機路徑，不含子資料夾） */
+            folder: string;
+            /** @description 類別（小寫英數字與連字號），例如 f＝食物包裝、o＝其他物品 */
+            category?: string;
+            /** @description 批次（小寫英數字與連字號），例如 a01 */
+            batch?: string;
+            /** @description 第一個序號；0 表示接在本類別批次既有的最大序號之後 */
+            start?: number;
+            /** @description 序號位數（補零），預設 3 */
+            width?: number;
+            /**
+             * @description 編號順序：mtime＝修改時間（預設，通常即拍攝順序）、name＝原檔名
+             * @enum {string}
+             */
+            order?: "mtime" | "name";
+            /** @description 看不出條碼的檔名也編號（不帶條碼） */
+            include_unknown?: boolean;
+            /** @description 沒有條碼時寫在條碼欄的標記（小寫字母），預設 nocode */
+            no_code?: string;
+        };
+        UndoImageNamesRequest: {
+            /** @description 照片所在的資料夾 */
+            folder: string;
         };
         /** @enum {string} */
         SubmissionStatus: "draft" | "confirmed" | "rejected";
@@ -1972,6 +2057,90 @@ export interface operations {
         };
         responses: {
             /** @description 更新後的真值表與結論（結構由 Python 定義） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeJson"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["SplitLocked"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    previewImageNames: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageNamingRequest"];
+            };
+        };
+        responses: {
+            /** @description 改名預覽（結構由 Python 定義） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeJson"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["SplitLocked"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    applyImageNames: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageNamingRequest"];
+            };
+        };
+        responses: {
+            /** @description 改名數與改名後的預覽（結構由 Python 定義） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeJson"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["SplitLocked"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    undoImageNames: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UndoImageNamesRequest"];
+            };
+        };
+        responses: {
+            /** @description 還原數（restored）與無法還原的說明（problems） */
             200: {
                 headers: {
                     [name: string]: unknown;

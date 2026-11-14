@@ -36,6 +36,30 @@ python rename_by_truth.py <執行> --undo                          # 依 rename_
 `--include-auto` 連程式自動推定的也改；不覆寫既有檔案。資料夾來源的執行不需要 `--folder`。
 改名後的照片再放進工作台，號碼會由檔名自動帶入。
 
+### 規則化檔名：`<類別>_<批次>_<序號>_<條碼>`
+
+檔名已經是條碼號碼的照片，再改成規則化檔名：工作台「通用工具 → 圖片批次命名」（`/tools/naming`），
+或命令列 `name_images.py`（邏輯在 `dietai.devtools.image_naming`，規則在 `dietai.evaluation.image_names`）。
+找最佳流程會把規則化檔名中的條碼直接當作**人工確認**的真值，不必再逐張輸入，也不靠程式判讀。
+
+```bash
+python name_images.py <資料夾> --category f --batch a01            # 預覽
+python name_images.py <資料夾> --category f --batch a01 --apply    # 真的改名
+python name_images.py <資料夾> --undo                                 # 依 _rename_log.csv 還原
+```
+
+```
+4710088410108.jpg、4710088410108_2.jpg  →  f_a01_001_4710088410108.jpg
+沒有條碼_IMG_1234.jpg                    →  f_a01_002_nocode.jpg（負樣本）
+```
+
+- 類別建議用一個字母：`f`＝食物包裝、`o`＝其他物品（書、用品等），兩類規則相同；也可自訂。類別、批次只用小寫英數字與連字號；欄位以底線分隔。
+- 序號預設 3 位補零（`--width`），起始號碼可自訂（`--start`，預設接在既有的最大序號之後）。
+- 條碼為 EAN-13（UPC-A 補成 13 位）或 EAN-8，檢查碼須正確。條碼欄全為小寫字母表示確認沒有條碼（預設 `nocode`，`--no-code` 自訂）。EAN-8 與沒有條碼的檔名較短，工作台會提示長度不一致。
+- 依修改時間（通常即拍攝順序）編號，`--order name` 改依原檔名；同類別批次已有的序號不重複使用，新照片接在後面。
+- 看不出條碼的檔名預設略過；`--include-unknown` 只編號不帶條碼（`f_a01_016.jpg`），之後可用 `rename_by_truth.py` 補上條碼（會保留類別、批次、序號）。
+- 預設只預覽；不覆寫既有檔案。
+
 ## manifest 格式
 
 CSV（UTF-8），每列一張影像；格式定義見 `dietai.evaluation.manifest`。
