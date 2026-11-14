@@ -1,0 +1,41 @@
+{
+  "name": "locate",
+  "title": "定位條碼＋對比加強",
+  "description": "先以 OpenCV 條碼偵測器找出條碼、轉正裁下再解碼；裁切後另以 CLAHE 加強對比（框放大 1.15 與 1.8 倍各一條），並保留原圖、縮小一半、縮小＋轉 90°。zxing 內建的旋轉與縮小嘗試開啟；只收零售條碼（EAN-13、EAN-8、UPC-A）。20261115 f_a01 dev：推薦流程「原圖 → 定位＋CLAHE ×1.15 → 定位＋CLAHE ×1.8 → 定位」225/250、0 誤讀。",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": true,
+    "try_downscale": true,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "locate",
+      "raw",
+      "multiscale",
+      "pipeline"
+    ],
+    "scales": [
+      0.5
+    ],
+    "pipelines": [
+      [
+        "multiscale:0.5",
+        "rotate:90"
+      ],
+      [
+        "locate:1.15",
+        "clahe"
+      ],
+      [
+        "locate:1.8",
+        "clahe"
+      ]
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

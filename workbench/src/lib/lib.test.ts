@@ -306,6 +306,8 @@ describe('方法代碼與量測值的中文名稱', () => {
     expect(methodText('pipeline@denoise+binarize')).toBe('疊加：去雜訊＋自適應二值化')
     expect(methodText('deskew@x')).toBe('旋轉校正（x）')
     expect(methodText('rotate@-45')).toBe('旋轉 -45°')
+    expect(methodText('locate')).toBe('定位條碼')
+    expect(methodText('pipeline@locate:1.8+clahe')).toBe('疊加：定位條碼（框 ×1.8）＋CLAHE')
     expect(methodText('pipeline@multiscale:0.5+rotate:90+clahe')).toBe(
       '疊加：縮放 ×0.5＋旋轉 90°＋CLAHE',
     )

@@ -48,6 +48,10 @@ describe('flowPresets', () => {
     ])
   })
 
+  it('methodsOf：定位條碼只有一個方法', () => {
+    expect(methodsOf(preset('loc', ['locate', 'raw']).arm.ladder)).toEqual(['locate', 'raw'])
+  })
+
   it('methodsOf 展開旋轉角度；沒有角度時不能執行', () => {
     const rot = preset('rot', ['rotate', 'pipeline'], {
       angles: [90, -45],
@@ -130,6 +134,16 @@ describe('flowPresets', () => {
     expect(
       presetProblems(preset('x', ['pipeline'], { pipelines: [['clahe'], ['clahe']] })),
     ).toEqual(['每條疊加流程至少要有兩個步驟', '疊加流程不能重複'])
+    expect(
+      presetProblems(preset('x', ['pipeline'], { pipelines: [['locate:1.8', 'clahe']] })),
+    ).toEqual([])
+    for (const bad of [
+      ['clahe', 'locate'],
+      ['locate', 'rotate:90'],
+    ])
+      expect(presetProblems(preset('x', ['pipeline'], { pipelines: [bad] }))).toEqual([
+        '定位條碼只能放在疊加流程的第一步，之後只能接二值化、CLAHE、銳化、去雜訊',
+      ])
   })
 
   it('overridesOf／valuesOf：與結構預設值互轉', () => {

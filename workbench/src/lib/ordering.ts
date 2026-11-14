@@ -12,6 +12,7 @@ export const RUNG_ORDER = [
   'deskew',
   'rotate',
   'multiscale',
+  'locate',
   'pipeline',
 ]
 

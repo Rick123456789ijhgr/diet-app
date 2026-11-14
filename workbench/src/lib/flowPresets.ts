@@ -48,6 +48,9 @@ export const PIPELINE_STEPS = [
   'rotate:90',
   'rotate:45',
   'rotate:-45',
+  'locate',
+  'locate:1.15',
+  'locate:1.8',
   'binarize',
   'otsu',
   'clahe',
@@ -178,6 +181,17 @@ export function presetProblems(preset: Preset): string[] {
     if (pipelines.some((p) => p.length < 2)) out.push('每條疊加流程至少要有兩個步驟')
     const keys = pipelines.map((p) => p.join('+'))
     if (new Set(keys).size !== keys.length) out.push('疊加流程不能重複')
+    // 定位條碼只能是第一步，之後只能接只改像素的處理（同後端 config.check_pipeline）
+    const isLocate = (s: string) => s.split(':')[0] === 'locate'
+    const pixel = new Set(['binarize', 'otsu', 'clahe', 'sharpen', 'denoise'])
+    if (
+      pipelines.some(
+        (p) =>
+          p.slice(1).some(isLocate) ||
+          (isLocate(p[0] ?? '') && !p.slice(1).every((s) => pixel.has(s))),
+      )
+    )
+      out.push('定位條碼只能放在疊加流程的第一步，之後只能接二值化、CLAHE、銳化、去雜訊')
   }
   return out
 }
