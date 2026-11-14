@@ -74,6 +74,13 @@ def test_method_ids():
     )
     assert arm_methods(piped) == ("otsu", "pipeline@denoise+binarize", "pipeline@deskew+clahe")
     assert method_id(Rung.PIPELINE, {"steps": "clahe+otsu"}) == "pipeline@clahe+otsu"
+    assert method_id(Rung.ROTATE, {"angle": 90.0}) == "rotate@90"
+    rotated = LadderConfig(
+        rungs=(Rung.ROTATE, Rung.PIPELINE),
+        angles=(90.0, -45.0),
+        pipelines=(("multiscale:0.5", "rotate:90"),),
+    )
+    assert arm_methods(rotated) == ("rotate@90", "rotate@-45", "pipeline@multiscale:0.5+rotate:90")
 
 
 @pytest.mark.parametrize(
@@ -423,6 +430,17 @@ def test_pipeline_vs_parts():
     assert ab["diff"] == pytest.approx(-0.25) and (ab["misread"], ab["best_misread"]) == (2, 0)
     # Z 沒有單獨執行：只和 B 比
     assert by["pipeline@B+Z"]["best_part"] == "B"
+    # 帶參數的步驟（multiscale:0.5）對應單一方法 multiscale@0.5
+    scaled = [
+        *rows,
+        *(_row(v, "multiscale@0.5", CODE) for v in ("v1", "v2", "v3", "v4")),
+        *(
+            _row(v, "pipeline@multiscale:0.5+B", CODE if v == "v1" else "")
+            for v in ("v1", "v2", "v3", "v4")
+        ),
+    ]
+    by = {c["pipeline"]: c for c in pipeline_vs_parts(scaled)}
+    assert by["pipeline@multiscale:0.5+B"]["best_part"] == "multiscale@0.5"
     with pytest.raises(ValueError, match="指定 arm"):
         pipeline_vs_parts([*rows, _row("v1", "A", arm="b")])
     assert pipeline_vs_parts([*rows, _row("v1", "A", arm="b")], arm="b") == []

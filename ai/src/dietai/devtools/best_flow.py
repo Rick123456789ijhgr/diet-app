@@ -386,11 +386,12 @@ def _result(judged: Sequence[Mapping[str, str]], criteria: GreedyCriteria) -> di
 def ladder_export(order: Sequence[str]) -> dict[str, Any]:
     """把方法順序轉成 ``LadderConfig`` 的匯出格式（工作台的匯入格式）。
 
-    設定中同一階只能出現一次：多尺度的各倍率、各疊加流程會併到該階第一次出現的位置，
+    設定中同一階只能出現一次：多尺度的各倍率、旋轉的各角度、各疊加流程會併到該階第一次出現的位置，
     此時 ``exact`` 為 ``False``，實際順序與推薦順序略有不同。
     """
     rungs: list[str] = []
     scales: list[float] = []
+    angles: list[float] = []
     pipelines: list[list[str]] = []
     for method in order:
         rung, _, arg = method.partition("@")
@@ -398,12 +399,16 @@ def ladder_export(order: Sequence[str]) -> dict[str, Any]:
             rungs.append(rung)
         if rung == Rung.MULTISCALE.value:
             scales.append(float(arg))
+        elif rung == Rung.ROTATE.value:
+            angles.append(float(arg))
         elif rung == Rung.PIPELINE.value:
             pipelines.append(arg.split("+"))
     expanded: list[str] = []
     for rung in rungs:
         if rung == Rung.MULTISCALE.value:
             expanded += [f"{rung}@{s:g}" for s in scales]
+        elif rung == Rung.ROTATE.value:
+            expanded += [f"{rung}@{a:g}" for a in angles]
         elif rung == Rung.PIPELINE.value:
             expanded += [f"{rung}@{'+'.join(p)}" for p in pipelines]
         else:
@@ -411,6 +416,8 @@ def ladder_export(order: Sequence[str]) -> dict[str, Any]:
     values: dict[str, Any] = {"rungs": rungs}
     if scales:
         values["scales"] = scales
+    if angles:
+        values["angles"] = angles
     if pipelines:
         values["pipelines"] = pipelines
     return {"class": "LadderConfig", "values": values, "exact": expanded == list(order)}

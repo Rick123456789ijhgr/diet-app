@@ -468,8 +468,10 @@ def _ref(item: StoredImage) -> dict[str, Any]:
 
 
 def _attempt_count(cfg: LadderConfig) -> int:
-    """逐步升級的嘗試次數：多尺度階依倍率各算一次。"""
-    return sum(len(cfg.scales) if r is Rung.MULTISCALE else 1 for r in cfg.rungs)
+    """逐步升級的嘗試次數：多尺度階依倍率、旋轉階依角度、疊加流程階依流程各算一次。"""
+    per = {Rung.MULTISCALE: len(cfg.scales), Rung.ROTATE: len(cfg.angles)}
+    per[Rung.PIPELINE] = len(cfg.pipelines)
+    return sum(per.get(r, 1) for r in cfg.rungs)
 
 
 @functools.cache

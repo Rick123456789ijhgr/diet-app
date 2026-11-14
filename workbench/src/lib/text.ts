@@ -63,6 +63,7 @@ export const RUNG_TEXT: Record<string, string> = {
   multiscale: '多尺度',
   otsu: 'Otsu 二值化',
   clahe: 'CLAHE',
+  rotate: '旋轉',
   pipeline: '疊加流程',
 }
 
@@ -198,15 +199,28 @@ export const groupText = (group: string) => GROUP_TEXT[group] ?? group
 export const rungText = (rung: string) => RUNG_TEXT[rung] ?? rung
 export const featureText = (f: string) => FEATURE_TEXT[f] ?? f
 /**
- * 「每個方法都執行」的方法代碼（evaluation.method_id）：多尺度帶倍率（multiscale@2 → 多尺度 ×2），
- * 疊加流程列出各步驟（pipeline@denoise+binarize → 疊加：去雜訊＋自適應二值化）。
+ * 「每個方法都執行」的方法代碼（evaluation.method_id）：多尺度帶倍率（multiscale@2 → 多尺度 ×2）、
+ * 旋轉帶角度（rotate@90 → 旋轉 90°），疊加流程列出各步驟（pipeline@denoise+binarize →
+ * 疊加：去雜訊＋自適應二值化；pipeline@multiscale:0.5+rotate:90 → 疊加：縮放 ×0.5＋旋轉 90°）。
  */
 export function methodText(id: string): string {
-  const [rung = '', param] = id.split('@')
-  if (param === undefined) return rungText(rung)
+  const at = id.indexOf('@')
+  if (at < 0) return rungText(id)
+  const rung = id.slice(0, at)
+  const param = id.slice(at + 1)
   if (rung === 'multiscale') return `${rungText(rung)} ×${param}`
-  if (rung === 'pipeline') return `疊加：${param.split('+').map(rungText).join('＋')}`
+  if (rung === 'rotate') return `${rungText(rung)} ${param}°`
+  if (rung === 'pipeline') return `疊加：${param.split('+').map(stepText).join('＋')}`
   return `${rungText(rung)}（${param}）`
+}
+
+/** 疊加流程的一個步驟（preprocess.config.parse_pipeline_step）：multiscale:0.5 → 縮放 ×0.5。 */
+export function stepText(token: string): string {
+  const [step = '', arg] = token.split(':')
+  if (arg === undefined) return rungText(step)
+  if (step === 'multiscale') return `縮放 ×${arg}`
+  if (step === 'rotate') return `旋轉 ${arg}°`
+  return `${rungText(step)}（${arg}）`
 }
 export const outcomeText = (o: string) => OUTCOME_TEXT[o] ?? o
 export const imageKindText = (k: string) => IMAGE_KIND_TEXT[k] ?? k

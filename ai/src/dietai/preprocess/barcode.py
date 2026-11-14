@@ -19,7 +19,7 @@ import numpy as np
 import numpy.typing as npt
 
 from dietai.preprocess import ops
-from dietai.preprocess.config import LadderConfig
+from dietai.preprocess.config import LadderConfig, parse_pipeline_step
 from dietai.preprocess.decoders import DecodeHit, Decoder
 from dietai.preprocess.types import CodeFormat, Image, PreprocessWarning, Rung, StepRecord
 
@@ -107,9 +107,9 @@ def ean13_checksum_ok(code: str) -> bool:
 def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[Variant]:
     """依 ``cfg.rungs`` 的順序逐一產生影像版本（惰性產生，呼叫端可提早停止）。
 
-    使用的設定欄位：``rungs``、``scales``、``pipelines``、``binarize_*``、``sharpen_*``、
-    ``denoise_ksize``、``clahe_*``、``deskew_min_deg``。多尺度階每個倍率、疊加流程階每條流程
-    各產生一個版本。
+    使用的設定欄位：``rungs``、``scales``、``angles``、``pipelines``、``binarize_*``、``sharpen_*``、
+    ``denoise_ksize``、``clahe_*``、``deskew_min_deg``。多尺度階每個倍率、旋轉階每個角度、
+    疊加流程階每條流程各產生一個版本。
 
     為避免每次嘗試都複製整張影像，``raw`` 階的 ``image`` 就是輸入本身、``gray`` 階與其他階
     共用同一份灰階；解碼器不會修改輸入，呼叫端也不得修改這些影像（需要時自行 ``copy()``）。
@@ -126,7 +126,7 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
 
     for rung in cfg.rungs:
         # 以下各階皆只改像素、不改幾何，座標與原圖相同，故 ``to_original`` 為恆等矩陣；
-        # 只有 deskew（旋轉＋擴大畫布）與 multiscale（縮放）需要回推矩陣
+        # 只有 deskew、rotate（旋轉＋擴大畫布）與 multiscale（縮放）需要回推矩陣
         if rung is Rung.RAW:
             yield Variant(rung, img, _IDENTITY)
         elif rung is Rung.GRAY:
@@ -154,19 +154,53 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
             inverse = np.asarray(cv2.invertAffineTransform(m), dtype=np.float64)
             yield Variant(rung, ops.rotate(get_gray(), -skew), inverse, params)
         elif rung is Rung.MULTISCALE:
-            h, w = get_gray().shape[:2]
             for factor in cfg.scales:
-                out = ops.scale(get_gray(), factor)
-                # 以實際輸出尺寸計算倍率：``ops.scale`` 會把寬高取整，實際倍率可能與 factor
-                # 略有差異，且 x、y 方向不一定相同
-                sx, sy = out.shape[1] / w, out.shape[0] / h
-                # resize 的像素中心對應：x' = (x + 0.5)·s − 0.5
-                # 反解得 x = x'/s + (0.5/s − 0.5)，即下方矩陣的縮放項與平移項（y 方向同理）
-                inverse = np.array(
-                    [[1 / sx, 0.0, 0.5 / sx - 0.5], [0.0, 1 / sy, 0.5 / sy - 0.5]],
-                    dtype=np.float64,
-                )
+                out, inverse = _scaled(get_gray(), factor)
                 yield Variant(rung, out, inverse, {"factor": factor})
+        elif rung is Rung.ROTATE:
+            for angle in cfg.angles:
+                out, inverse = _rotated(get_gray(), angle)
+                yield Variant(rung, out, inverse, {"angle": angle})
+
+
+def _scaled(gray: Image, factor: float) -> tuple[Image, Affine]:
+    """縮放，回傳（結果, 回推原圖的矩陣）。"""
+    h, w = gray.shape[:2]
+    out = ops.scale(gray, factor)
+    # 以實際輸出尺寸計算倍率：``ops.scale`` 會把寬高取整，實際倍率可能與 factor
+    # 略有差異，且 x、y 方向不一定相同
+    sx, sy = out.shape[1] / w, out.shape[0] / h
+    # resize 的像素中心對應：x' = (x + 0.5)·s − 0.5
+    # 反解得 x = x'/s + (0.5/s − 0.5)，即下方矩陣的縮放項與平移項（y 方向同理）
+    inverse = np.array(
+        [[1 / sx, 0.0, 0.5 / sx - 0.5], [0.0, 1 / sy, 0.5 / sy - 0.5]],
+        dtype=np.float64,
+    )
+    return out, inverse
+
+
+def _rotated(gray: Image, angle: float) -> tuple[Image, Affine]:
+    """逆時針旋轉 ``angle`` 度（畫布擴大），回傳（結果, 回推原圖的矩陣）。
+
+    90 的倍數用 ``cv2.rotate`` 搬移像素（不內插、比 warpAffine 快），回推矩陣為精確的整數對應；
+    其他角度用 ``ops.rotate``（雙線性內插，空白處填白）。
+    """
+    h, w = gray.shape[:2]
+    quarter = angle % 360
+    if quarter == 90:  # 逆時針 90°：x' = y、y' = w − 1 − x → x = w − 1 − y'、y = x'
+        out = cv2.rotate(gray, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        inverse = np.array([[0.0, -1.0, w - 1.0], [1.0, 0.0, 0.0]])
+    elif quarter == 270:  # 順時針 90°：x' = h − 1 − y、y' = x → x = y'、y = h − 1 − x'
+        out = cv2.rotate(gray, cv2.ROTATE_90_CLOCKWISE)
+        inverse = np.array([[0.0, 1.0, 0.0], [-1.0, 0.0, h - 1.0]])
+    elif quarter == 180:
+        out = cv2.rotate(gray, cv2.ROTATE_180)
+        inverse = np.array([[-1.0, 0.0, w - 1.0], [0.0, -1.0, h - 1.0]])
+    else:
+        m, _ = ops.rotation_matrix(gray.shape, angle)
+        inverse = np.asarray(cv2.invertAffineTransform(m), dtype=np.float64)
+        return ops.rotate(gray, angle), inverse
+    return np.asarray(out, dtype=np.uint8), inverse
 
 
 # 只改像素、不改幾何的處理；單獨一階與疊加流程中的步驟共用 ``_pixel_step``
@@ -192,19 +226,29 @@ def _pixel_step(gray: Image, step: Rung, cfg: LadderConfig) -> tuple[Image, dict
 
 
 def _pipeline(
-    gray: Image, steps: tuple[Rung, ...], cfg: LadderConfig
+    gray: Image, steps: tuple[str, ...], cfg: LadderConfig
 ) -> tuple[Image, Affine, dict[str, Any]]:
     """在同一張灰階影像上依序做 ``steps``，回傳（結果, 回推原圖的矩陣, 參數）。
 
     參數為 ``steps``（以 ``+`` 串接的步驟代碼）與各步驟的參數（鍵為 ``步驟.參數``）。
     旋轉校正依「目前的影像」估計角度，小於 ``deskew_min_deg`` 時這一步不旋轉
-    （``deskew.applied`` 為 ``False``），流程其餘步驟照常執行。
+    （``deskew.applied`` 為 ``False``），流程其餘步驟照常執行。縮放（``multiscale:0.5``）與
+    旋轉（``rotate:90``）使用步驟代碼中的參數，例如先縮小一半再轉 90°。
     """
     out = gray
     to_original = _IDENTITY
-    params: dict[str, Any] = {"steps": "+".join(s.value for s in steps)}
-    for step in steps:
-        if step is Rung.DESKEW:
+    params: dict[str, Any] = {"steps": "+".join(str(s) for s in steps)}
+    for token in steps:
+        step, value = parse_pipeline_step(token)
+        if step is Rung.MULTISCALE and value is not None:
+            out, inverse = _scaled(out, value)
+            to_original = _compose(to_original, inverse)
+            params["multiscale.factor"] = value
+        elif step is Rung.ROTATE and value is not None:
+            out, inverse = _rotated(out, value)
+            to_original = _compose(to_original, inverse)
+            params["rotate.angle"] = value
+        elif step is Rung.DESKEW:
             skew = ops.estimate_skew(out)
             applied = abs(skew) >= cfg.deskew_min_deg
             params.update({"deskew.skew_deg": round(skew, 2), "deskew.applied": applied})

@@ -188,6 +188,15 @@ def test_resolve_run_requires_a_finished_best_flow_run(e1_dir, tmp_path):
     [
         (["raw", "otsu"], {"rungs": ["raw", "otsu"]}, True),
         (
+            ["rotate@90", "rotate@-45", "pipeline@multiscale:0.5+rotate:90"],
+            {
+                "rungs": ["rotate", "pipeline"],
+                "angles": [90.0, -45.0],
+                "pipelines": [["multiscale:0.5", "rotate:90"]],
+            },
+            True,
+        ),
+        (
             ["raw", "multiscale@2", "pipeline@denoise+binarize"],
             {
                 "rungs": ["raw", "multiscale", "pipeline"],

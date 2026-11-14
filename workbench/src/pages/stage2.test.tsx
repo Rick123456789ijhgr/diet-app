@@ -44,7 +44,7 @@ describe('條碼頁', () => {
     await user.click(screen.getByRole('button', { name: /匯入／匯出設定/ }))
     expect(screen.getByText("LadderConfig(rungs=('gray', 'raw', 'binarize'))")).toBeInTheDocument()
     // 還原後回到預設順序（不帶 rungs 覆寫）；兩段可同時展開
-    await user.click(screen.getByRole('button', { name: /還原順序、倍率與格式/ }))
+    await user.click(screen.getByRole('button', { name: /還原順序、倍率、角度與格式/ }))
     expect(screen.getByText('LadderConfig()')).toBeInTheDocument()
   })
 

@@ -86,24 +86,28 @@ _TEST_NOTE = "結果表含測試集，不做貪婪選擇（規則 7）；請以 
 
 
 def method_id(rung: Rung, params: Mapping[str, Any]) -> str:
-    """方法代碼：階的代碼；多尺度加上倍率（``multiscale@2``），疊加流程加上步驟
-    （``pipeline@denoise+binarize``）。"""
+    """方法代碼：階的代碼；多尺度加上倍率（``multiscale@2``）、旋轉加上角度（``rotate@90``），
+    疊加流程加上步驟（``pipeline@denoise+binarize``、``pipeline@multiscale:0.5+rotate:90``）。"""
     if rung is Rung.MULTISCALE:
         return f"{rung.value}@{float(params['factor']):g}"
+    if rung is Rung.ROTATE:
+        return f"{rung.value}@{float(params['angle']):g}"
     if rung is Rung.PIPELINE:
         return f"{rung.value}@{params['steps']}"
     return rung.value
 
 
 def arm_methods(cfg: LadderConfig) -> tuple[str, ...]:
-    """設定中 ``rungs`` 展開後的方法代碼（依階梯順序，多尺度依 ``scales``、疊加流程依
-    ``pipelines`` 的順序）。"""
+    """設定中 ``rungs`` 展開後的方法代碼（依階梯順序，多尺度依 ``scales``、旋轉依 ``angles``、
+    疊加流程依 ``pipelines`` 的順序）。"""
     out: list[str] = []
     for rung in cfg.rungs:
         if rung is Rung.MULTISCALE:
             out += [method_id(rung, {"factor": f}) for f in cfg.scales]
+        elif rung is Rung.ROTATE:
+            out += [method_id(rung, {"angle": a}) for a in cfg.angles]
         elif rung is Rung.PIPELINE:
-            out += [method_id(rung, {"steps": "+".join(s.value for s in p)}) for p in cfg.pipelines]
+            out += [method_id(rung, {"steps": "+".join(str(s) for s in p)}) for p in cfg.pipelines]
         else:
             out.append(rung.value)
     return tuple(out)
@@ -605,8 +609,11 @@ def pipeline_vs_parts(
     for name, s in stats.items():
         if not name.startswith(prefix):
             continue
+        # 帶參數的步驟（multiscale:0.5）對應的單一方法代碼為 multiscale@0.5
         parts = [
-            p for p in name[len(prefix) :].split("+") if p in stats and stats[p]["rate"] is not None
+            p
+            for p in (s.replace(":", "@", 1) for s in name[len(prefix) :].split("+"))
+            if p in stats and stats[p]["rate"] is not None
         ]
         best = max(parts, key=lambda p: stats[p]["rate"], default="")
         out.append(

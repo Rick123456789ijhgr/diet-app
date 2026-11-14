@@ -10,6 +10,7 @@ export const RUNG_ORDER = [
   'sharpen',
   'denoise',
   'deskew',
+  'rotate',
   'multiscale',
   'pipeline',
 ]

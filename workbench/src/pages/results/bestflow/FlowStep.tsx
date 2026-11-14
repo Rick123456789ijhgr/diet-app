@@ -20,7 +20,7 @@ import {
   type Preset,
   type PresetEntry,
 } from '@/lib/flowPresets'
-import { methodText, rungText } from '@/lib/text'
+import { methodText, stepText } from '@/lib/text'
 
 export function FlowStep({
   entries,
@@ -471,7 +471,7 @@ function PipelinesEditor({
             <div className="flex items-center gap-2">
               <span className="text-muted tabular w-4 text-xs">{i + 1}</span>
               <span className="min-w-0 flex-1">
-                {p.length ? p.map(rungText).join(' → ') : '（尚未選步驟）'}
+                {p.length ? p.map(stepText).join(' → ') : '（尚未選步驟）'}
               </span>
               <button
                 type="button"
@@ -483,14 +483,15 @@ function PipelinesEditor({
               </button>
             </div>
             <div className="flex flex-wrap gap-1 pl-6">
-              {PIPELINE_STEPS.map((s) => {
+              {/* 常用步驟＋這條流程已有的其他步驟（例如匯入的 multiscale:0.75） */}
+              {[...new Set<string>([...PIPELINE_STEPS, ...p])].map((s) => {
                 const on = p.includes(s)
                 return (
                   <button
                     key={s}
                     type="button"
                     aria-pressed={on}
-                    aria-label={`第 ${i + 1} 條：${rungText(s)}`}
+                    aria-label={`第 ${i + 1} 條：${stepText(s)}`}
                     // 點選加到最後，再點一次移除
                     onClick={() => set(i, on ? p.filter((x) => x !== s) : [...p, s])}
                     className={cn(
@@ -500,7 +501,7 @@ function PipelinesEditor({
                         : 'border-card-border text-muted hover:bg-hover',
                     )}
                   >
-                    {rungText(s)}
+                    {stepText(s)}
                     {on && <span className="ml-1 opacity-60">{p.indexOf(s) + 1}</span>}
                   </button>
                 )
