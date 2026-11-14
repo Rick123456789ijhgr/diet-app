@@ -289,3 +289,15 @@ class UndoImageNamesResponse(_message.Message):
     JSON_FIELD_NUMBER: _ClassVar[int]
     json: str
     def __init__(self, json: _Optional[str] = ...) -> None: ...
+
+class ListFoldersRequest(_message.Message):
+    __slots__ = ("path",)
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    path: str
+    def __init__(self, path: _Optional[str] = ...) -> None: ...
+
+class ListFoldersResponse(_message.Message):
+    __slots__ = ("json",)
+    JSON_FIELD_NUMBER: _ClassVar[int]
+    json: str
+    def __init__(self, json: _Optional[str] = ...) -> None: ...

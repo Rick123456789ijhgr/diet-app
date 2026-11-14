@@ -24,7 +24,14 @@ test('通用工具・圖片批次命名：預覽、改名、還原', async ({ pa
     .click()
   await expect(page).toHaveURL(/\/tools\/naming$/)
 
-  await page.getByLabel('資料夾', { exact: true }).fill(dir)
+  // 「瀏覽…」從上一層開始，點進暫存資料夾後選擇（真的由 Python 列出本機資料夾）
+  await page.getByLabel('資料夾', { exact: true }).fill(path.dirname(dir))
+  await page.getByRole('button', { name: '瀏覽…' }).click()
+  const picker = page.getByRole('dialog', { name: '選擇資料夾' })
+  await picker.getByRole('button', { name: path.basename(dir) }).click()
+  await expect(picker.getByText('這個資料夾有 2 張影像')).toBeVisible()
+  await picker.getByRole('button', { name: '選擇這個資料夾' }).click()
+  await expect(page.getByLabel('資料夾', { exact: true })).toHaveValue(dir)
   await page.getByRole('radio', { name: /其他物品/ }).click()
   await page.getByRole('button', { name: '預覽' }).click()
   const table = page.getByRole('table', { name: '改名預覽' })

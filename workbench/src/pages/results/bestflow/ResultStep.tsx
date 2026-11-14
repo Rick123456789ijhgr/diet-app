@@ -18,6 +18,7 @@ import {
 import { useState, type ReactNode } from 'react'
 
 import { api, ApiError, artifactUrl, unwrap } from '@/api/client'
+import { FolderPicker } from '@/components/FolderPicker'
 import { BarList } from '@/components/charts'
 import { CodeBlock } from '@/components/ConfigIO'
 import { EmptyState, Section } from '@/components/layout/Workspace'
@@ -388,19 +389,22 @@ function RenameDialog({ data }: { data: Run }) {
           </li>
         </ul>
         {uploaded ? (
-          <label className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             <span className="font-semibold">照片所在的資料夾</span>
-            <input
-              aria-label="照片所在的資料夾"
-              value={folder}
-              onChange={(e) => setFolder(e.target.value)}
-              placeholder="D:\photos\barcodes"
-              className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-9 rounded-xl border px-3 focus-visible:outline-none"
-            />
+            <div className="flex gap-2">
+              <input
+                aria-label="照片所在的資料夾"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                placeholder="D:\photos\barcodes"
+                className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-9 min-w-0 flex-1 rounded-xl border px-3 focus-visible:outline-none"
+              />
+              <FolderPicker value={folder} onPick={setFolder} size="md" />
+            </div>
             <span className="text-muted text-xs">
               這次的圖片是上傳的，工具以檔名在這個資料夾裡找到原始照片。
             </span>
-          </label>
+          </div>
         ) : (
           <p className="text-muted text-xs">
             這次的圖片來自資料夾 <span className="readout break-all">{data.meta.source}</span>

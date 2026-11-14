@@ -36,6 +36,7 @@ const (
 	WorkbenchService_PreviewImageNames_FullMethodName = "/dietai.v1.WorkbenchService/PreviewImageNames"
 	WorkbenchService_ApplyImageNames_FullMethodName   = "/dietai.v1.WorkbenchService/ApplyImageNames"
 	WorkbenchService_UndoImageNames_FullMethodName    = "/dietai.v1.WorkbenchService/UndoImageNames"
+	WorkbenchService_ListFolders_FullMethodName       = "/dietai.v1.WorkbenchService/ListFolders"
 )
 
 // WorkbenchServiceClient is the client API for WorkbenchService service.
@@ -75,6 +76,8 @@ type WorkbenchServiceClient interface {
 	ApplyImageNames(ctx context.Context, in *ApplyImageNamesRequest, opts ...grpc.CallOption) (*ApplyImageNamesResponse, error)
 	// 圖片批次命名：依 _rename_log.csv 還原全部改名
 	UndoImageNames(ctx context.Context, in *UndoImageNamesRequest, opts ...grpc.CallOption) (*UndoImageNamesResponse, error)
+	// 資料夾瀏覽：列出子資料夾與影像張數（給工作台的「瀏覽…」彈窗）
+	ListFolders(ctx context.Context, in *ListFoldersRequest, opts ...grpc.CallOption) (*ListFoldersResponse, error)
 }
 
 type workbenchServiceClient struct {
@@ -282,6 +285,16 @@ func (c *workbenchServiceClient) UndoImageNames(ctx context.Context, in *UndoIma
 	return out, nil
 }
 
+func (c *workbenchServiceClient) ListFolders(ctx context.Context, in *ListFoldersRequest, opts ...grpc.CallOption) (*ListFoldersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListFoldersResponse)
+	err := c.cc.Invoke(ctx, WorkbenchService_ListFolders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WorkbenchServiceServer is the server API for WorkbenchService service.
 // All implementations must embed UnimplementedWorkbenchServiceServer
 // for forward compatibility.
@@ -319,6 +332,8 @@ type WorkbenchServiceServer interface {
 	ApplyImageNames(context.Context, *ApplyImageNamesRequest) (*ApplyImageNamesResponse, error)
 	// 圖片批次命名：依 _rename_log.csv 還原全部改名
 	UndoImageNames(context.Context, *UndoImageNamesRequest) (*UndoImageNamesResponse, error)
+	// 資料夾瀏覽：列出子資料夾與影像張數（給工作台的「瀏覽…」彈窗）
+	ListFolders(context.Context, *ListFoldersRequest) (*ListFoldersResponse, error)
 	mustEmbedUnimplementedWorkbenchServiceServer()
 }
 
@@ -379,6 +394,9 @@ func (UnimplementedWorkbenchServiceServer) ApplyImageNames(context.Context, *App
 }
 func (UnimplementedWorkbenchServiceServer) UndoImageNames(context.Context, *UndoImageNamesRequest) (*UndoImageNamesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UndoImageNames not implemented")
+}
+func (UnimplementedWorkbenchServiceServer) ListFolders(context.Context, *ListFoldersRequest) (*ListFoldersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListFolders not implemented")
 }
 func (UnimplementedWorkbenchServiceServer) mustEmbedUnimplementedWorkbenchServiceServer() {}
 func (UnimplementedWorkbenchServiceServer) testEmbeddedByValue()                          {}
@@ -686,6 +704,24 @@ func _WorkbenchService_UndoImageNames_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WorkbenchService_ListFolders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListFoldersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkbenchServiceServer).ListFolders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkbenchService_ListFolders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkbenchServiceServer).ListFolders(ctx, req.(*ListFoldersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WorkbenchService_ServiceDesc is the grpc.ServiceDesc for WorkbenchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -748,6 +784,10 @@ var WorkbenchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UndoImageNames",
 			Handler:    _WorkbenchService_UndoImageNames_Handler,
+		},
+		{
+			MethodName: "ListFolders",
+			Handler:    _WorkbenchService_ListFolders_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

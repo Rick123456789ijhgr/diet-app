@@ -571,6 +571,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workbench/v1/dev/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 資料夾瀏覽：列出子資料夾與影像張數（給「瀏覽…」彈窗選路徑）
+         * @description 瀏覽器拿不到使用者選的資料夾的完整路徑，因此由伺服器列出本機的資料夾。
+         *     path 省略時從起點開始（Windows 為各磁碟機）。只列資料夾名稱與直接位於其中的影像張數，不讀檔案內容；
+         *     test split 的資料夾標為 locked，要進入時回 SPLIT_LOCKED。
+         */
+        get: operations["listFolders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2141,6 +2163,36 @@ export interface operations {
         };
         responses: {
             /** @description 還原數（restored）與無法還原的說明（problems） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeJson"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["SplitLocked"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listFolders: {
+        parameters: {
+            query?: {
+                /** @description 要列出的資料夾（絕對路徑，或相對於 Python 服務的工作目錄）；省略＝起點 */
+                path?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description {path, parent, folders: [{name, path, images, locked}], images, truncated}（結構由 Python 定義）；
+             *     parent 為空字串＝回到起點、null＝已在起點
+             */
             200: {
                 headers: {
                     [name: string]: unknown;

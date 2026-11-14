@@ -3,6 +3,7 @@
 import { FileImage, FolderOpen, ImagePlus, Tag, Upload, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 
+import { FolderPicker } from '@/components/FolderPicker'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
@@ -235,16 +236,19 @@ function FolderArea({
 }) {
   return (
     <div className="bg-sunken max-w-xl space-y-3 rounded-[20px] p-5">
-      <label className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
         <span className="text-[13px] font-semibold">資料夾路徑（執行工作台的這台電腦）</span>
-        <input
-          aria-label="圖片資料夾"
-          value={folder}
-          onChange={(e) => setFolder(e.target.value)}
-          placeholder="D:\photos\barcodes"
-          className="border-card-border bg-card focus-visible:border-primary readout h-9 rounded-xl border px-3 text-[13px] focus-visible:outline-none"
-        />
-      </label>
+        <div className="flex gap-2">
+          <input
+            aria-label="圖片資料夾"
+            value={folder}
+            onChange={(e) => setFolder(e.target.value)}
+            placeholder="D:\photos\barcodes"
+            className="border-card-border bg-card focus-visible:border-primary readout h-9 min-w-0 flex-1 rounded-xl border px-3 text-[13px] focus-visible:outline-none"
+          />
+          <FolderPicker value={folder} onPick={setFolder} size="md" />
+        </div>
+      </div>
       <label className="flex items-center gap-2 text-xs">
         <input
           type="checkbox"

@@ -1888,6 +1888,96 @@ func (x *UndoImageNamesResponse) GetJson() string {
 	return ""
 }
 
+// path 空字串＝起點（Windows 為各磁碟機）
+type ListFoldersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFoldersRequest) Reset() {
+	*x = ListFoldersRequest{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFoldersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFoldersRequest) ProtoMessage() {}
+
+func (x *ListFoldersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFoldersRequest.ProtoReflect.Descriptor instead.
+func (*ListFoldersRequest) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ListFoldersRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+// json：{path, parent, folders: [{name, path, images, locked}], images, truncated}
+type ListFoldersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Json          string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFoldersResponse) Reset() {
+	*x = ListFoldersResponse{}
+	mi := &file_dietai_v1_workbench_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFoldersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFoldersResponse) ProtoMessage() {}
+
+func (x *ListFoldersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dietai_v1_workbench_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFoldersResponse.ProtoReflect.Descriptor instead.
+func (*ListFoldersResponse) Descriptor() ([]byte, []int) {
+	return file_dietai_v1_workbench_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ListFoldersResponse) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
 var File_dietai_v1_workbench_proto protoreflect.FileDescriptor
 
 const file_dietai_v1_workbench_proto_rawDesc = "" +
@@ -2004,8 +2094,11 @@ const file_dietai_v1_workbench_proto_rawDesc = "" +
 	"\x15UndoImageNamesRequest\x12\x16\n" +
 	"\x06folder\x18\x01 \x01(\tR\x06folder\",\n" +
 	"\x16UndoImageNamesResponse\x12\x12\n" +
-	"\x04json\x18\x01 \x01(\tR\x04json2\xde\n" +
-	"\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\"(\n" +
+	"\x12ListFoldersRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\")\n" +
+	"\x13ListFoldersResponse\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json2\xac\v\n" +
 	"\x10WorkbenchService\x12[\n" +
 	"\x10GetConfigSchemas\x12\".dietai.v1.GetConfigSchemasRequest\x1a#.dietai.v1.GetConfigSchemasResponse\x12C\n" +
 	"\bPutImage\x12\x1a.dietai.v1.PutImageRequest\x1a\x1b.dietai.v1.PutImageResponse\x12I\n" +
@@ -2027,7 +2120,8 @@ const file_dietai_v1_workbench_proto_rawDesc = "" +
 	"\x10SetBestFlowTruth\x12\".dietai.v1.SetBestFlowTruthRequest\x1a#.dietai.v1.SetBestFlowTruthResponse\x12^\n" +
 	"\x11PreviewImageNames\x12#.dietai.v1.PreviewImageNamesRequest\x1a$.dietai.v1.PreviewImageNamesResponse\x12X\n" +
 	"\x0fApplyImageNames\x12!.dietai.v1.ApplyImageNamesRequest\x1a\".dietai.v1.ApplyImageNamesResponse\x12U\n" +
-	"\x0eUndoImageNames\x12 .dietai.v1.UndoImageNamesRequest\x1a!.dietai.v1.UndoImageNamesResponseB?Z=github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1b\x06proto3"
+	"\x0eUndoImageNames\x12 .dietai.v1.UndoImageNamesRequest\x1a!.dietai.v1.UndoImageNamesResponse\x12L\n" +
+	"\vListFolders\x12\x1d.dietai.v1.ListFoldersRequest\x1a\x1e.dietai.v1.ListFoldersResponseB?Z=github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1b\x06proto3"
 
 var (
 	file_dietai_v1_workbench_proto_rawDescOnce sync.Once
@@ -2041,7 +2135,7 @@ func file_dietai_v1_workbench_proto_rawDescGZIP() []byte {
 	return file_dietai_v1_workbench_proto_rawDescData
 }
 
-var file_dietai_v1_workbench_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_dietai_v1_workbench_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_dietai_v1_workbench_proto_goTypes = []any{
 	(*ImageRef)(nil),                  // 0: dietai.v1.ImageRef
 	(*GetConfigSchemasRequest)(nil),   // 1: dietai.v1.GetConfigSchemasRequest
@@ -2079,6 +2173,8 @@ var file_dietai_v1_workbench_proto_goTypes = []any{
 	(*ApplyImageNamesResponse)(nil),   // 33: dietai.v1.ApplyImageNamesResponse
 	(*UndoImageNamesRequest)(nil),     // 34: dietai.v1.UndoImageNamesRequest
 	(*UndoImageNamesResponse)(nil),    // 35: dietai.v1.UndoImageNamesResponse
+	(*ListFoldersRequest)(nil),        // 36: dietai.v1.ListFoldersRequest
+	(*ListFoldersResponse)(nil),       // 37: dietai.v1.ListFoldersResponse
 }
 var file_dietai_v1_workbench_proto_depIdxs = []int32{
 	0,  // 0: dietai.v1.PutImageResponse.image:type_name -> dietai.v1.ImageRef
@@ -2104,25 +2200,27 @@ var file_dietai_v1_workbench_proto_depIdxs = []int32{
 	30, // 20: dietai.v1.WorkbenchService.PreviewImageNames:input_type -> dietai.v1.PreviewImageNamesRequest
 	32, // 21: dietai.v1.WorkbenchService.ApplyImageNames:input_type -> dietai.v1.ApplyImageNamesRequest
 	34, // 22: dietai.v1.WorkbenchService.UndoImageNames:input_type -> dietai.v1.UndoImageNamesRequest
-	2,  // 23: dietai.v1.WorkbenchService.GetConfigSchemas:output_type -> dietai.v1.GetConfigSchemasResponse
-	4,  // 24: dietai.v1.WorkbenchService.PutImage:output_type -> dietai.v1.PutImageResponse
-	6,  // 25: dietai.v1.WorkbenchService.Synthesize:output_type -> dietai.v1.SynthesizeResponse
-	8,  // 26: dietai.v1.WorkbenchService.Degrade:output_type -> dietai.v1.DegradeResponse
-	10, // 27: dietai.v1.WorkbenchService.RenderView:output_type -> dietai.v1.RenderViewResponse
-	12, // 28: dietai.v1.WorkbenchService.GetArtifact:output_type -> dietai.v1.GetArtifactResponse
-	14, // 29: dietai.v1.WorkbenchService.Sweep:output_type -> dietai.v1.SweepResponse
-	16, // 30: dietai.v1.WorkbenchService.RunBatch:output_type -> dietai.v1.RunBatchResponse
-	18, // 31: dietai.v1.WorkbenchService.ListE1Runs:output_type -> dietai.v1.ListE1RunsResponse
-	20, // 32: dietai.v1.WorkbenchService.GetE1Run:output_type -> dietai.v1.GetE1RunResponse
-	22, // 33: dietai.v1.WorkbenchService.StartE1Run:output_type -> dietai.v1.StartE1RunResponse
-	24, // 34: dietai.v1.WorkbenchService.StartBestFlowRun:output_type -> dietai.v1.StartBestFlowRunResponse
-	26, // 35: dietai.v1.WorkbenchService.GetBestFlowRun:output_type -> dietai.v1.GetBestFlowRunResponse
-	28, // 36: dietai.v1.WorkbenchService.SetBestFlowTruth:output_type -> dietai.v1.SetBestFlowTruthResponse
-	31, // 37: dietai.v1.WorkbenchService.PreviewImageNames:output_type -> dietai.v1.PreviewImageNamesResponse
-	33, // 38: dietai.v1.WorkbenchService.ApplyImageNames:output_type -> dietai.v1.ApplyImageNamesResponse
-	35, // 39: dietai.v1.WorkbenchService.UndoImageNames:output_type -> dietai.v1.UndoImageNamesResponse
-	23, // [23:40] is the sub-list for method output_type
-	6,  // [6:23] is the sub-list for method input_type
+	36, // 23: dietai.v1.WorkbenchService.ListFolders:input_type -> dietai.v1.ListFoldersRequest
+	2,  // 24: dietai.v1.WorkbenchService.GetConfigSchemas:output_type -> dietai.v1.GetConfigSchemasResponse
+	4,  // 25: dietai.v1.WorkbenchService.PutImage:output_type -> dietai.v1.PutImageResponse
+	6,  // 26: dietai.v1.WorkbenchService.Synthesize:output_type -> dietai.v1.SynthesizeResponse
+	8,  // 27: dietai.v1.WorkbenchService.Degrade:output_type -> dietai.v1.DegradeResponse
+	10, // 28: dietai.v1.WorkbenchService.RenderView:output_type -> dietai.v1.RenderViewResponse
+	12, // 29: dietai.v1.WorkbenchService.GetArtifact:output_type -> dietai.v1.GetArtifactResponse
+	14, // 30: dietai.v1.WorkbenchService.Sweep:output_type -> dietai.v1.SweepResponse
+	16, // 31: dietai.v1.WorkbenchService.RunBatch:output_type -> dietai.v1.RunBatchResponse
+	18, // 32: dietai.v1.WorkbenchService.ListE1Runs:output_type -> dietai.v1.ListE1RunsResponse
+	20, // 33: dietai.v1.WorkbenchService.GetE1Run:output_type -> dietai.v1.GetE1RunResponse
+	22, // 34: dietai.v1.WorkbenchService.StartE1Run:output_type -> dietai.v1.StartE1RunResponse
+	24, // 35: dietai.v1.WorkbenchService.StartBestFlowRun:output_type -> dietai.v1.StartBestFlowRunResponse
+	26, // 36: dietai.v1.WorkbenchService.GetBestFlowRun:output_type -> dietai.v1.GetBestFlowRunResponse
+	28, // 37: dietai.v1.WorkbenchService.SetBestFlowTruth:output_type -> dietai.v1.SetBestFlowTruthResponse
+	31, // 38: dietai.v1.WorkbenchService.PreviewImageNames:output_type -> dietai.v1.PreviewImageNamesResponse
+	33, // 39: dietai.v1.WorkbenchService.ApplyImageNames:output_type -> dietai.v1.ApplyImageNamesResponse
+	35, // 40: dietai.v1.WorkbenchService.UndoImageNames:output_type -> dietai.v1.UndoImageNamesResponse
+	37, // 41: dietai.v1.WorkbenchService.ListFolders:output_type -> dietai.v1.ListFoldersResponse
+	24, // [24:42] is the sub-list for method output_type
+	6,  // [6:24] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -2139,7 +2237,7 @@ func file_dietai_v1_workbench_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_dietai_v1_workbench_proto_rawDesc), len(file_dietai_v1_workbench_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   36,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

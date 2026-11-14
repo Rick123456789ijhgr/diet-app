@@ -22,7 +22,7 @@ from typing import Any
 
 import grpc
 
-from dietai.devtools import batch, best_flow, degradations, e1, image_naming, sweep
+from dietai.devtools import batch, best_flow, degradations, e1, folders, image_naming, sweep
 from dietai.devtools.configs import config_from_override
 from dietai.devtools.degradations import Degradation
 from dietai.devtools.images import decode_image, load_image
@@ -351,6 +351,14 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
             raise SceneError("缺少資料夾", "folder")
         out = image_naming.undo_json(request.folder)
         return workbench_pb2.UndoImageNamesResponse(json=convert.dumps(out))
+
+    @unary
+    def ListFolders(
+        self, request: workbench_pb2.ListFoldersRequest
+    ) -> workbench_pb2.ListFoldersResponse:
+        """資料夾瀏覽：子資料夾與影像張數（見 ``folders.list_folders_json``）。"""
+        out = folders.list_folders_json(request.path)
+        return workbench_pb2.ListFoldersResponse(json=convert.dumps(out))
 
     def _best_flow_thumb(self, path: str) -> str:
         """找最佳流程真值表的縮圖：依原檔路徑快取在暫存區，同一張只讀檔一次。"""

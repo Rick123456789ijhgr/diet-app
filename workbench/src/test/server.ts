@@ -309,6 +309,44 @@ const json = async (request: Request) => {
   return body as Record<string, unknown>
 }
 
+// ── 資料夾瀏覽的假資料夾樹（Windows 路徑）──
+const dir = (name: string, path: string, images: number | null = 0, locked = false) => ({
+  name,
+  path,
+  images,
+  locked,
+})
+const FOLDER_TREE: Record<string, unknown> = {
+  '': {
+    path: '',
+    parent: null,
+    folders: [dir('C:\\', 'C:\\', 0), dir('D:\\', 'D:\\', 0)],
+    images: 0,
+    truncated: false,
+  },
+  'D:\\': {
+    path: 'D:\\',
+    parent: '',
+    folders: [dir('photos', 'D:\\photos', 0)],
+    images: 0,
+    truncated: false,
+  },
+  'D:\\photos': {
+    path: 'D:\\photos',
+    parent: 'D:\\',
+    folders: [dir('food', 'D:\\photos\\food', 12), dir('test', 'D:\\photos\\test', null, true)],
+    images: 0,
+    truncated: false,
+  },
+  'D:\\photos\\food': {
+    path: 'D:\\photos\\food',
+    parent: 'D:\\photos',
+    folders: [],
+    images: 12,
+    truncated: false,
+  },
+}
+
 // ── 圖片批次命名的假資料夾 ──
 interface NamingBody {
   folder: string
@@ -928,6 +966,19 @@ export const handlers = [
       else bestFlowTruths[id] = v
     }
     return HttpResponse.json(bestFlowRun(bestFlowTruths))
+  }),
+  // 資料夾瀏覽：假的本機資料夾樹（FOLDER_TREE）；找不到的路徑回 404
+  http.get('*/workbench/v1/dev/folders', ({ request }) => {
+    const path = new URL(request.url).searchParams.get('path') ?? ''
+    requests.push({ path: new URL(request.url).pathname, body: path })
+    const node = FOLDER_TREE[path]
+    if (!node) {
+      return HttpResponse.json(
+        { code: 'PATH_NOT_FOUND', message: `找不到資料夾：${path}` },
+        { status: 404 },
+      )
+    }
+    return HttpResponse.json(node)
   }),
   // 圖片批次命名：一個假資料夾（兩張條碼檔名、一張看不出條碼），改名後狀態變成「不變」
   http.post('*/workbench/v1/dev/image-naming/preview', async ({ request }) =>
