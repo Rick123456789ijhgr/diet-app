@@ -38,10 +38,23 @@ export const STORAGE_KEY = 'wb.bestflow.presets'
 export const EMPTY: StoredPresets = { edits: {}, custom: [] }
 
 /**
- * 疊加流程可用的步驟；與 Python 的 preprocess.config.PIPELINE_STEPS 相同（後端會再驗證，
- * 不合法時回 400 並指出欄位 arm）。
+ * 疊加流程可選的步驟代碼；與 Python 的 preprocess.config.PIPELINE_STEPS 對應，縮放與旋轉帶參數
+ * （multiscale:0.5、rotate:90，見 parse_pipeline_step），這裡列出常用的值。後端會再驗證，
+ * 不合法時回 400 並指出欄位 arm。
  */
-export const PIPELINE_STEPS = ['binarize', 'otsu', 'clahe', 'sharpen', 'denoise', 'deskew'] as const
+export const PIPELINE_STEPS = [
+  'multiscale:0.5',
+  'multiscale:0.25',
+  'rotate:90',
+  'rotate:45',
+  'rotate:-45',
+  'binarize',
+  'otsu',
+  'clahe',
+  'sharpen',
+  'denoise',
+  'deskew',
+] as const
 
 /** 讀取瀏覽器中的方案；沒有、格式不對或無法存取 localStorage 時回傳空的。 */
 export function loadStored(): StoredPresets {
@@ -136,9 +149,11 @@ export function armOf(preset: Preset): ArmConfig {
 export function methodsOf(ladder: Record<string, unknown>): string[] {
   const rungs = (ladder.rungs as string[] | undefined) ?? []
   const scales = (ladder.scales as number[] | undefined) ?? []
+  const angles = (ladder.angles as number[] | undefined) ?? []
   const pipelines = (ladder.pipelines as string[][] | undefined) ?? []
   return rungs.flatMap((r) => {
     if (r === 'multiscale') return scales.map((s) => `multiscale@${s}`)
+    if (r === 'rotate') return angles.map((a) => `rotate@${a}`)
     if (r === 'pipeline') return pipelines.map((p) => `pipeline@${p.join('+')}`)
     return [r]
   })
@@ -155,6 +170,8 @@ export function presetProblems(preset: Preset): string[] {
   if (rungs.length === 0) out.push('至少要有一個方法')
   if (rungs.includes('multiscale') && ((ladder.scales as number[] | undefined) ?? []).length === 0)
     out.push('多尺度至少要有一個倍率')
+  if (rungs.includes('rotate') && ((ladder.angles as number[] | undefined) ?? []).length === 0)
+    out.push('旋轉至少要有一個角度')
   if (rungs.includes('pipeline')) {
     const pipelines = (ladder.pipelines as string[][] | undefined) ?? []
     if (pipelines.length === 0) out.push('疊加流程至少要有一條')

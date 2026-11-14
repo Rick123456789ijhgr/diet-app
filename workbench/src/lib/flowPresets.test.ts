@@ -48,6 +48,21 @@ describe('flowPresets', () => {
     ])
   })
 
+  it('methodsOf 展開旋轉角度；沒有角度時不能執行', () => {
+    const rot = preset('rot', ['rotate', 'pipeline'], {
+      angles: [90, -45],
+      pipelines: [['multiscale:0.5', 'rotate:90']],
+    })
+    expect(methodsOf(rot.arm.ladder)).toEqual([
+      'rotate@90',
+      'rotate@-45',
+      'pipeline@multiscale:0.5+rotate:90',
+    ])
+    expect(presetProblems(preset('x', ['rotate'], { angles: [] }))).toEqual([
+      '旋轉至少要有一個角度',
+    ])
+  })
+
   it('修改內建方案：標示已修改；改回原樣或還原時移除修改', () => {
     const edited = { ...RAW, arm: { ...RAW.arm, ladder: { ...RAW.arm.ladder, rungs: ['gray'] } } }
     let stored = savePreset(EMPTY, BUILTINS, edited)

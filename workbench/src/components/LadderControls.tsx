@@ -9,6 +9,8 @@ import { rungText } from '@/lib/text'
 
 // 多尺度倍率的候選值；目前設定中若有不在此列的倍率（例如匯入的設定），會另外併入選項顯示
 const SCALE_OPTIONS = [0.25, 0.5, 0.75, 1.5, 2, 3, 4]
+// 旋轉角度（逆時針、度）的候選值；同上，不在此列的會併入顯示
+const ANGLE_OPTIONS = [90, -90, 45, -45, 30, -30, 180]
 
 /**
  * 條碼逐步升級（ladder）的序列欄位編輯器。這些欄位是陣列、不是單一數值，
@@ -37,7 +39,7 @@ export function LadderControls({
   formats: string[]
   /** 電子發票模式不受格式限制，不顯示 */
   showFormats: boolean
-  /** 不顯示「還原順序、倍率與格式」（還原目標不是結構預設值時，由呼叫端自己提供還原） */
+  /** 不顯示「還原順序、倍率、角度與格式」（還原目標不是結構預設值時，由呼叫端自己提供還原） */
   hideReset?: boolean
   /** 序列的標題與說明（找最佳流程每個方法都執行，順序不代表嘗試順序） */
   orderTitle?: string
@@ -45,6 +47,7 @@ export function LadderControls({
 }) {
   const rungs = sequenceOf<string>(schema, overrides, 'rungs')
   const scales = sequenceOf<number>(schema, overrides, 'scales')
+  const angles = sequenceOf<number>(schema, overrides, 'angles')
   const formats = sequenceOf<string>(schema, overrides, 'accept_formats')
   const set = (name: string, value: (string | number)[]) =>
     onChange(setSequence(schema, overrides, name, value))
@@ -57,8 +60,8 @@ export function LadderControls({
   }
   // 尚未加入序列的階，顯示為下方的「＋」按鈕
   const unused = allRungs.filter((r) => !rungs.includes(r))
-  // 本元件負責的三個序列欄位；有任一出現在覆寫中即視為「已修改」
-  const SEQUENCES = ['rungs', 'scales', 'accept_formats']
+  // 本元件負責的序列欄位；有任一出現在覆寫中即視為「已修改」
+  const SEQUENCES = ['rungs', 'scales', 'angles', 'accept_formats']
   const changed = SEQUENCES.some((k) => k in overrides)
 
   return (
@@ -66,7 +69,7 @@ export function LadderControls({
       {!hideReset && (
         <div className="flex items-center justify-between">
           <span className="text-muted text-xs">
-            {changed ? '順序、倍率或格式已修改' : '順序、倍率、格式為預設值'}
+            {changed ? '順序、倍率、角度或格式已修改' : '順序、倍率、角度、格式為預設值'}
           </span>
           <Button
             size="sm"
@@ -83,7 +86,7 @@ export function LadderControls({
             }
           >
             <RotateCcw className="size-3.5" aria-hidden />
-            還原順序、倍率與格式
+            還原順序、倍率、角度與格式
           </Button>
         </div>
       )}
@@ -157,6 +160,25 @@ export function LadderControls({
           }
         />
       </fieldset>
+
+      {rungs.includes('rotate') && (
+        <fieldset>
+          <legend className="text-ink mb-1.5 text-xs font-semibold">旋轉角度</legend>
+          <p className="text-muted mb-2 text-xs">
+            旋轉階依點選順序嘗試的角度（逆時針）；90° 把直放的條碼轉成橫的。
+          </p>
+          <Chips
+            options={[...new Set([...ANGLE_OPTIONS, ...angles])]}
+            selected={angles}
+            format={(v) => `${v}°`}
+            ordered
+            minSelected={1}
+            onToggle={(v) =>
+              set('angles', angles.includes(v) ? angles.filter((x) => x !== v) : [...angles, v])
+            }
+          />
+        </fieldset>
+      )}
 
       {showFormats && (
         <fieldset>
