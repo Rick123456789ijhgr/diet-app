@@ -39,6 +39,8 @@ service WorkbenchService {
   rpc ApplyImageNames(ApplyImageNamesRequest) returns (ApplyImageNamesResponse);
   // 圖片批次命名：依 _rename_log.csv 還原全部改名
   rpc UndoImageNames(UndoImageNamesRequest) returns (UndoImageNamesResponse);
+  // 資料夾瀏覽：列出子資料夾與影像張數（給工作台的「瀏覽…」彈窗）
+  rpc ListFolders(ListFoldersRequest) returns (ListFoldersResponse);
 }
 
 // 暫存影像。image_id 與診斷影像的 ID 共用同一個空間，皆可由 GetArtifact 取得
@@ -237,5 +239,15 @@ message UndoImageNamesRequest {
 
 // json：還原數（restored）與無法還原的說明（problems）
 message UndoImageNamesResponse {
+  string json = 1;
+}
+
+// path 空字串＝起點（Windows 為各磁碟機）
+message ListFoldersRequest {
+  string path = 1;
+}
+
+// json：{path, parent, folders: [{name, path, images, locked}], images, truncated}
+message ListFoldersResponse {
   string json = 1;
 }

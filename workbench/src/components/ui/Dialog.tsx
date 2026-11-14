@@ -20,6 +20,7 @@ export function Dialog({
   children,
   footer,
   className,
+  onEscapeKeyDown,
 }: {
   trigger?: ReactNode
   open?: boolean
@@ -29,6 +30,8 @@ export function Dialog({
   children: ReactNode
   footer?: ReactNode
   className?: string
+  /** 按 Esc 時（彈窗關閉前）呼叫；preventDefault 可讓彈窗不關閉，例如正在編輯的輸入框要先處理 Esc */
+  onEscapeKeyDown?: (e: KeyboardEvent) => void
 }) {
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -41,6 +44,7 @@ export function Dialog({
               'wb-dialog bg-card text-ink flex max-h-[min(720px,calc(100vh-2rem))] w-full max-w-md flex-col rounded-[20px] shadow-xl focus:outline-none',
               className,
             )}
+            onEscapeKeyDown={onEscapeKeyDown}
             // 沒有說明時不要讓 Radix 警告找不到 aria-describedby
             {...(description ? {} : { 'aria-describedby': undefined })}
           >

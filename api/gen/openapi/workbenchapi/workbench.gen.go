@@ -954,6 +954,12 @@ type GetE1RunParams struct {
 	Root *E1Root `form:"root,omitempty" json:"root,omitempty"`
 }
 
+// ListFoldersParams defines parameters for ListFolders.
+type ListFoldersParams struct {
+	// Path 要列出的資料夾（絕對路徑，或相對於 Python 服務的工作目錄）；省略＝起點
+	Path *string `form:"path,omitempty" json:"path,omitempty"`
+}
+
 // PutImageMultipartBody defines parameters for PutImage.
 type PutImageMultipartBody struct {
 	// File JPEG／PNG 等影像檔
@@ -1162,6 +1168,9 @@ type ServerInterface interface {
 	// GetE1Run 取得一次 E1 執行的結果
 	// (GET /workbench/v1/dev/e1/runs/{run_id})
 	GetE1Run(w http.ResponseWriter, r *http.Request, runId string, params GetE1RunParams)
+	// ListFolders 資料夾瀏覽：列出子資料夾與影像張數（給「瀏覽…」彈窗選路徑）
+	// (GET /workbench/v1/dev/folders)
+	ListFolders(w http.ResponseWriter, r *http.Request, params ListFoldersParams)
 	// PreprocessFood 食物照片前處理（VLM 輸入、切菜、盤緣）
 	// (POST /workbench/v1/dev/food)
 	PreprocessFood(w http.ResponseWriter, r *http.Request)
@@ -1930,6 +1939,39 @@ func (siw *ServerInterfaceWrapper) GetE1Run(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// ListFolders operation middleware
+func (siw *ServerInterfaceWrapper) ListFolders(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFoldersParams
+
+	// ------------- Optional query parameter "path" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "path", r.URL.Query(), &params.Path, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "path"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "path", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFolders(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PreprocessFood operation middleware
 func (siw *ServerInterfaceWrapper) PreprocessFood(w http.ResponseWriter, r *http.Request) {
 
@@ -2265,6 +2307,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/image-naming/preview", wrapper.PreviewImageNames)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/image-naming/apply", wrapper.ApplyImageNames)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workbench/v1/dev/image-naming/undo", wrapper.UndoImageNames)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workbench/v1/dev/folders", wrapper.ListFolders)
 
 	return m
 }
@@ -4066,6 +4109,84 @@ func (response GetE1Run503JSONResponse) VisitGetE1RunResponse(w http.ResponseWri
 	return err
 }
 
+type ListFoldersRequestObject struct {
+	Params ListFoldersParams
+}
+
+type ListFoldersResponseObject interface {
+	VisitListFoldersResponse(w http.ResponseWriter) error
+}
+
+type ListFolders200JSONResponse FreeJson
+
+func (response ListFolders200JSONResponse) VisitListFoldersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFolders400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListFolders400JSONResponse) VisitListFoldersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFolders403JSONResponse struct{ SplitLockedJSONResponse }
+
+func (response ListFolders403JSONResponse) VisitListFoldersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFolders404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListFolders404JSONResponse) VisitListFoldersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListFolders503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ListFolders503JSONResponse) VisitListFoldersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PreprocessFoodRequestObject struct {
 	Body *PreprocessFoodJSONRequestBody
 }
@@ -4962,6 +5083,9 @@ type StrictServerInterface interface {
 	// GetE1Run 取得一次 E1 執行的結果
 	// (GET /workbench/v1/dev/e1/runs/{run_id})
 	GetE1Run(ctx context.Context, request GetE1RunRequestObject) (GetE1RunResponseObject, error)
+	// ListFolders 資料夾瀏覽：列出子資料夾與影像張數（給「瀏覽…」彈窗選路徑）
+	// (GET /workbench/v1/dev/folders)
+	ListFolders(ctx context.Context, request ListFoldersRequestObject) (ListFoldersResponseObject, error)
 	// PreprocessFood 食物照片前處理（VLM 輸入、切菜、盤緣）
 	// (POST /workbench/v1/dev/food)
 	PreprocessFood(ctx context.Context, request PreprocessFoodRequestObject) (PreprocessFoodResponseObject, error)
@@ -5688,6 +5812,32 @@ func (sh *strictHandler) GetE1Run(w http.ResponseWriter, r *http.Request, runId 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetE1RunResponseObject); ok {
 		if err := validResponse.VisitGetE1RunResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListFolders operation middleware
+func (sh *strictHandler) ListFolders(w http.ResponseWriter, r *http.Request, params ListFoldersParams) {
+	var request ListFoldersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListFolders(ctx, request.(ListFoldersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListFolders")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListFoldersResponseObject); ok {
+		if err := validResponse.VisitListFoldersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

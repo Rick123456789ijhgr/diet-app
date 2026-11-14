@@ -988,6 +988,39 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /workbench/v1/dev/folders:
+    get:
+      operationId: listFolders
+      summary: 資料夾瀏覽：列出子資料夾與影像張數（給「瀏覽…」彈窗選路徑）
+      description: |
+        瀏覽器拿不到使用者選的資料夾的完整路徑，因此由伺服器列出本機的資料夾。
+        path 省略時從起點開始（Windows 為各磁碟機）。只列資料夾名稱與直接位於其中的影像張數，不讀檔案內容；
+        test split 的資料夾標為 locked，要進入時回 SPLIT_LOCKED。
+      tags: [dev]
+      parameters:
+        - name: path
+          in: query
+          required: false
+          description: 要列出的資料夾（絕對路徑，或相對於 Python 服務的工作目錄）；省略＝起點
+          schema:
+            type: string
+      responses:
+        "200":
+          description: |
+            {path, parent, folders: [{name, path, images, locked}], images, truncated}（結構由 Python 定義）；
+            parent 為空字串＝回到起點、null＝已在起點
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FreeJson"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/SplitLocked"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
 components:
   securitySchemes:
     sessionCookie:

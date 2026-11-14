@@ -17,6 +17,7 @@ import { artifactUrl, overrideBody, type ConfigOverride } from '@/api/client'
 import { BarList, ValueHistogram } from '@/components/charts'
 import { ConfigIO } from '@/components/ConfigIO'
 import { ImageViewer } from '@/components/ImageViewer'
+import { FolderPicker } from '@/components/FolderPicker'
 import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
@@ -192,16 +193,19 @@ export function FolderMode({
             if (folder.trim()) run()
           }}
         >
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className="text-muted text-xs">資料夾（伺服器本機路徑）</span>
-            <input
-              aria-label="資料夾"
-              value={folder}
-              onChange={(e) => setFolder(e.target.value)}
-              placeholder="..\research\data\splits\dev"
-              className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
-            />
-          </label>
+            <div className="flex gap-2">
+              <input
+                aria-label="資料夾"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                placeholder="..\research\data\splits\dev"
+                className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 min-w-0 flex-1 rounded-lg border px-2 text-xs focus-visible:outline-none"
+              />
+              <FolderPicker value={folder} onPick={setFolder} />
+            </div>
+          </div>
           <p className="text-muted text-xs">
             相對於 ai/ 或絕對路徑。splits/test 會被拒絕（測試集鎖定）。
           </p>

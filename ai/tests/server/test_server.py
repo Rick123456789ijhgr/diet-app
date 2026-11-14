@@ -678,3 +678,22 @@ def test_image_naming_preview_apply_undo(wb, tmp_path):
         grpc.StatusCode.NOT_FOUND,
         "PATH_NOT_FOUND",
     )
+
+
+def test_list_folders(wb, tmp_path):
+    (tmp_path / "food").mkdir()
+    (tmp_path / "food" / "a.jpg").write_bytes(b"x")
+    out = json.loads(wb.ListFolders(workbench_pb2.ListFoldersRequest(path=str(tmp_path))).json)
+    assert [(f["name"], f["images"]) for f in out["folders"]] == [("food", 1)]
+    _expect_error(
+        lambda: wb.ListFolders(workbench_pb2.ListFoldersRequest(path=str(tmp_path / "nope"))),
+        grpc.StatusCode.NOT_FOUND,
+        "PATH_NOT_FOUND",
+    )
+    locked = tmp_path / "splits" / "test"
+    locked.mkdir(parents=True)
+    _expect_error(
+        lambda: wb.ListFolders(workbench_pb2.ListFoldersRequest(path=str(locked))),
+        grpc.StatusCode.PERMISSION_DENIED,
+        "SPLIT_LOCKED",
+    )

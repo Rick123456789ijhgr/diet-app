@@ -7,6 +7,7 @@ import { Eye, FolderOpen, PenLine, SlidersHorizontal, TriangleAlert, Undo2 } fro
 import { useState, type ReactNode } from 'react'
 
 import { api, ApiError, unwrap } from '@/api/client'
+import { FolderPicker } from '@/components/FolderPicker'
 import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ErrorBox, Metric, MetricGrid } from '@/components/results'
@@ -140,19 +141,22 @@ export function NamingPage() {
         }}
       >
         <PanelSection title="資料夾">
-          <label className="flex flex-col gap-1 text-sm">
+          <div className="flex flex-col gap-1 text-sm">
             <span className="text-muted text-xs">
               照片所在的資料夾（伺服器本機路徑，不含子資料夾）
             </span>
-            <input
-              aria-label="資料夾"
-              aria-invalid={invalid('folder')}
-              value={folder}
-              onChange={(e) => setFolder(e.target.value)}
-              placeholder="D:\photos\food"
-              className={cn(fieldClass, 'readout')}
-            />
-          </label>
+            <div className="flex gap-2">
+              <input
+                aria-label="資料夾"
+                aria-invalid={invalid('folder')}
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                placeholder="D:\photos\food"
+                className={cn(fieldClass, 'readout min-w-0 flex-1')}
+              />
+              <FolderPicker value={folder} onPick={setFolder} />
+            </div>
+          </div>
           <p className="text-muted mt-2 text-xs">
             檔名要先是條碼（<span className="readout">4710088410108.jpg</span>、
             <span className="readout">沒有條碼_IMG_1.jpg</span>），工具保留條碼、改成規則化檔名。
