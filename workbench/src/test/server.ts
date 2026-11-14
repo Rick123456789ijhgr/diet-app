@@ -230,11 +230,44 @@ export const foodSchema: ConfigClass = {
   ],
 }
 
+/** 找最佳流程的內建方案（同 dietai.devtools.best_flow.presets_json 的形狀）。 */
+export const bestFlowPresets = [
+  {
+    id: 'all_methods',
+    name: '全部方法',
+    description: '每個方法都執行。',
+    arm: {
+      name: 'all_methods',
+      description: '每個方法都執行。',
+      decoder: 'zxing',
+      zxing: { try_rotate: false },
+      ladder: {
+        rungs: ['raw', 'gray', 'binarize', 'multiscale'],
+        scales: [2, 0.5],
+        accept_formats: [],
+        verify_ean13: true,
+      },
+    },
+  },
+  {
+    id: 'raw_only',
+    name: '只用原圖（基準）',
+    description: '只解碼原圖。',
+    arm: {
+      name: 'raw_only',
+      description: '只解碼原圖。',
+      decoder: 'zxing',
+      zxing: { try_rotate: false },
+      ladder: { rungs: ['raw'], scales: [2, 0.5], accept_formats: [], verify_ean13: true },
+    },
+  },
+]
+
 export const schemas: ConfigSchemas = {
   classes: [qualitySchema, degradationSchema, ladderSchema, zxingSchema, labelSchema, foodSchema],
   enums: {
     PreprocessWarning: ['TOO_BLURRY'],
-    Rung: ['raw', 'gray', 'binarize', 'sharpen'],
+    Rung: ['raw', 'gray', 'binarize', 'sharpen', 'pipeline'],
     CodeFormat: ['EAN13', 'EAN8', 'UPCA', 'UPCE', 'OTHER'],
   },
 }
@@ -905,6 +938,9 @@ export const handlers = [
       { type: 'done', name: '20261014-run', path: 'D:/runs/20261014-run' },
     ])
   }),
+  http.get('*/workbench/v1/dev/best-flow/presets', () =>
+    HttpResponse.json({ presets: bestFlowPresets }),
+  ),
   http.post('*/workbench/v1/dev/best-flow/runs', async ({ request }) => {
     const body = (await json(request)) as { folder?: string }
     if (body.folder?.includes('splits/test')) {

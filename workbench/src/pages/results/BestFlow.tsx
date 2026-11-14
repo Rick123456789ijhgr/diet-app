@@ -1,10 +1,11 @@
-// 模組一・找最佳流程（實驗一）：四個步驟，一次只顯示一個步驟的畫面。
-//   1 選擇圖片 → 2 逐張確認真值 → 3 比較方法（每個方法都執行）→ 4 結論（可用 Python 工具把原始照片改名成條碼號碼）
+// 模組一・找最佳流程（實驗一）：五個步驟，一次只顯示一個步驟的畫面。
+//   1 選擇圖片 → 2 逐張確認真值 → 3 處理流程（選方案，可編輯、另存、還原）→ 4 比較方法（方案中的每個方法都執行）
+//   → 5 結論（可用 Python 工具把原始照片改名成條碼號碼）
 // 真值推定、判定、貪婪選擇與統計一律由後端（dietai.evaluation.best_flow 與 methods）計算，前端只顯示。
-// 後端流程不變：先執行（POST /dev/best-flow/runs），執行完再把人工確認的真值一次送出（PUT .../truth）。
+// 後端流程不變：先執行（POST /dev/best-flow/runs，帶所選方案的 arm），執行完再把人工確認的真值一次送出（PUT .../truth）。
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, History, Play, RotateCcw, Square } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useBlocker } from 'react-router'
 
 import { api, unwrap } from '@/api/client'
@@ -16,8 +17,21 @@ import { Badge, Button } from '@/components/ui/primitives'
 import { useStream } from '@/hooks/useStream'
 import { truthsOf, uploadIds } from '@/lib/barcodeTruth'
 import { cn } from '@/lib/cn'
+import {
+  addCustom,
+  armOf,
+  loadStored,
+  mergePresets,
+  presetProblems,
+  removeCustom,
+  restorePreset,
+  savePreset,
+  saveStored,
+  type Preset,
+} from '@/lib/flowPresets'
 import { progressPercent } from '@/lib/number'
 
+import { FlowStep } from './bestflow/FlowStep'
 import { useItems, useUploads, type Item } from './bestflow/items'
 import { PickStep, type Source } from './bestflow/PickStep'
 import { ResultStep } from './bestflow/ResultStep'
@@ -34,6 +48,7 @@ import { RootInput } from './shared'
 const STEPS = [
   { id: 'pick', title: '選擇圖片' },
   { id: 'truth', title: '確認真值' },
+  { id: 'flow', title: '處理流程' },
   { id: 'run', title: '比較方法' },
   { id: 'result', title: '結論' },
 ] as const
@@ -103,6 +118,22 @@ export function BestFlow({
   })
   const runs = list.data?.best_flow_runs ?? []
 
+  // 處理流程方案：內建的由後端提供，修改與自訂的存在瀏覽器
+  const presetQuery = useQuery({
+    queryKey: ['best-flow-presets'],
+    queryFn: ({ signal }) =>
+      unwrap(
+        api.GET('/workbench/v1/dev/best-flow/presets', { signal }),
+      ) as Promise<unknown> as Promise<{ presets: Preset[] }>,
+    staleTime: Infinity,
+  })
+  const builtins = useMemo(() => presetQuery.data?.presets ?? [], [presetQuery.data])
+  const [stored, setStored] = useState(loadStored)
+  useEffect(() => saveStored(stored), [stored])
+  const entries = useMemo(() => mergePresets(builtins, stored), [builtins, stored])
+  const selected = entries.find((e) => e.preset.id === stored.selected) ?? entries[0]
+  const flowReady = selected !== undefined && presetProblems(selected.preset).length === 0
+
   const answered = items.filter((i) => i.answer).length
   const currentKey = answersKey(items)
   const unsavedAnswers = currentKey !== savedKey && currentKey !== NO_ANSWERS
@@ -157,6 +188,7 @@ export function BestFlow({
         items.map((i) => i.answer),
       )
     }
+    if (selected) body = { ...body, arm: armOf(selected.preset), preset_id: selected.preset.id }
     const finished: { name?: string } = {}
     await stream.run(body, (e) => {
       if (e.type === 'done') finished.name = e.name
@@ -195,6 +227,7 @@ export function BestFlow({
     if (busy) return false
     if (s === 'pick') return true
     if (s === 'truth') return source === 'upload' && items.length > 0
+    if (s === 'flow') return source === 'folder' ? folder.trim() !== '' : items.length > 0
     if (s === 'result') return runName !== null
     return false // 比較方法只能按「開始比較」進入
   }
@@ -210,12 +243,14 @@ export function BestFlow({
     if (step !== 'truth') heading.current?.focus()
   }, [step])
 
+  const toFlow = (
+    <Button variant="primary" disabled={!canGo('flow')} onClick={() => goto('flow')}>
+      下一步：選擇處理流程
+      <ArrowRight className="size-4" aria-hidden />
+    </Button>
+  )
   const startButton = (
-    <Button
-      variant="primary"
-      disabled={source === 'folder' ? folder.trim() === '' : items.length === 0}
-      onClick={() => void start()}
-    >
+    <Button variant="primary" disabled={!canGo('flow') || !flowReady} onClick={() => void start()}>
       <Play className="size-4" aria-hidden />
       開始比較
     </Button>
@@ -254,7 +289,7 @@ export function BestFlow({
         )}
         <div className="ml-auto">
           {source === 'folder' ? (
-            startButton
+            toFlow
           ) : (
             <Button variant="primary" disabled={items.length === 0} onClick={() => goto('truth')}>
               下一步：逐張確認真值
@@ -284,6 +319,40 @@ export function BestFlow({
           已確認 <span className="text-ink readout font-semibold">{answered}</span>／{items.length}{' '}
           張{answered < items.length && `；其餘 ${items.length - answered} 張交給程式推定`}
         </p>
+        {toFlow}
+      </>
+    )
+  } else if (step === 'flow') {
+    screen = (
+      <FlowStep
+        entries={entries}
+        selected={selected}
+        loading={presetQuery.isLoading}
+        error={presetQuery.error}
+        onSelect={(id) => setStored((s) => ({ ...s, selected: id }))}
+        onSave={(p) => setStored((s) => savePreset(s, builtins, p))}
+        onRestore={(id) => setStored((s) => restorePreset(s, id))}
+        onDuplicate={(base, name) => {
+          const out = addCustom(stored, base, name)
+          setStored(out.stored)
+          return out.id
+        }}
+        onRemove={(id) => setStored((s) => removeCustom(s, id))}
+      />
+    )
+    footer = (
+      <>
+        <Button variant="ghost" onClick={() => goto(source === 'upload' ? 'truth' : 'pick')}>
+          <ArrowLeft className="size-4" aria-hidden />
+          上一步
+        </Button>
+        <p className="text-muted min-w-0 flex-1 truncate text-center text-xs">
+          {selected && (
+            <>
+              方案：<span className="text-ink font-semibold">{selected.preset.name}</span>
+            </>
+          )}
+        </p>
         {startButton}
       </>
     )
@@ -309,7 +378,7 @@ export function BestFlow({
         停止
       </Button>
     ) : (
-      <Button variant="ghost" onClick={() => goto(source === 'upload' ? 'truth' : 'pick')}>
+      <Button variant="ghost" onClick={() => goto('flow')}>
         <ArrowLeft className="size-4" aria-hidden />
         上一步
       </Button>
@@ -345,7 +414,7 @@ export function BestFlow({
     <div className="flex h-full min-h-0 flex-col pr-3 pb-3">
       <PageHeader
         title="找最佳流程"
-        description="選圖片、逐張確認條碼真值，再比較各種前處理方法，選出讀得最多又不增加誤讀的流程。"
+        description="選圖片、逐張確認條碼真值、選擇要比較的處理流程方案，再選出讀得最多又不增加誤讀的流程。"
         aside={
           <div className="flex items-center gap-2">
             {busy && (
@@ -444,7 +513,7 @@ function RunScreen({
       : phase?.kind === 'truth'
         ? ['寫入你確認的真值', 1, 1]
         : p
-          ? ['每張圖都用全部前處理方法各解碼一次', p.done, p.total]
+          ? ['每張圖都用方案中的每個方法各解碼一次', p.done, p.total]
           : ['準備中', 0, 0]
   if (error) {
     return (

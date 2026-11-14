@@ -24,6 +24,9 @@ export function LadderControls({
   rungs: allRungs,
   formats: allFormats,
   showFormats,
+  hideReset,
+  orderTitle = '嘗試順序',
+  orderHelp = '依序嘗試，第一次成功即停止；最終順序由 E1 實驗決定。',
 }: {
   schema: ConfigClass
   overrides: ConfigOverride
@@ -34,6 +37,11 @@ export function LadderControls({
   formats: string[]
   /** 電子發票模式不受格式限制，不顯示 */
   showFormats: boolean
+  /** 不顯示「還原順序、倍率與格式」（還原目標不是結構預設值時，由呼叫端自己提供還原） */
+  hideReset?: boolean
+  /** 序列的標題與說明（找最佳流程每個方法都執行，順序不代表嘗試順序） */
+  orderTitle?: string
+  orderHelp?: string
 }) {
   const rungs = sequenceOf<string>(schema, overrides, 'rungs')
   const scales = sequenceOf<number>(schema, overrides, 'scales')
@@ -55,31 +63,33 @@ export function LadderControls({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <span className="text-muted text-xs">
-          {changed ? '順序、倍率或格式已修改' : '順序、倍率、格式為預設值'}
-        </span>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={!changed}
-          // 只移除這三個序列欄位（順序、倍率、格式）的覆寫，ParamForm 管理的其他數值參數保持不變；
-          // 按鈕文字與實際行為一致，含採用格式（發票模式不顯示格式，但同樣還原）
-          onClick={() =>
-            onChange(
-              Object.fromEntries(Object.entries(overrides).filter(([k]) => !SEQUENCES.includes(k))),
-            )
-          }
-        >
-          <RotateCcw className="size-3.5" aria-hidden />
-          還原順序、倍率與格式
-        </Button>
-      </div>
+      {!hideReset && (
+        <div className="flex items-center justify-between">
+          <span className="text-muted text-xs">
+            {changed ? '順序、倍率或格式已修改' : '順序、倍率、格式為預設值'}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={!changed}
+            // 只移除這三個序列欄位（順序、倍率、格式）的覆寫，ParamForm 管理的其他數值參數保持不變；
+            // 按鈕文字與實際行為一致，含採用格式（發票模式不顯示格式，但同樣還原）
+            onClick={() =>
+              onChange(
+                Object.fromEntries(
+                  Object.entries(overrides).filter(([k]) => !SEQUENCES.includes(k)),
+                ),
+              )
+            }
+          >
+            <RotateCcw className="size-3.5" aria-hidden />
+            還原順序、倍率與格式
+          </Button>
+        </div>
+      )}
       <fieldset>
-        <legend className="text-ink mb-1.5 text-xs font-semibold">嘗試順序</legend>
-        <p className="text-muted mb-2 text-xs">
-          依序嘗試，第一次成功即停止；最終順序由 E1 實驗決定。
-        </p>
+        <legend className="text-ink mb-1.5 text-xs font-semibold">{orderTitle}</legend>
+        <p className="text-muted mb-2 text-xs">{orderHelp}</p>
         <ol className="space-y-1">
           {/* 以階名為 key（序列內不重複），重新排序時 React 能正確搬移列而不是重建 */}
           {rungs.map((r, i) => (

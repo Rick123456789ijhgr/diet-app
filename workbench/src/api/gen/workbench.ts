@@ -453,6 +453,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workbench/v1/dev/best-flow/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 找最佳流程：內建的處理流程方案
+         * @description 回傳 {"presets": [{id, name, description, arm}]}，arm 為實驗組設定（同 configs/*.json）。
+         *     工作台以此為預設值；修改與自訂方案存在瀏覽器，執行時以 POST /dev/best-flow/runs 的 arm 送出。
+         */
+        get: operations["listBestFlowPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workbench/v1/dev/best-flow/runs": {
         parameters: {
             query?: never;
@@ -463,8 +484,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 找最佳流程：對資料夾或上傳的圖片執行所有方法（以 SSE 回報進度，最後一個事件為 done）
-         * @description folder 與 image_ids 擇一。事件依序為 start（total）、progress（done、total）、done（name、path）。
+         * 找最佳流程：對資料夾或上傳的圖片執行所選方案的所有方法（以 SSE 回報進度，最後一個事件為 done）
+         * @description folder 與 image_ids 擇一；arm 省略時執行 c0_all_methods（每個方法都執行）。設定不合法時回 400（欄位 arm）。事件依序為 start（total）、progress（done、total）、done（name、path）。
          *     已完成的執行列在 GET /dev/e1/runs 回應的 best_flow_runs。拒絕 test split 下的路徑（SPLIT_LOCKED）。
          */
         post: operations["startBestFlowRun"];
@@ -839,6 +860,10 @@ export interface components {
             limit?: number;
             /** @description 結果資料夾；省略時使用預設的 runs 資料夾 */
             root?: string;
+            /** @description 實驗組設定（name、description、decoder、zxing、ladder，同 configs/*.json）；省略時為 c0_all_methods */
+            arm?: components["schemas"]["FreeJson"];
+            /** @description 方案代碼，只寫進紀錄 */
+            preset_id?: string;
         };
         SetBestFlowTruthRequest: {
             /** @description 圖片 id → 條碼（EAN-13／UPC-A／EAN-8）；空字串＝沒有條碼；null＝取消人工確認 */
@@ -1964,6 +1989,27 @@ export interface operations {
             };
             403: components["responses"]["SplitLocked"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listBestFlowPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 方案清單（結構由 Python 定義） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FreeJson"];
+                };
+            };
             503: components["responses"]["Unavailable"];
         };
     };
