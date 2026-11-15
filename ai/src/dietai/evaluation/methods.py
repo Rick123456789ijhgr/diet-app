@@ -12,7 +12,8 @@
 - ``greedy_ladder``：以貪婪法選擇步驟與順序（設計 6.5 節），每一步即該方法的邊際貢獻。
 
 單一方法的判定與 ``judge`` 相同（``min_agree`` 只作用於逐步升級，不影響單一方法）：
-正樣本有採用結果且任一與真值相符 → ``correct``，不符 → ``misread``，沒有 → ``missed``；
+正樣本有採用結果且全部與真值相符 → ``correct``，有任何不符（含多重結果）→ ``misread``，
+沒有 → ``missed``；
 負樣本有採用結果 → ``false_positive``，否則 ``true_negative``。略過的方法（傾斜角太小而不旋轉）
 不送解碼，判為 ``missed``／``true_negative``，``skipped`` 欄為 1。
 
@@ -37,8 +38,8 @@ from dietai.evaluation.barcode import (
     Arm,
     Outcome,
     RunSummary,
-    _gtin13,
     _jsonable,
+    judge_texts,
     meta_lines,
     prepare_run_dir,
     run_meta,
@@ -117,11 +118,7 @@ def judge_attempt(attempt: RungAttempt, truth: str) -> Outcome:
     """單一方法（一次嘗試）的判定，規則見模組說明。"""
     if not truth:
         return Outcome.FALSE_POSITIVE if attempt.hits else Outcome.TRUE_NEGATIVE
-    if not attempt.hits:
-        return Outcome.MISSED
-    if any(_gtin13(h.text) == _gtin13(truth) for h in attempt.hits):
-        return Outcome.CORRECT
-    return Outcome.MISREAD
+    return judge_texts([h.text for h in attempt.hits], truth)
 
 
 def run_methods(
@@ -309,10 +306,8 @@ def _ladder(v: _Variant, order: Sequence[str], min_agree: int) -> _LadderOutcome
             continue
         if not v.truth:
             outcome = Outcome.FALSE_POSITIVE
-        elif any(_gtin13(text) == _gtin13(v.truth) for _, text in confirmed):
-            outcome = Outcome.CORRECT
         else:
-            outcome = Outcome.MISREAD
+            outcome = judge_texts([text for _, text in confirmed], v.truth)
         # 第一次解出任一已確認結果的方法，即救回這個變體的步驟（同 barcode.first_rung）
         first = next(m for m in order[: i + 1] if set(_hits(v.by_method[m])) & set(confirmed))
         return _LadderOutcome(outcome, i + 1, elapsed, i, first, confirmed, rejected)

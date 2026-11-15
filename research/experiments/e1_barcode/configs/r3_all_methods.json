@@ -1,0 +1,74 @@
+{
+  "name": "r3_all_methods",
+  "description": "零售格式：每個方法都執行——所有單一方法（含 Otsu、CLAHE、rotate、locate）＋多尺度＋疊加流程 C-01～C-05 與定位、縮小旋轉流程；zxing-cpp 內建嘗試關閉",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw",
+      "gray",
+      "binarize",
+      "otsu",
+      "clahe",
+      "sharpen",
+      "denoise",
+      "deskew",
+      "rotate",
+      "locate",
+      "multiscale",
+      "pipeline"
+    ],
+    "scales": [
+      2.0,
+      0.5
+    ],
+    "angles": [
+      90.0
+    ],
+    "pipelines": [
+      [
+        "denoise",
+        "binarize"
+      ],
+      [
+        "clahe",
+        "binarize"
+      ],
+      [
+        "clahe",
+        "denoise"
+      ],
+      [
+        "denoise",
+        "clahe",
+        "binarize"
+      ],
+      [
+        "deskew",
+        "denoise",
+        "binarize"
+      ],
+      [
+        "multiscale:0.5",
+        "rotate:90"
+      ],
+      [
+        "locate:1.15",
+        "clahe"
+      ],
+      [
+        "locate:1.8",
+        "clahe"
+      ]
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

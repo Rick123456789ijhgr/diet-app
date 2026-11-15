@@ -3,6 +3,7 @@
     python make_variants.py --sources ../../data/e1/sources.csv --out ../../data/e1/variants
     python make_variants.py --sources ... --out ... --conditions blur,motion,jpeg --max-side 1200
     python make_variants.py --sources ... --out ... --include-test   # 一併產生測試集原圖的變體
+    python make_variants.py --sources ... --out ... --clean-only     # 只產生縮放後的 clean
 
 來源 manifest 的格式同 run.py（image、truth、split，id 即 source_id），每張原圖都要有 split。
 輸出：splits/<split>/<source_id>/<條件>_<等級>.png、
@@ -39,11 +40,20 @@ def main(argv: list[str] | None = None) -> int:
         "--max-side", type=int, default=1600, help="原圖長邊上限（px），0 為不縮小（預設 1600）"
     )
     p.add_argument(
+        "--clean-only",
+        action="store_true",
+        help="只產生未劣化的 clean（縮到 --max-side 後的原圖），用來挑選可當變體來源的清楚原圖",
+    )
+    p.add_argument(
         "--include-test", action="store_true", help="一併產生測試集原圖的變體（變體仍標為 test）"
     )
     args = p.parse_args(argv)
 
     conditions = [s.strip() for s in args.conditions.split(",") if s.strip()] or None
+    if args.clean_only:
+        if conditions:
+            p.error("--clean-only 不能與 --conditions 同時使用")
+        conditions = []  # 空清單：只產生 clean
     try:
         sources = read_manifest(args.sources, include_test=args.include_test)
         if sources.excluded_test:

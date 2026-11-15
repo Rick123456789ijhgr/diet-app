@@ -6,9 +6,12 @@
 
 判定規則（``judge``）：
 
-- 有真值（正樣本）：階梯成功且任一結果的文字等於真值 → ``correct``；比對前 12 位與 13 位數字
-  一律補成 GTIN-13（UPC-A ``012345678905`` 與真值 ``0012345678905`` 視為相同）；
-  成功但文字都不符 → ``misread``（階梯會在誤讀時停止，這是真實行為）；失敗 → ``missed``。
+- 有真值（正樣本）：階梯成功且所有已確認結果都等於真值 → ``correct``；比對前 12 位與 13 位數字
+  一律補成 GTIN-13（UPC-A ``012345678905`` 與真值 ``0012345678905`` 視為相同，同一號碼讀到多次
+  只算一個）；成功但有任何與真值不同的結果 → ``misread``（階梯會在誤讀時停止，這是真實行為）；
+  失敗 → ``missed``。
+- 誤讀中「真值也在結果裡、但同時讀出其他號碼」的稱為**多重結果**（``is_ambiguous``）：APP 拿到
+  兩個以上的號碼時無法判斷哪個才對，因此不算成功；彙整時另列 ``ambiguous`` 數（設計 8.1 節）。
 - 無真值（負樣本）：有已確認的結果（``hits``，即達 ``LadderConfig.min_agree`` 票者）→
   ``false_positive``，否則 ``true_negative``。``min_agree > 1`` 時未達確認票數的零星解碼
   不算誤報（與正樣本只看已確認結果的規則一致）。
@@ -176,11 +179,26 @@ def judge(result: LadderResult, truth: str) -> Outcome:
         return Outcome.FALSE_POSITIVE if result.hits else Outcome.TRUE_NEGATIVE
     if not result.success:
         return Outcome.MISSED
-    # 成功時任一已確認結果與真值相符即算對（同一張可能同時解出多個條碼）；
-    # 兩邊都先正規化成 GTIN-13，避免 UPC-A 與 EAN-13 表示法不同而誤判為誤讀
-    if any(_gtin13(h.text) == _gtin13(truth) for h in result.hits):
-        return Outcome.CORRECT
-    return Outcome.MISREAD
+    return judge_texts([h.text for h in result.hits], truth)
+
+
+def judge_texts(texts: Iterable[str], truth: str) -> Outcome:
+    """正樣本的判定：所有結果（正規化成 GTIN-13 後去重）都等於真值才算 ``correct``。
+
+    沒有結果 → ``missed``；有任何與真值不同的結果 → ``misread``（含多重結果）。
+    兩邊都先正規化成 GTIN-13，避免 UPC-A 與 EAN-13 表示法不同而誤判為誤讀。
+    """
+    codes = {_gtin13(t) for t in texts}
+    if not codes:
+        return Outcome.MISSED
+    return Outcome.CORRECT if codes == {_gtin13(truth)} else Outcome.MISREAD
+
+
+def is_ambiguous(row: Mapping[str, str]) -> bool:
+    """結果列是否為「多重結果」：判為誤讀，但真值也在解出的號碼中（``decoded`` 以 ``|`` 分隔）。"""
+    if row.get("outcome") != Outcome.MISREAD or not row.get("truth") or not row.get("decoded"):
+        return False
+    return _gtin13(row["truth"]) in {_gtin13(t) for t in row["decoded"].split("|")}
 
 
 def _gtin13(code: str) -> str:
@@ -490,7 +508,8 @@ def summarize(
     """依實驗組（與 ``by`` 指定的標籤欄）分組彙整。
 
     每組欄位：``arm``、``by`` 各欄、``n``（正樣本數，不含 error）、``correct``、``rate``、
-    ``ci_low``／``ci_high``（Wilson 95%）、``misread``、``missed``、``negatives``、
+    ``ci_low``／``ci_high``（Wilson 95%）、``misread``、``ambiguous``（誤讀中的多重結果）、
+    ``missed``、``negatives``、
     ``false_positive``、``errors``、``median_ms``（每張影像整條階梯的耗時中位數）、
     ``mean_attempts``。
 
@@ -540,6 +559,7 @@ def summarize(
             "ci_low": lo if n else None,
             "ci_high": hi if n else None,
             "misread": oc[Outcome.MISREAD],
+            "ambiguous": sum(1 for r in valid if is_ambiguous(r)),
             "missed": oc[Outcome.MISSED],
             "negatives": len(neg),
             "false_positive": oc[Outcome.FALSE_POSITIVE],
@@ -764,7 +784,8 @@ def meta_lines(meta: Mapping[str, Any], title: str) -> list[str]:
 def summary_table(summary: Sequence[Mapping[str, Any]], by: Sequence[str]) -> str:
     """把 ``summarize`` 的結果排成 Markdown 表格；有 ``baseline`` 時多兩欄 McNemar。"""
     has_p = bool(summary) and "p_value" in summary[0]
-    head = ["arm", *by, "n", "成功率", "95% CI", "誤讀", "漏讀", "負樣本誤報", "耗時中位數 ms"]
+    head = ["arm", *by, "n", "成功率", "95% CI", "誤讀", "其中多重", "漏讀", "負樣本誤報"]
+    head.append("耗時中位數 ms")
     if has_p:
         head += ["失去／救回", "McNemar p"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
@@ -774,7 +795,7 @@ def summary_table(summary: Sequence[Mapping[str, Any]], by: Sequence[str]) -> st
         fp = f"{s['false_positive']}/{s['negatives']}" if s["negatives"] else "—"
         ms = "—" if s["median_ms"] is None else f"{s['median_ms']:.1f}"
         cells = [s["arm"], *(str(s[b]) for b in by), str(s["n"]), rate, ci]
-        cells += [str(s["misread"]), str(s["missed"]), fp, ms]
+        cells += [str(s["misread"]), str(s.get("ambiguous", 0)), str(s["missed"]), fp, ms]
         if has_p:
             cells += [f"{s['lost']}／{s['gained']}", f"{s['p_value']:.3g}"]
         lines.append("| " + " | ".join(cells) + " |")

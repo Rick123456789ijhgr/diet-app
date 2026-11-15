@@ -9,9 +9,12 @@ import pytest
 from dietai.evaluation import read_manifest
 from dietai.evaluation.splits import (
     apply_split,
+    code_type,
     list_images,
     parse_fractions,
     plan_split,
+    refresh_sources,
+    select_sources,
     summarize,
     undo_split,
 )
@@ -120,7 +123,7 @@ def test_apply_moves_files_and_locks_test(tmp_path: Path) -> None:
     dev = read_manifest(manifest)
     assert dev.excluded_test in (3, 4)  # 6 組取 3 組；重複的那組分到 test 時是 4 張
     assert {i.split for i in dev.items} == {"dev"}
-    assert dev.tag_columns == ("category", "batch")
+    assert dev.tag_columns == ("category", "batch", "code_type")
     full = read_manifest(manifest, include_test=True)
     assert len(full.items) == 7
     assert all(i.truth.isdigit() and i.image.is_file() for i in full.items)
@@ -143,3 +146,61 @@ def test_apply_checks_before_moving(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError, match="目標已存在"):
         apply_split(root, plan)
     assert all(p.is_file() for p in paths)  # 一個都沒搬
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        ("4710088491374", "gtin"),
+        ("2015922710171", "store"),  # 店內碼（EAN-13 開頭 2）
+        ("0212345678903", "store"),  # UPC-A number system 2
+        ("0012345678905", "gtin"),
+        ("012345678905", "gtin"),  # 12 位 UPC-A
+        ("20032906", "store"),  # EAN-8 開頭 2
+        ("96385074", "gtin"),
+        ("", "none"),
+    ],
+)
+def test_code_type(code: str, expected: str) -> None:
+    assert code_type(code) == expected
+
+
+def test_refresh_rewrites_manifest_from_folders(tmp_path: Path) -> None:
+    _books(tmp_path)
+    root = tmp_path / "e1"
+    plan = plan_split(list_images([tmp_path / "incoming" / "o_a01"]), {"o_a01": 0.5})
+    manifest = apply_split(root, plan)
+    before = manifest.read_bytes()
+    manifest.write_text("id,image,truth\n", encoding="utf-8")  # 舊格式
+    refresh_sources(root)
+    assert manifest.read_bytes() == before
+    # 檔案放錯資料夾會被擋下
+    src = next((root / "splits" / "dev" / "o_a01").iterdir())
+    (root / "splits" / "dev" / "f_a01").mkdir()
+    src.rename(root / "splits" / "dev" / "f_a01" / src.name)
+    with pytest.raises(ValueError, match="不符"):
+        refresh_sources(root)
+
+
+def test_select_sources_keeps_correct_dev_only(tmp_path: Path) -> None:
+    _books(tmp_path)
+    root = tmp_path / "e1"
+    plan = plan_split(list_images([tmp_path / "incoming" / "o_a01"]), {"o_a01": 0.5})
+    manifest = apply_split(root, plan)
+    dev = [a.path.stem for a in plan if a.split == "dev"]
+    test = [a.path.stem for a in plan if a.split == "test"]
+    rows = [
+        {"arm": "r0", "method": "raw", "source_id": dev[0], "outcome": "correct"},
+        {"arm": "r0", "method": "raw", "source_id": dev[1], "outcome": "misread"},
+        {"arm": "r1", "method": "raw", "source_id": dev[1], "outcome": "correct"},  # 別的實驗組
+        {"arm": "r0", "method": "raw", "source_id": test[0], "outcome": "correct"},  # 測試集
+    ]
+    out = tmp_path / "other" / "variant_sources.csv"
+    path, kept, total = select_sources(manifest, rows, out, arm="r0")
+    assert (kept, total) == (1, len(dev))
+    sel = read_manifest(path, include_test=True)
+    assert [i.id for i in sel.items] == [dev[0]]
+    assert sel.items[0].image.is_file()  # 相對路徑已改成相對新位置
+    assert sel.tag_columns == ("category", "batch", "code_type")
+    with pytest.raises(FileExistsError):
+        select_sources(manifest, rows, out, arm="r0")

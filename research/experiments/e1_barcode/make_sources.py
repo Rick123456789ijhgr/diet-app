@@ -4,6 +4,7 @@
         --test o_a01=0.5                       # 預覽
     python make_sources.py ... --test o_a01=0.5 --apply   # 確認無誤後才真的搬
     python make_sources.py --undo                          # 依 split_moves.csv 搬回原處
+    python make_sources.py --refresh                       # 依 splits/ 現況重寫 sources.csv
 
 （在 ai/.venv 環境中執行；從專案根目錄可用 ai\\.venv\\Scripts\\python 加上本檔的路徑。）
 
@@ -41,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--apply", action="store_true", help="真的搬檔案並寫出 manifest（預設只預覽）")
     p.add_argument("--undo", action="store_true", help="依 split_moves.csv 把照片搬回原處")
+    p.add_argument(
+        "--refresh", action="store_true", help="依 splits/ 現況重寫 sources.csv（不搬檔案）"
+    )
     args = p.parse_args(argv)
 
     if args.undo:
@@ -49,6 +53,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {msg}")
         print(f"已搬回 {restored} 張照片。")
         return 1 if problems else 0
+    if args.refresh:
+        try:
+            manifest = splits.refresh_sources(args.root)
+        except (OSError, ValueError) as e:
+            p.error(str(e))
+        print(f"已重寫來源 manifest：{manifest}")
+        return 0
     if not args.folders:
         p.error("請指定照片資料夾")
 

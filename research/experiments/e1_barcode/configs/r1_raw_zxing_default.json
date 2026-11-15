@@ -1,0 +1,16 @@
+{
+  "name": "r1_raw_zxing_default",
+  "description": "零售格式：原圖、zxing-cpp 內建旋轉／縮小／反色全開（不做前處理的上線情境，同 z0 但限格式）",
+  "decoder": "zxing",
+  "zxing": {},
+  "ladder": {
+    "rungs": [
+      "raw"
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}

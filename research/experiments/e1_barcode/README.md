@@ -111,6 +111,13 @@ p0002,images/p0002.jpg,4712345678901,test,far,30,backlit,foil
 | `m5_retail_zxing_default` | 同 z1，加格式限制 | 開 | 誤讀對策 |
 | `z2_default_v2` | sharpen 最後＋只收零售格式 | 開 | 目前的程式預設（2026-10-12 起） |
 | `c0_all_methods` | 所有單一方法（含 otsu、clahe）＋多尺度＋疊加流程 C-01～C-05 | 關 | `run_methods.py` 的預設（每個方法都執行） |
+| `r0_raw` | raw，只收零售格式 | 關 | **2026-11-15 起的正式基準**（同 a0 但限格式） |
+| `r1_raw_zxing_default` | raw，只收零售格式 | 開 | 階段零：不做前處理的上線情境 |
+| `r2_raw_pyzbar` | raw，只收零售格式 | — | 階段零：解碼器對照 |
+| `r3_all_methods` | 同 c0，再加 rotate、locate 與定位、縮小旋轉流程，只收零售格式 | 關 | 正式的「每個方法都執行」 |
+
+`r*` 是 2026-11-15 決定的正式設定：商品條碼任務只收 EAN-13／EAN-8／UPC-A。照片中常有網址 QR、店內標籤的 QR、
+內部碼（Code 128 等），不限格式時這些都被判為誤讀，混淆了「讀錯號碼」與「讀到別的碼」。
 
 消融組關閉 zxing-cpp 內建的旋轉／縮小／反色，才量得到階梯本身的貢獻（模組一 Phase 2 決議）。
 
@@ -155,7 +162,10 @@ python make_sources.py --undo                                                   
 
 - 同一條碼的照片整組分在同一邊；`--test` 指定各批次分到 test 的「組」的比例，未列出的批次全部是 dev。
 - 每組依 `sha256(種子:條碼)` 排序後取前段，結果可重現、與檔案順序無關。邏輯在 `dietai.evaluation.splits`。
-- 照片搬到 `splits/<split>/<類別>_<批次>/`；`sources.csv` 欄位為 `id, image, truth, split, category, batch`。
+- 照片搬到 `splits/<split>/<類別>_<批次>/`；`sources.csv` 欄位為 `id, image, truth, split, category, batch, code_type`。
+- `code_type`：`gtin`（商品條碼）、`store`（店內碼：EAN-13 開頭 2、UPC-A number system 2／4、EAN-8 開頭 0／2）或 `none`（負樣本）。
+  店內碼是店家自行印的價格標籤（生鮮秤重、超商便當等），查不到產品資料庫；仍是有效的解碼樣本，報告時依 `code_type` 分開列。
+- 格式變更（例如新增標籤欄）用 `make_sources.py --refresh` 依 `splits/` 現況重寫 `sources.csv`，不搬檔案、不改變切分。
 - **切分後不要改種子或比例重切**，也不要把 `splits/test` 下的照片丟進工作台（工作台會拒絕讀取）。
 
 ### 本專題的切分（2026-11-15，方案 B）
@@ -166,6 +176,8 @@ python make_sources.py --undo                                                   
 | `o_a01` | 書籍等 100 張（99 種條碼） | 50 | 50 | 從未用於調整；依條碼分組對半切（種子 0） |
 
 指令：`make_sources.py incoming/o_a01 incoming/f_a01 --test o_a01=0.5 --seed 0 --apply`；`sources.csv` 的 sha256 為 `51a74c75bd436519afa2e1b553ef2618e8346541e53f259a4c67208ebb46e1de`（350 列）。
+2026-11-15 加上 `code_type` 欄後以 `--refresh` 重寫，sha256 為 `00f7fc556c81475d8e57b6c240293dfefa44be0be621a8488105c75e5b04aa27`（切分不變）。
+dev 300 張中 `gtin` 267、`store` 33；test 50 張全為 `gtin`。
 
 研究限制：測試集只有書籍等其他物品，沒有食品包裝；test 的結論不能直接推到食品包裝。
 
@@ -190,6 +202,35 @@ python make_variants.py --sources ... --out ... --conditions blur,motion,jpeg --
 - 測試集原圖的變體寫在 `splits/test/` 下，預設不產生；正式實驗前才加 `--include-test`。
 - `source_id`、`seed` 不會出現在「依標籤分組」的表格中；`source_id` 是以原始樣本為單位統計時的集群。
 - 合成資料（`make_synthetic.py`）也帶 `source_id`（條碼代碼），可以先用來演練整套流程。
+
+### 挑選變體來源（清楚原圖）
+
+變體要從「本身就讀得到」的原圖產生；原圖本來就讀不到時，再加劣化也量不出劣化的影響。標準（2026-11-15 決定）：
+**縮到長邊 1600 px 後，`r0_raw`（不做前處理、zxing-cpp 內建嘗試關閉、只收零售格式）判為正確**（只讀出真值一個號碼）。
+
+```bash
+python make_variants.py --sources ../../data/e1/sources.csv --out ../../data/e1/clean1600 --clean-only
+python run_methods.py --manifest ../../data/e1/clean1600/manifest.csv --only r0_raw,r1_raw_zxing_default,r2_raw_pyzbar --label clean1600_retail
+python select_sources.py runs/<上一步> --out ../../data/e1/variant_sources.csv
+python make_variants.py --sources ../../data/e1/variant_sources.csv --out ../../data/e1/variants
+```
+
+2026-11-15 結果（run `20261115-232928_clean1600_retail`）：dev 300 張保留 **116 張**（食品 `gtin` 82、食品 `store` 18、書籍等 16）。
+讀不到的 184 張多半是條碼在畫面中太小；這些照片仍納入「真實照片」的評估，只是不產生變體。
+`select_sources` 一律不寫出測試集；正式實驗時以同一標準挑 test 的變體來源（後續）。
+
+### 階段零：不做前處理的引擎比較（dev 300 張，探索）
+
+run `20261115-233254_stage0_retail`（原始解析度、只收零售格式；判定採 2026-11-15 的多重結果規則）：
+
+| 實驗組 | 成功率 | 誤讀（其中多重） | gtin | store | 耗時中位數 |
+| --- | --- | --- | --- | --- | --- |
+| `r0_raw`（zxing 內建嘗試關） | 37.0% | 0（0） | 93/267 | 18/33 | 82 ms |
+| `r1_raw_zxing_default` | **75.3%** | 5（5） | 202/267 | 24/33 | 383 ms |
+| `r2_raw_pyzbar` | 71.7% | 9（3） | 192/267 | 23/33 | 365 ms |
+
+zxing-cpp 成功率較高、單號誤讀較少（多重結果的「幽靈號碼」與真值共享後半段，如 `4710022027447`／`7710272027447`）；
+pyzbar 另有 6 張完全讀錯（真值不在結果中）。依此選定 zxing-cpp（階段零結論，待寫入「結論」）。
 
 ## 工作台：找最佳流程
 

@@ -1,0 +1,20 @@
+{
+  "name": "r0_raw",
+  "description": "零售格式（2026-11-15 起的正式設定）：原圖、zxing-cpp 內建嘗試關閉，只收 EAN-13／EAN-8／UPC-A（前處理實驗的基準，同 a0_raw 但限格式）",
+  "decoder": "zxing",
+  "zxing": {
+    "try_rotate": false,
+    "try_downscale": false,
+    "try_invert": false
+  },
+  "ladder": {
+    "rungs": [
+      "raw"
+    ],
+    "accept_formats": [
+      "EAN13",
+      "EAN8",
+      "UPCA"
+    ]
+  }
+}
