@@ -47,7 +47,7 @@ export function SubmissionsPage() {
   })
 
   return (
-    <div className="h-full overflow-y-auto pr-3 pb-3">
+    <div className="h-full overflow-y-auto p-3">
       <PageHeader
         title="上傳清單"
         description="上傳包裝正面、條碼、營養標示三張照片，人工確認條碼與營養數值後寫入產品資料庫。"
@@ -132,7 +132,7 @@ export function SubmissionsPage() {
             )}
           </Card>
         </Section>
-        <Section title="以條碼查產品">
+        <Section title="以條碼查產品" hint="輸入條碼查詢產品資料庫中已確認的產品。">
           <Card className="p-4">
             <ProductLookup />
           </Card>

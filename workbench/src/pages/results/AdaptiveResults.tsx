@@ -10,7 +10,7 @@ import { BarList, Heatmap } from '@/components/charts'
 import { PanelSection } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
-import { Badge, Segmented } from '@/components/ui/primitives'
+import { Badge, InfoTip, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { featureText, methodText, outcomeText } from '@/lib/text'
 
@@ -162,7 +162,10 @@ export function AdaptiveResults({
   const policy = arm?.policies.find((p) => p.name === policyName) ?? arm?.policies[0]
 
   const panel = (
-    <PanelSection title="執行結果">
+    <PanelSection
+      title="執行結果"
+      hint="先試原圖，失敗才量測品質，依規則決定接下來嘗試的方法與順序。門檻只能在 dev 上以 adaptive.py --tune 調整；這裡只檢視結果。"
+    >
       <RootInput value={root} onChange={setRoot} placeholder={list.data?.root} />
       <Select
         label="執行"
@@ -197,10 +200,6 @@ export function AdaptiveResults({
           />
         </>
       )}
-      <p className="text-muted text-xs">
-        先試原圖，失敗才量測品質，依規則決定接下來嘗試的方法與順序。門檻只能在 dev 上以 adaptive.py
-        --tune 調整；這裡只檢視結果。
-      </p>
     </PanelSection>
   )
 
@@ -238,7 +237,7 @@ export function AdaptiveResults({
         <EmptyState>沒有可顯示的實驗組或策略。</EmptyState>
       ) : policy.error ? (
         <div className="p-4">
-          <div role="alert" className="bg-danger-soft text-danger rounded-[20px] px-4 py-3 text-xs">
+          <div role="alert" className="bg-danger-soft text-danger rounded-card px-4 py-3 text-xs">
             策略 {policy.name} 無法在這個實驗組上計算：{policy.error}
           </div>
         </div>
@@ -271,7 +270,7 @@ function PolicyView({ data, arm, policy }: { data: AdaptiveRun; arm: ArmResult; 
   const readout = (
     <>
       {!arm.baseline && (
-        <div className="bg-warn-soft text-warn shrink-0 rounded-[20px] px-4 py-3 text-xs">
+        <div className="bg-warn-soft text-warn shrink-0 rounded-card px-4 py-2.5 text-xs">
           結果含測試集（或沒有原圖），不做貪婪選擇，沒有比較基準。
         </div>
       )}
@@ -297,7 +296,7 @@ function PolicyView({ data, arm, policy }: { data: AdaptiveRun; arm: ArmResult; 
         </MetricGrid>
       </ReadoutBlock>
       <ReadoutBlock title="策略">
-        <p className="readout text-[13px]">
+        <p className="readout text-sm">
           {policy.name} {policy.source === 'run' && <Badge tone="primary">調整後</Badge>}
         </p>
         {policy.description && <p className="text-muted mt-1 text-xs">{policy.description}</p>}
@@ -341,6 +340,13 @@ function PolicyView({ data, arm, policy }: { data: AdaptiveRun; arm: ArmResult; 
         >
           {tab === 'compare' ? (
             <>
+              <p className="text-muted flex items-center gap-1 text-xs">
+                以變體為單位，僅供探索
+                <InfoTip
+                  label="統計說明"
+                  text="以變體為單位的信賴區間與 McNemar 只供探索；以原始樣本為單位的比較見 adaptive.py 的 summary_adaptive_*.md。"
+                />
+              </p>
               <BarList
                 label="基準與策略的成功率長條圖，附 95% 信賴區間"
                 rows={overall.map((r) => ({
@@ -386,10 +392,6 @@ function PolicyView({ data, arm, policy }: { data: AdaptiveRun; arm: ArmResult; 
                   t.mean_attempts.toFixed(2),
                 ])}
               />
-              <p className="text-muted mt-2 text-xs">
-                以變體為單位的信賴區間與 McNemar 只供探索；以原始樣本為單位的比較見 adaptive.py 的
-                summary_adaptive_*.md。
-              </p>
             </>
           ) : tab === 'rules' ? (
             <DataTable
@@ -457,8 +459,9 @@ function BinsView({ data, arm }: { data: AdaptiveRun; arm: ArmResult }) {
               )
             }}
           />
-          <p className="text-muted mt-2 text-xs">
-            只計正樣本，依量測值的四分位數分成四組；同一值很多時組別可能不均。
+          <p className="text-muted mt-2 flex items-center gap-1 text-xs">
+            只計正樣本・依四分位數分成四組
+            <InfoTip text="只計正樣本，依量測值的四分位數分成四組；同一值很多時組別可能不均。" />
           </p>
         </>
       )}

@@ -53,9 +53,9 @@ export function Stepper<T extends string>({
                 disabled={isCurrent || !canGo(s.id)}
                 onClick={() => onSelect(s.id)}
                 className={cn(
-                  'group flex items-center gap-2 rounded-full py-1 pr-3 pl-1 text-[13px] transition-colors',
+                  'group flex items-center gap-2 rounded-lg py-1 pr-2.5 pl-1 text-sm transition-colors',
                   'focus-visible:ring-primary/40 focus-visible:ring-2 focus-visible:outline-none',
-                  isCurrent ? 'bg-ink text-on-ink font-semibold' : 'text-ink-2',
+                  isCurrent ? 'text-ink font-semibold' : 'text-ink-2',
                   !isCurrent && canGo(s.id) && 'hover:bg-hover hover:text-ink',
                   !isCurrent && !canGo(s.id) && 'text-muted',
                 )}
@@ -63,7 +63,7 @@ export function Stepper<T extends string>({
                 <span
                   className={cn(
                     'readout grid size-6 place-items-center rounded-full text-xs font-semibold',
-                    isCurrent && 'bg-card text-ink',
+                    isCurrent && 'bg-primary text-on-primary',
                     isDone && 'bg-primary-soft text-primary-ink',
                     !isCurrent && !isDone && 'bg-sunken',
                   )}

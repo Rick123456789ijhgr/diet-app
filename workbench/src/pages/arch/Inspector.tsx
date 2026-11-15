@@ -3,7 +3,14 @@
 import { ArrowLeftRight, Ban, Layers, Trash2, Unlink } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { Button, DraftNumberInput, Hint, Segmented, Slider } from '@/components/ui/primitives'
+import {
+  Button,
+  DraftNumberInput,
+  Hint,
+  InfoTip,
+  Segmented,
+  Slider,
+} from '@/components/ui/primitives'
 import {
   type ArchEdge,
   type ArchNode,
@@ -28,13 +35,24 @@ import { SWATCHES } from '@/lib/arch/theme'
 import { cn } from '@/lib/cn'
 
 const INPUT =
-  'bg-sunken h-8 w-full rounded-lg border border-transparent px-2.5 text-[13px] focus-visible:border-primary focus-visible:bg-card focus-visible:outline-none'
+  'bg-sunken h-8 w-full rounded-lg border border-transparent px-2.5 text-sm focus-visible:border-primary focus-visible:bg-card focus-visible:outline-none'
 
-/** 面板的一段：小標＋內容。 */
-export function Block({ title, children }: { title: string; children: ReactNode }) {
+/** 面板的一段：小標＋內容；hint 為說明（放在小標旁的 ⓘ 提示裡）。 */
+export function Block({
+  title,
+  hint,
+  children,
+}: {
+  title: string
+  hint?: ReactNode
+  children: ReactNode
+}) {
   return (
-    <section className="border-card-border space-y-3 border-b px-4 py-4">
-      <h2 className="text-muted text-[11px] font-semibold tracking-[0.12em]">{title}</h2>
+    <section className="border-card-border space-y-3 border-b px-4 py-3.5">
+      <div className="flex min-h-5 items-center gap-1">
+        <h2 className="text-muted text-xs font-semibold tracking-[0.12em]">{title}</h2>
+        {hint && <InfoTip text={hint} side="left" />}
+      </div>
       {children}
     </section>
   )
@@ -44,7 +62,7 @@ export function Block({ title, children }: { title: string; children: ReactNode 
 function StickyHeader({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="bg-card border-card-border sticky top-0 z-10 flex items-center gap-2 border-b px-4 py-3">
-      <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={title}>
+      <h2 className="min-w-0 flex-1 truncate text-sm font-semibold" title={title}>
         {title}
       </h2>
       {children}
@@ -165,7 +183,7 @@ export function ColorField({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
         <span className="text-ink-2">{label}</span>
-        <span className="text-muted tabular font-mono text-[11px]">
+        <span className="text-muted tabular font-mono text-xs">
           {value === 'none' ? '透明' : value === 'auto' ? (autoLabel ?? '自動') : value}
         </span>
       </div>
@@ -176,7 +194,7 @@ export function ColorField({
             selected={value === 'auto'}
             onClick={() => onChange('auto', true)}
           >
-            <span className="text-ink-2 text-[10px] font-semibold">A</span>
+            <span className="text-ink-2 text-xs font-semibold">A</span>
           </Swatch>
         )}
         {allowNone && (
@@ -443,7 +461,7 @@ export function NodeInspector({
         {accent && color('強調塊文字', 'accentText')}
       </Block>
 
-      <Block title="字級">
+      <Block title="字級" hint="標題太長放不下時會自動縮小。">
         <NumberField
           label="標題字級"
           value={s.titleSize}
@@ -460,7 +478,6 @@ export function NodeInspector({
           onFocus={p.checkpoint}
           onCommit={(kickerSize) => setStyle({ kickerSize }, false)}
         />
-        <p className="text-muted text-[11px]">標題太長放不下時會自動縮小。</p>
       </Block>
 
       <Block title="尺寸（對齊 20 px 格點）">
@@ -543,15 +560,15 @@ export function EdgeInspector({
           </Button>
         </Hint>
       </StickyHeader>
-      <Block title="端點">
-        <div className="space-y-0.5 text-[13px]">
+      <Block
+        title="端點"
+        hint="拖曳連線兩端的方塊可以重新接到別的定位點，或拉到空白處成為自由端點。"
+      >
+        <div className="space-y-0.5 text-sm">
           <div className="font-medium">{name(e.from)}</div>
           <div className="text-muted text-xs">↓</div>
           <div className="font-medium">{name(e.to)}</div>
         </div>
-        <p className="text-muted text-[11px] leading-relaxed">
-          拖曳連線兩端的方塊可以重新接到別的定位點，或拉到空白處成為自由端點。
-        </p>
         <div className="flex gap-2">
           <Button className="flex-1" onClick={() => update({ from: e.to, to: e.from })}>
             <ArrowLeftRight className="size-4" aria-hidden />
@@ -738,15 +755,23 @@ export function DiagramInspector(p: Props) {
         </p>
       </Block>
       <Block title="操作">
-        <ul className="text-muted list-disc space-y-1 pl-4 text-xs leading-relaxed">
-          <li>左側工具列：點形狀新增元件；選「線條」（L）後從任意處拖到另一處畫線，V 回到選取。</li>
-          <li>元件一律落在點點上；與其他元件對齊時出現紅色參考線。</li>
-          <li>圖形四邊的中點是定位點：從定位點拖出線條，或把線條拖到定位點固定在那一邊。</li>
-          <li>選取後拖曳右下角方塊調整大小；拖曳連線兩端重新接。</li>
-          <li>點兩下空白處新增元件；點兩下有細部圖的元件進入下一層，Esc 回上一層。</li>
-          <li>拖曳空白處或滾輪平移，Ctrl＋滾輪縮放；Shift+1 符合畫面、Shift+2 回到中心。</li>
-          <li>方向鍵移動一格；Delete 刪除；Ctrl+Z 復原、Ctrl+Shift+Z 重做。</li>
-        </ul>
+        {/* 操作說明不常看，收在可展開的段落 */}
+        <details>
+          <summary className="text-muted hover:text-ink cursor-pointer text-sm select-none">
+            滑鼠與快速鍵
+          </summary>
+          <ul className="text-muted mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed">
+            <li>
+              左側工具列：點形狀新增元件；選「線條」（L）後從任意處拖到另一處畫線，V 回到選取。
+            </li>
+            <li>元件一律落在點點上；與其他元件對齊時出現紅色參考線。</li>
+            <li>圖形四邊的中點是定位點：從定位點拖出線條，或把線條拖到定位點固定在那一邊。</li>
+            <li>選取後拖曳右下角方塊調整大小；拖曳連線兩端重新接。</li>
+            <li>點兩下空白處新增元件；點兩下有細部圖的元件進入下一層，Esc 回上一層。</li>
+            <li>拖曳空白處或滾輪平移，Ctrl＋滾輪縮放；Shift+1 符合畫面、Shift+2 回到中心。</li>
+            <li>方向鍵移動一格；Delete 刪除；Ctrl+Z 復原、Ctrl+Shift+Z 重做。</li>
+          </ul>
+        </details>
       </Block>
     </>
   )

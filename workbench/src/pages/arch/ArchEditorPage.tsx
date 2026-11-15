@@ -238,7 +238,7 @@ export function ArchEditorPage() {
           <span className="bg-ink text-on-ink inline-flex size-7 items-center justify-center rounded-lg">
             <Network className="size-4" aria-hidden />
           </span>
-          <h1 className="text-[14px] font-semibold">架構圖編輯器</h1>
+          <h1 className="text-[15px] font-semibold">架構圖編輯器</h1>
         </div>
         <span className="bg-card-border h-5 w-px shrink-0" aria-hidden />
         <Breadcrumb doc={doc} diagramId={diagram.id} onGo={go} className="flex-1" />
@@ -277,7 +277,7 @@ export function ArchEditorPage() {
               <DropdownMenu.Content
                 align="end"
                 sideOffset={6}
-                className="bg-card shadow-card z-50 min-w-48 rounded-xl p-1"
+                className="bg-card shadow-card border-card-border border z-50 min-w-48 rounded-xl p-1"
               >
                 <MenuItem icon={<ImageIcon />} onSelect={() => void exportPng()}>
                   PNG 圖片（這張圖）
@@ -366,7 +366,7 @@ export function ArchEditorPage() {
             role="toolbar"
             aria-label="工具"
             aria-orientation="vertical"
-            className="bg-card shadow-card absolute top-3 left-3 flex flex-col gap-0.5 rounded-xl p-1"
+            className="bg-card shadow-card border-card-border border absolute top-3 left-3 flex flex-col gap-0.5 rounded-xl p-1"
           >
             <ToolButton
               label="選取"
@@ -485,7 +485,7 @@ function MenuItem({
   return (
     <DropdownMenu.Item
       onSelect={onSelect}
-      className="data-[highlighted]:bg-hover flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] outline-none [&_svg]:size-4 [&_svg]:text-muted"
+      className="data-[highlighted]:bg-hover flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm outline-none [&_svg]:size-4 [&_svg]:text-muted"
     >
       {icon}
       {children}

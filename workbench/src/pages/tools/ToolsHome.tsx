@@ -9,7 +9,7 @@ import { MODULES, toolPath } from '@/nav'
 export function ToolsHome() {
   const module = MODULES.find((m) => m.id === 'tools')!
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto pr-3 pb-3">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-3">
       <PageHeader title={module.name} description={module.description} />
       {module.tools.length === 0 ? (
         <EmptyState icon={<Wrench className="size-8" aria-hidden />}>尚無工具。</EmptyState>
@@ -19,9 +19,10 @@ export function ToolsHome() {
             <Link
               key={t.slug}
               to={toolPath(module, t)}
-              className="bg-card shadow-card group hover:bg-hover focus-visible:ring-primary/40 flex items-start gap-4 rounded-[20px] p-5 focus-visible:ring-2 focus-visible:outline-none"
+              title={t.description}
+              className="bg-card shadow-card border-card-border group hover:bg-hover focus-visible:ring-primary/40 rounded-card flex items-center gap-3 border px-4 py-3.5 focus-visible:ring-2 focus-visible:outline-none"
             >
-              <span className="bg-sunken group-hover:bg-card grid size-11 shrink-0 place-items-center rounded-full">
+              <span className="bg-sunken group-hover:bg-card grid size-10 shrink-0 place-items-center rounded-lg">
                 <t.icon className="size-5" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
@@ -32,7 +33,8 @@ export function ToolsHome() {
                     aria-hidden
                   />
                 </span>
-                <span className="text-muted mt-1 block text-xs leading-relaxed">
+                {/* 描述只顯示一行，完整內容在滑過時的 title 提示 */}
+                <span className="text-muted mt-0.5 block truncate text-xs leading-normal">
                   {t.description}
                 </span>
               </span>

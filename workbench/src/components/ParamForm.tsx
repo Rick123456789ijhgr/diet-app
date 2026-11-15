@@ -1,9 +1,16 @@
 // 依 Python 的 param() 宣告自動產生的參數表單。只回報與預設值不同的欄位（覆寫）。
-import { CircleHelp, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { useId } from 'react'
 
 import type { ConfigClass, ConfigField, ConfigOverride } from '@/api/client'
-import { Badge, Button, DraftNumberInput, Hint, Slider, Switch } from '@/components/ui/primitives'
+import {
+  Badge,
+  Button,
+  DraftNumberInput,
+  InfoTip,
+  Slider,
+  Switch,
+} from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { formatValue, setOverride, valueOf, type Value } from '@/lib/config'
 import { groupText } from '@/lib/text'
@@ -101,16 +108,7 @@ function FieldRow({
       <label htmlFor={id} className="truncate text-sm">
         {field.label}
       </label>
-      {/* 觸發元素用按鈕包住圖示：SVG 本身無法以鍵盤聚焦，按鈕可以（聚焦時顯示提示） */}
-      <Hint text={field.help}>
-        <button
-          type="button"
-          aria-label={`${field.label}說明`}
-          className="text-muted hover:text-ink focus-visible:ring-primary/40 shrink-0 rounded-full focus-visible:ring-2 focus-visible:outline-none"
-        >
-          <CircleHelp className="size-3.5" aria-hidden />
-        </button>
-      </Hint>
+      {field.help && <InfoTip text={field.help} label={`${field.label}說明`} />}
       {/* calibrate：此參數的預設值是暫定的，之後要以實驗資料校準 */}
       {field.calibrate && <Badge tone="accent">待校準</Badge>}
     </div>

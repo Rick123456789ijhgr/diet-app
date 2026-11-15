@@ -32,7 +32,7 @@ export function Breadcrumb({
   const trail = pathTo(doc, diagramId)
   const level = trail.at(-1)?.diagram.level
   return (
-    <nav aria-label="層級" className={cn('flex min-w-0 items-center gap-1 text-[13px]', className)}>
+    <nav aria-label="層級" className={cn('flex min-w-0 items-center gap-1 text-sm', className)}>
       {trail.map(({ diagram: d }, i) => {
         const last = i === trail.length - 1
         return (
@@ -67,7 +67,7 @@ export function ArchPage() {
   const drill = (child?: string) => child && doc.diagrams[child] && go(child)
 
   return (
-    <div className="flex h-full min-h-0 flex-col pr-3 pb-3">
+    <div className="flex h-full min-h-0 flex-col p-3">
       <PageHeader
         title="架構圖"
         description="逐層放大的專案架構（類似 C4 Model）：點有疊層圖示的元件看內部組成與流程；滑過元件看說明。"
@@ -76,19 +76,19 @@ export function ArchPage() {
             href={editorUrl(doc, diagram.id)}
             target="_blank"
             rel="noopener"
-            className="bg-ink text-on-ink focus-visible:ring-primary/40 inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium hover:opacity-85 focus-visible:ring-2 focus-visible:outline-none"
+            className="bg-primary text-on-primary focus-visible:ring-primary/40 inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-sm font-medium hover:brightness-110 focus-visible:ring-2 focus-visible:outline-none"
           >
             <SquarePen className="size-4" aria-hidden />
             編輯
           </a>
         }
       />
-      <div className="bg-card shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px]">
-        <div className="flex shrink-0 items-center px-4 pt-4 pb-3">
+      <div className="bg-card shadow-card border-card-border border flex min-h-0 flex-1 flex-col overflow-hidden rounded-card">
+        <div className="flex shrink-0 items-center px-4 pt-3.5 pb-2.5">
           <Breadcrumb doc={doc} diagramId={diagram.id} onGo={go} />
         </div>
         <div
-          className="mx-3 mb-3 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl"
+          className="mx-3 mb-3 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg"
           style={{ background: ARCH.canvas }}
         >
           {diagram.nodes.length === 0 ? (

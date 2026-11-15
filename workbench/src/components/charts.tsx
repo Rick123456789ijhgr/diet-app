@@ -52,7 +52,7 @@ function Axes({
   yFormat?: (v: number) => string
 }) {
   return (
-    <g className="text-[10px]">
+    <g className="text-xs">
       {ys.map((v) => (
         <g key={`y${v}`}>
           <line
@@ -165,7 +165,7 @@ export function LineChart({
               y={y(t.y) - 4}
               textAnchor="end"
               fill="var(--danger)"
-              className="text-[10px]"
+              className="text-xs"
             >
               {t.label}
             </text>
@@ -225,7 +225,7 @@ export function BarList({
   return (
     <svg viewBox={`0 0 ${W} ${h}`} className="w-full" role="img" aria-label={label}>
       {[0, 0.25, 0.5, 0.75, 1].map((v) => (
-        <g key={v} className="text-[10px]">
+        <g key={v} className="text-xs">
           <line x1={x(v)} x2={x(v)} y1={0} y2={h - 18} className="stroke-card-border" />
           <text x={x(v)} y={h - 4} textAnchor="middle" className="fill-muted">
             {Math.round(v * 100)}%
@@ -236,7 +236,7 @@ export function BarList({
         const cy = i * rowH + rowH / 2
         return (
           <g key={r.label}>
-            <text x={left - 8} y={cy + 4} textAnchor="end" className="fill-ink text-[11px]">
+            <text x={left - 8} y={cy + 4} textAnchor="end" className="fill-ink text-xs">
               {r.label}
             </text>
             {r.value !== null && (
@@ -257,7 +257,7 @@ export function BarList({
                   </g>
                 )}
                 {/* 數值文字固定放在 100% 位置右側對齊成一欄，而不是跟著長條末端移動 */}
-                <text x={x(1) + 6} y={cy + 4} className="fill-muted tabular text-[11px]">
+                <text x={x(1) + 6} y={cy + 4} className="fill-muted tabular text-xs">
                   {(r.value * 100).toFixed(1)}%{r.note ? ` ${r.note}` : ''}
                 </text>
               </>
@@ -306,7 +306,7 @@ export function StackedBars({
           const total = keys.reduce((a, k) => a + (r.values[k] ?? 0), 0)
           return (
             <g key={r.label}>
-              <text x={left - 8} y={cy + 4} textAnchor="end" className="fill-ink text-[11px]">
+              <text x={left - 8} y={cy + 4} textAnchor="end" className="fill-ink text-xs">
                 {r.label}
               </text>
               {keys.map((k) => {
@@ -332,7 +332,7 @@ export function StackedBars({
               <text
                 x={left + (total / max) * width + 6}
                 y={cy + 4}
-                className="fill-muted tabular text-[11px]"
+                className="fill-muted tabular text-xs"
               >
                 {total}
               </text>
@@ -379,19 +379,14 @@ export function Heatmap({
           x={left + j * cell + cell / 2}
           y={14}
           textAnchor="middle"
-          className="fill-muted text-[10px]"
+          className="fill-muted text-xs"
         >
           {c}
         </text>
       ))}
       {rows.map((r, i) => (
         <g key={r}>
-          <text
-            x={left - 8}
-            y={top + i * 26 + 17}
-            textAnchor="end"
-            className="fill-ink text-[11px]"
-          >
+          <text x={left - 8} y={top + i * 26 + 17} textAnchor="end" className="fill-ink text-xs">
             {rowLabel(r)}
           </text>
           {cols.map((c, j) => {
@@ -418,7 +413,7 @@ export function Heatmap({
                     textAnchor="middle"
                     // 底色夠深（>60%）時改用主色上的文字色維持對比
                     fill={rate > 0.6 ? 'var(--on-primary)' : 'var(--ink)'}
-                    className="tabular text-[10px]"
+                    className="tabular text-xs"
                   >
                     {Math.round(rate * 100)}%
                   </text>

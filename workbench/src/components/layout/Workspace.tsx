@@ -1,6 +1,6 @@
-// 工具頁版面（柔和卡片風）：灰色畫布上的白色大圓角卡片。
+// 工具頁版面：灰綠畫布上的白色卡片（12px 圓角、細框）。
 //
-//   ┌ 控制面板卡 ┐  大標題・說明                       右側操作
+//   ┌ 控制面板卡 ┐  標題 ⓘ                              右側操作
 //   │            │  ┌ 主檢視卡（影像／圖表）────┐ ┌ 讀數卡 ┐
 //   │            │  │                           │ ├ 讀數卡 ┤
 //   └────────────┘  └───────────────────────────┘ └────────┘
@@ -9,11 +9,12 @@
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 
+import { InfoTip } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 
 // 左側控制面板與右側讀數欄的固定寬度（px）；中間主檢視吃掉剩餘寬度
-export const PANEL_WIDTH = 312
-export const READOUT_WIDTH = 296
+export const PANEL_WIDTH = 300
+export const READOUT_WIDTH = 312
 
 /** 控制面板收起與否記在瀏覽器（每位使用者自己的偏好，所有工具頁共用）；讀不到時預設展開。 */
 const PANEL_KEY = 'wb.panelCollapsed'
@@ -37,7 +38,7 @@ function writeCollapsed(v: boolean) {
 /**
  * 工具頁的外層版面：左側控制面板卡（panel，由 PanelSections 的段落組成）＋右側「標題列＋內容」。
  * 控制面板自行捲動（overflow-y-auto），內容區撐滿剩餘高度，整頁不捲動。
- * - title／description：頁面大標題與一行說明（過長時截斷，完整內容放在 title 屬性）。
+ * - title／description：頁面標題；說明不直接顯示，放在標題旁的 ⓘ 提示裡。
  * - 標題左側的按鈕可收起控制面板，讓主檢視變寬；收起時面板只是隱藏（保留輸入中的內容）。
  */
 export function Workspace({
@@ -63,13 +64,13 @@ export function Workspace({
   const Icon = collapsed ? PanelLeftOpen : PanelLeftClose
   return (
     // min-h-0：flex 子項預設 min-height 為內容高度，不設的話內容會把版面撐高、內部捲動失效
-    <div className="flex h-full min-h-0 gap-3 pr-3 pb-3">
+    <div className="flex h-full min-h-0 gap-3 p-3">
       {/* 具名的 section（aria-label）成為地標，螢幕閱讀器可直接跳到控制面板 */}
       <section
         id={panelId}
         aria-label="控制面板"
         hidden={collapsed}
-        className="bg-card shadow-card shrink-0 overflow-y-auto rounded-[20px]"
+        className="bg-card shadow-card border-card-border rounded-card shrink-0 overflow-y-auto border"
         style={{ width: PANEL_WIDTH }}
       >
         {panel}
@@ -87,7 +88,7 @@ export function Workspace({
               aria-controls={panelId}
               aria-label={collapsed ? '展開控制面板' : '收起控制面板'}
               title={collapsed ? '展開控制面板' : '收起控制面板'}
-              className="text-muted hover:bg-card hover:text-ink focus-visible:ring-primary/40 grid size-8 shrink-0 place-items-center rounded-full focus-visible:ring-2 focus-visible:outline-none"
+              className="text-muted hover:bg-card hover:text-ink focus-visible:ring-primary/40 grid size-8 shrink-0 place-items-center rounded-lg focus-visible:ring-2 focus-visible:outline-none"
             >
               <Icon className="size-[18px]" aria-hidden />
             </button>
@@ -99,7 +100,7 @@ export function Workspace({
   )
 }
 
-/** 頁面標題列：大標題・說明，右側放操作。工具頁由 Workspace 帶入；沒有控制面板的頁面直接使用。 */
+/** 頁面標題列：標題＋說明圖示（ⓘ），右側放操作。工具頁由 Workspace 帶入；沒有控制面板的頁面直接使用。 */
 export function PageHeader({
   title,
   description,
@@ -113,13 +114,11 @@ export function PageHeader({
   leading?: ReactNode
 }) {
   return (
-    <div className="flex shrink-0 items-end gap-4 px-1 pt-1 pb-3">
-      {leading && <div className="self-center">{leading}</div>}
-      <div className="min-w-0 flex-1">
-        <h1 className="text-[22px] leading-tight font-semibold tracking-tight">{title}</h1>
-        <p className="text-muted mt-0.5 truncate text-[13px]" title={description}>
-          {description}
-        </p>
+    <div className="flex min-h-10 shrink-0 items-center gap-2 pb-3">
+      {leading}
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+        <h1 className="truncate text-[20px] leading-tight font-semibold">{title}</h1>
+        {description && <InfoTip text={description} label="頁面說明" side="bottom" />}
       </div>
       {aside}
     </div>
@@ -133,7 +132,7 @@ export function PageHeader({
 export function Split({ main, readout }: { main: ReactNode; readout?: ReactNode }) {
   return (
     <div className="flex h-full min-h-0 gap-3">
-      <div className="bg-card shadow-card min-w-0 flex-1 overflow-hidden rounded-[20px]">
+      <div className="bg-card shadow-card border-card-border rounded-card min-w-0 flex-1 overflow-hidden border">
         <div className="h-full overflow-y-auto">{main}</div>
       </div>
       {readout && (
@@ -168,17 +167,18 @@ export function MainView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {toolbar && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-4 pb-3">{toolbar}</div>
+        <div className="border-card-border flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
+          {toolbar}
+        </div>
       )}
-      <div
-        className={cn(
-          'flex min-h-0 flex-1 flex-col',
-          scroll ? 'overflow-y-auto px-5 pb-5' : 'px-3 pb-3',
-        )}
-      >
+      <div className={cn('flex min-h-0 flex-1 flex-col', scroll ? 'overflow-y-auto p-4' : 'p-2')}>
         {children}
       </div>
-      {footer && <div className="text-muted shrink-0 px-5 pb-4 text-xs">{footer}</div>}
+      {footer && (
+        <div className="border-card-border text-muted shrink-0 border-t px-4 py-2 text-xs">
+          {footer}
+        </div>
+      )}
     </div>
   )
 }
@@ -186,20 +186,24 @@ export function MainView({
 /** 內容區塊（主檢視裡）：標題列＋內容。 */
 export function Section({
   title,
+  hint,
   children,
   aside,
   className,
 }: {
   title: string
+  /** 區塊說明，放在標題旁的 ⓘ 提示裡 */
+  hint?: ReactNode
   children: ReactNode
   aside?: ReactNode
   className?: string
 }) {
   return (
     <section className={cn('mb-5', className)}>
-      <div className="mb-2 flex min-h-6 items-center justify-between gap-2">
-        <h2 className="text-[14px] font-semibold">{title}</h2>
-        {aside}
+      <div className="mb-2 flex min-h-7 items-center gap-1.5">
+        <h2 className="text-[15px] font-semibold">{title}</h2>
+        {hint && <InfoTip text={hint} />}
+        {aside && <div className="ml-auto flex items-center gap-2">{aside}</div>}
       </div>
       {children}
     </section>
@@ -209,19 +213,23 @@ export function Section({
 /** 讀數欄裡的一張卡。 */
 export function ReadoutBlock({
   title,
+  hint,
   children,
   aside,
 }: {
   title?: string
+  /** 說明，放在標題旁的 ⓘ 提示裡 */
+  hint?: ReactNode
   children: ReactNode
   aside?: ReactNode
 }) {
   return (
-    <section className="bg-card shadow-card shrink-0 rounded-[20px] p-4">
+    <section className="bg-card shadow-card border-card-border rounded-card shrink-0 border p-3.5">
       {title && (
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-[14px] font-semibold">{title}</h2>
-          {aside}
+        <div className="mb-2.5 flex items-center gap-1.5">
+          <h2 className="text-sm font-semibold">{title}</h2>
+          {hint && <InfoTip text={hint} />}
+          {aside && <div className="ml-auto flex items-center gap-2">{aside}</div>}
         </div>
       )}
       {children}
@@ -232,7 +240,7 @@ export function ReadoutBlock({
 /** 空狀態／載入中的置中提示（可附圖示），例如尚未選檔、載入中。 */
 export function EmptyState({ icon, children }: { icon?: ReactNode; children: ReactNode }) {
   return (
-    <div className="text-muted flex h-full min-h-48 flex-col items-center justify-center gap-2 p-6 text-center text-sm">
+    <div className="text-muted flex h-full min-h-40 flex-col items-center justify-center gap-2 p-6 text-center text-sm [&_svg]:opacity-70">
       {icon}
       {children}
     </div>

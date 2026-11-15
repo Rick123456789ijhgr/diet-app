@@ -168,7 +168,7 @@ function Browser({
         </ToolButton>
       </div>
 
-      <div className="border-card-border flex min-h-0 flex-1 overflow-hidden rounded-xl border">
+      <div className="border-card-border flex min-h-0 flex-1 overflow-hidden rounded-lg border">
         <Sidebar current={data?.path ?? path} recent={recent} onGo={go} />
         <div className="flex min-w-0 flex-1 flex-col">
           {query.isError ? (
@@ -188,7 +188,7 @@ function Browser({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="folder-picker-target" className="text-ink-2 shrink-0 text-[13px]">
+        <label htmlFor="folder-picker-target" className="text-ink-2 shrink-0 text-sm">
           資料夾：
         </label>
         <input
@@ -197,7 +197,7 @@ function Browser({
           value={target}
           placeholder="請選一個資料夾"
           title={target}
-          className="readout border-card-border bg-sunken min-w-0 flex-1 rounded-lg border px-2.5 py-1.5 text-[13px]"
+          className="readout border-card-border bg-sunken min-w-0 flex-1 rounded-lg border px-2.5 py-1.5 text-sm"
         />
         <Button
           variant="primary"
@@ -259,7 +259,7 @@ function AddressBar({ path, onGo }: { path: string; onGo: (p: string) => void })
             setEditing(false)
           }
         }}
-        className="readout border-primary bg-card focus-visible:ring-primary/40 h-8 min-w-0 flex-1 rounded-lg border px-2.5 text-[13px] focus-visible:ring-2 focus-visible:outline-none"
+        className="readout border-primary bg-card focus-visible:ring-primary/40 h-8 min-w-0 flex-1 rounded-lg border px-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
       />
     )
   }
@@ -290,7 +290,7 @@ function AddressBar({ path, onGo }: { path: string; onGo: (p: string) => void })
                 aria-current={last ? 'location' : undefined}
                 onClick={() => !last && onGo(s.path)}
                 className={cn(
-                  'hover:bg-hover min-w-0 truncate rounded px-1.5 py-0.5 text-[13px]',
+                  'hover:bg-hover min-w-0 truncate rounded px-1.5 py-0.5 text-sm',
                   last ? 'text-ink font-semibold' : 'text-ink-2',
                 )}
               >
@@ -396,7 +396,7 @@ function SideItem({
       aria-current={active ? 'location' : undefined}
       onClick={onClick}
       className={cn(
-        'focus-visible:ring-primary/40 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] focus-visible:ring-2 focus-visible:outline-none',
+        'focus-visible:ring-primary/40 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm focus-visible:ring-2 focus-visible:outline-none',
         active ? 'bg-card text-ink font-semibold' : 'text-ink-2 hover:bg-hover',
       )}
     >
@@ -487,7 +487,7 @@ function FolderList({
                 onClick={() => !f.locked && onSelect(f.path)}
                 onDoubleClick={() => !f.locked && onOpen(f.path)}
                 className={cn(
-                  'grid cursor-default grid-cols-[1fr_6rem] items-center rounded-md px-2 py-1.5 text-[13px] select-none',
+                  'grid cursor-default grid-cols-[1fr_6rem] items-center rounded-md px-2 py-1.5 text-sm select-none',
                   f.locked
                     ? 'text-muted opacity-60'
                     : on

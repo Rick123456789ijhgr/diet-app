@@ -2,7 +2,7 @@
 import { ArrowDown, ArrowUp, Plus, RotateCcw, X } from 'lucide-react'
 
 import type { ConfigClass, ConfigOverride } from '@/api/client'
-import { Button } from '@/components/ui/primitives'
+import { Button, InfoTip } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { sequenceOf, setSequence } from '@/lib/config'
 import { rungText } from '@/lib/text'
@@ -91,14 +91,13 @@ export function LadderControls({
         </div>
       )}
       <fieldset>
-        <legend className="text-ink mb-1.5 text-xs font-semibold">{orderTitle}</legend>
-        <p className="text-muted mb-2 text-xs">{orderHelp}</p>
+        <Legend title={orderTitle} hint={orderHelp} />
         <ol className="space-y-1">
           {/* 以階名為 key（序列內不重複），重新排序時 React 能正確搬移列而不是重建 */}
           {rungs.map((r, i) => (
             <li
               key={r}
-              className="border-card-border bg-card flex items-center gap-2 rounded-lg border px-2 py-1 text-[13px]"
+              className="border-card-border bg-card flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm"
             >
               <span className="text-muted tabular w-4 text-xs">{i + 1}</span>
               <span className="flex-1">{rungText(r)}</span>
@@ -145,8 +144,7 @@ export function LadderControls({
       </fieldset>
 
       <fieldset>
-        <legend className="text-ink mb-1.5 text-xs font-semibold">多尺度倍率</legend>
-        <p className="text-muted mb-2 text-xs">多尺度階依點選順序嘗試的縮放倍率。</p>
+        <Legend title="多尺度倍率" hint="多尺度階依點選順序嘗試的縮放倍率。" />
         {/* 選項＝候選值 ∪ 目前已選（去重後由小到大）；已選的順序即嘗試順序，點選時加到最後、再點一次移除 */}
         <Chips
           options={[...new Set([...SCALE_OPTIONS, ...scales])].sort((a, b) => a - b)}
@@ -163,10 +161,10 @@ export function LadderControls({
 
       {rungs.includes('rotate') && (
         <fieldset>
-          <legend className="text-ink mb-1.5 text-xs font-semibold">旋轉角度</legend>
-          <p className="text-muted mb-2 text-xs">
-            旋轉階依點選順序嘗試的角度（逆時針）；90° 把直放的條碼轉成橫的。
-          </p>
+          <Legend
+            title="旋轉角度"
+            hint="旋轉階依點選順序嘗試的角度（逆時針）；90° 把直放的條碼轉成橫的。"
+          />
           <Chips
             options={[...new Set([...ANGLE_OPTIONS, ...angles])]}
             selected={angles}
@@ -182,10 +180,10 @@ export function LadderControls({
 
       {showFormats && (
         <fieldset>
-          <legend className="text-ink mb-1.5 text-xs font-semibold">採用格式</legend>
-          <p className="text-muted mb-2 text-xs">
-            全部不選為全部採用；其他格式的結果不採用（例如斜拍 EAN-13 被誤讀成 UPC-E）。
-          </p>
+          <Legend
+            title="採用格式"
+            hint="全部不選為全部採用；其他格式的結果不採用（例如斜拍 EAN-13 被誤讀成 UPC-E）。"
+          />
           <Chips
             options={allFormats}
             selected={formats}
@@ -200,6 +198,16 @@ export function LadderControls({
         </fieldset>
       )}
     </div>
+  )
+}
+
+/** 分組標題＋旁邊的 ⓘ 說明（說明不直接佔畫面）。 */
+function Legend({ title, hint }: { title: string; hint: string }) {
+  return (
+    <legend className="text-ink mb-2 flex items-center gap-1 text-xs font-semibold">
+      {title}
+      <InfoTip text={hint} label={`${title}說明`} />
+    </legend>
   )
 }
 
@@ -221,7 +229,7 @@ function IconButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="text-muted hover:text-ink rounded p-0.5 disabled:opacity-30"
+      className="text-muted hover:text-ink hover:bg-hover rounded-md p-1 disabled:opacity-30"
     >
       {children}
     </button>
@@ -264,7 +272,7 @@ function Chips<T extends string | number>({
             title={locked ? `至少保留 ${minSelected} 個` : undefined}
             onClick={() => onToggle(o)}
             className={cn(
-              'readout rounded-lg border px-2 py-0.5 text-xs disabled:cursor-not-allowed',
+              'readout h-7 rounded-lg border px-2.5 text-xs disabled:cursor-not-allowed',
               on
                 ? 'border-primary bg-primary-soft text-primary-ink'
                 : 'border-card-border text-muted hover:bg-hover',

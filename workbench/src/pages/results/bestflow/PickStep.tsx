@@ -5,7 +5,7 @@ import { useRef, useState } from 'react'
 
 import { FolderPicker } from '@/components/FolderPicker'
 import { Dialog } from '@/components/ui/Dialog'
-import { Button, Segmented } from '@/components/ui/primitives'
+import { Button, InfoTip, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { cn } from '@/lib/cn'
 
@@ -40,7 +40,7 @@ export function PickStep({
   setRecursive: (v: boolean) => void
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-6 py-5">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-5 py-4">
       <Segmented
         label="圖片來源"
         value={source}
@@ -105,7 +105,7 @@ function UploadArea({
           add(e.dataTransfer.files)
         }}
         className={cn(
-          'flex items-center rounded-[20px] border-2 border-dashed transition-colors',
+          'flex items-center rounded-card border-2 border-dashed transition-colors',
           empty
             ? 'min-h-72 flex-1 flex-col justify-center gap-3 p-8 text-center'
             : 'gap-3 px-4 py-3',
@@ -117,11 +117,20 @@ function UploadArea({
           aria-hidden
         />
         <div className={cn('min-w-0', empty ? '' : 'flex-1')}>
-          <p className={cn('font-semibold', empty ? 'text-[16px]' : 'text-[13px]')}>
+          <p className={cn('font-semibold', empty ? 'text-[16px]' : 'text-sm')}>
             {empty ? '把條碼照片拖到這裡' : `還可以再加 ${room} 張`}
           </p>
-          <p className="text-muted mt-0.5 text-xs">
-            可多選，最多 {MAX_UPLOADS} 張。不要放測試集的圖片（規則 7）。
+          <p
+            className={cn(
+              'text-muted mt-1 flex items-center gap-1 text-xs',
+              empty && 'justify-center',
+            )}
+          >
+            最多 {MAX_UPLOADS} 張・不要放測試集的圖片
+            <InfoTip
+              label="上傳說明"
+              text={`可一次多選，最多 ${MAX_UPLOADS} 張；大量圖片請改用資料夾。測試集（test split）的圖片不得用來調整規則、門檻或提示（規則 7）。`}
+            />
           </p>
         </div>
         {/* 原生檔案欄位的按鈕文字隨瀏覽器語系（例如 Choose Files），改以中文按鈕觸發 */}
@@ -150,7 +159,7 @@ function UploadArea({
       {!empty && (
         <section aria-label="已選的圖片" className="flex min-h-0 flex-col gap-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h2 className="text-[14px] font-semibold">已選 {items.length} 張</h2>
+            <h2 className="text-[15px] font-semibold">已選 {items.length} 張</h2>
             {fromName > 0 && (
               <span className="text-muted flex items-center gap-1 text-xs">
                 <Tag className="size-3.5" aria-hidden />
@@ -188,7 +197,7 @@ function UploadArea({
                 </>
               }
             >
-              <p className="text-ink-2 text-[13px] leading-relaxed">
+              <p className="text-ink-2 text-sm leading-relaxed">
                 只想換掉其中幾張的話，把游標移到圖片上，按右上角的 ✕ 個別移除。
               </p>
             </Dialog>
@@ -196,14 +205,14 @@ function UploadArea({
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
             {items.map((it) => (
               <li key={it.key} className="group relative">
-                <div className="bg-sunken flex aspect-square items-center justify-center overflow-hidden rounded-2xl">
+                <div className="bg-sunken flex aspect-square items-center justify-center overflow-hidden rounded-lg">
                   {it.url ? (
                     <img src={it.url} alt="" className="size-full object-cover" />
                   ) : (
                     <FileImage className="text-muted size-6" aria-hidden />
                   )}
                 </div>
-                <p className="readout mt-1 truncate text-[11px]" title={it.file.name}>
+                <p className="readout mt-1 truncate text-xs" title={it.file.name}>
                   {it.file.name}
                 </p>
                 <button
@@ -235,16 +244,25 @@ function FolderArea({
   setRecursive: (v: boolean) => void
 }) {
   return (
-    <div className="bg-sunken max-w-xl space-y-3 rounded-[20px] p-5">
+    <div className="bg-sunken max-w-xl space-y-3 rounded-card p-4">
       <div className="flex flex-col gap-1.5">
-        <span className="text-[13px] font-semibold">資料夾路徑（執行工作台的這台電腦）</span>
+        <span className="flex items-center gap-1 text-sm font-semibold">
+          資料夾路徑
+          <InfoTip
+            label="資料夾說明"
+            text={
+              '路徑指執行工作台的這台電腦上的資料夾。\n' +
+              '資料夾的圖片不經過瀏覽器，所以沒有「逐張確認真值」這一步：直接比較各方法，執行完再到結論的「真值」分頁確認程式推定不了的圖片。'
+            }
+          />
+        </span>
         <div className="flex gap-2">
           <input
             aria-label="圖片資料夾"
             value={folder}
             onChange={(e) => setFolder(e.target.value)}
             placeholder="D:\photos\barcodes"
-            className="border-card-border bg-card focus-visible:border-primary readout h-9 min-w-0 flex-1 rounded-xl border px-3 text-[13px] focus-visible:outline-none"
+            className="border-card-border bg-card focus-visible:border-primary readout h-9 min-w-0 flex-1 rounded-lg border px-3 text-sm focus-visible:outline-none"
           />
           <FolderPicker value={folder} onPick={setFolder} size="md" />
         </div>
@@ -258,10 +276,7 @@ function FolderArea({
         />
         包含子資料夾
       </label>
-      <p className="text-muted text-xs leading-relaxed">
-        資料夾的圖片不經過瀏覽器，所以沒有「逐張確認真值」這一步：直接比較各方法，
-        執行完再到結論的「真值」分頁確認程式推定不了的圖片。splits/test 會被拒絕（測試集已鎖定）。
-      </p>
+      <p className="text-muted text-xs">splits/test 會被拒絕（測試集已鎖定）。</p>
     </div>
   )
 }

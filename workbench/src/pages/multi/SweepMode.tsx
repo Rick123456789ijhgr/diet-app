@@ -18,10 +18,17 @@ import { ConfigIO } from '@/components/ConfigIO'
 import { ImageSourcePanel } from '@/components/ImageSourcePanel'
 import { LadderControls } from '@/components/LadderControls'
 import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
-import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
+import {
+  EmptyState,
+  MainView,
+  ReadoutBlock,
+  Section,
+  Split,
+  Workspace,
+} from '@/components/layout/Workspace'
 import { ParamForm } from '@/components/ParamForm'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
-import { Badge, DraftNumberInput, Segmented } from '@/components/ui/primitives'
+import { Badge, DraftNumberInput, InfoTip, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis } from '@/hooks/useAnalysis'
 import { useConfigClass, useConfigSchemas } from '@/hooks/useConfigSchemas'
@@ -175,7 +182,14 @@ const LOCATE_TEXT: Record<LocateOutcome, string> = {
 const TOL = { default: 0.03, lo: 0.005, hi: 0.2 }
 /** 適用範圍（ADR 0004）：伺服器端的逐步升級只服務無法重拍的靜態照片。 */
 const SCOPE_NOTE = '適用：相簿匯入、冷啟動上傳等無法重拍的靜態照片；APP 即時掃描不經此流程。'
-/** 評估對象的一句說明（左欄「評估對象」下方）。 */
+/** 合成樣本的評分方式（左欄「合成樣本」標題旁的提示）。 */
+const SAMPLE_TEXT: Record<'barcode' | 'label', string> = {
+  barcode:
+    '樣本為合成 EAN-13，內容各不相同；成功率為讀對的樣本數除以樣本數，讀成別的號碼另計為誤讀。',
+  label:
+    '樣本為合成營養標示（各自隨機透視），已知真實四角；四角中最大的誤差不超過「真值平均邊長 × 容許誤差」才算正確，找到但超過算偏移。',
+}
+/** 評估對象的一句說明（左欄「評估對象」標題旁的提示）。 */
 const TARGET_TEXT: Record<Target, string> = {
   quality: '對基準影像逐級退化，看品質指標在哪個等級首次觸發警告。',
   barcode: '對合成 EAN-13 逐級退化並解碼，比較只用原圖與逐步升級的成功率、誤讀率。',
@@ -307,7 +321,7 @@ export function SweepMode({
           aria-label="退化種類"
           value={axisKey}
           onChange={(e) => setAxis(e.target.value)}
-          className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none"
+          className="border-card-border bg-card focus-visible:border-primary h-8 rounded-lg border px-2.5 text-sm focus-visible:outline-none"
         >
           {SWEEP_AXES.map((a) => (
             <option key={a.key} value={a.key}>
@@ -354,73 +368,60 @@ export function SweepMode({
           {rangeError}
         </p>
       )}
-      <p className="text-muted text-xs">
-        可用範圍 {axis.lo}–{axis.hi}；在範圍內等距取點。
-      </p>
     </div>
   )
 
   // 合成樣本設定（條碼與營養標示）：樣本數、模組寬（只用於條碼）、種子、容許誤差（只用於標示）
   const sampleControls = (
-    <div className="space-y-2">
-      {target === 'barcode' ? (
-        <p className="text-muted text-xs">
-          樣本為合成 EAN-13，內容各不相同；成功率為讀對的樣本數除以樣本數，讀成別的號碼另計為誤讀。
-        </p>
-      ) : (
-        <p className="text-muted text-xs">
-          樣本為合成營養標示（各自隨機透視），已知真實四角；四角中最大的誤差不超過「真值平均邊長 ×
-          容許誤差」才算正確，找到但超過算偏移。
-        </p>
-      )}
-      <p className="text-muted text-xs">{SCOPE_NOTE}</p>
-      <div className="flex items-end gap-2">
-        {/* [欄位, 標籤, 最小值, 最大值]；輸入四捨五入成整數並限制在範圍內；模組寬只用於條碼 */}
-        {(
-          [
-            ['samples', '樣本數', 1, 30],
-            ['module_px', '模組寬', 1, 12],
-            ['seed', '種子', 0, 10000],
-          ] as const
-        )
-          .filter(([key]) => target === 'barcode' || key !== 'module_px')
-          .map(([key, label, lo, hi]) => (
-            <div key={key} className="flex flex-col gap-1 text-xs">
-              <span className="text-muted">{label}</span>
-              <DraftNumberInput
-                aria-label={label}
-                value={samples[key]}
-                parse={(t) => {
-                  const v = Math.round(Number(t))
-                  return v >= lo && v <= hi ? v : undefined
-                }}
-                onCommit={(v) => setSamples({ ...samples, [key]: v })}
-              />
-            </div>
-          ))}
-        {target === 'label' && (
-          <div className="flex flex-col gap-1 text-xs">
-            <span className="text-muted">容許誤差</span>
+    <div className="flex items-end gap-2">
+      {/* [欄位, 標籤, 最小值, 最大值]；輸入四捨五入成整數並限制在範圍內；模組寬只用於條碼 */}
+      {(
+        [
+          ['samples', '樣本數', 1, 30],
+          ['module_px', '模組寬', 1, 12],
+          ['seed', '種子', 0, 10000],
+        ] as const
+      )
+        .filter(([key]) => target === 'barcode' || key !== 'module_px')
+        .map(([key, label, lo, hi]) => (
+          <div key={key} className="flex flex-col gap-1 text-xs">
+            <span className="text-muted">{label}</span>
             <DraftNumberInput
-              aria-label="容許誤差"
-              step={0.005}
-              value={tol}
+              aria-label={label}
+              value={samples[key]}
               parse={(t) => {
-                const v = Number(t)
-                return v >= TOL.lo && v <= TOL.hi ? v : undefined
+                const v = Math.round(Number(t))
+                return v >= lo && v <= hi ? v : undefined
               }}
-              onCommit={setTol}
+              onCommit={(v) => setSamples({ ...samples, [key]: v })}
             />
           </div>
-        )}
-      </div>
+        ))}
+      {target === 'label' && (
+        <div className="flex flex-col gap-1 text-xs">
+          <span className="text-muted">容許誤差</span>
+          <DraftNumberInput
+            aria-label="容許誤差"
+            step={0.005}
+            value={tol}
+            parse={(t) => {
+              const v = Number(t)
+              return v >= TOL.lo && v <= TOL.hi ? v : undefined
+            }}
+            onCommit={setTol}
+          />
+        </div>
+      )}
     </div>
   )
 
   // 品質門檻：條碼與營養標示只用來對照「該不該請使用者重拍」（結果的品質門檻檢視），不影響解碼與定位
   const qualityForm = quality && (
     <div className="border-card-border space-y-2 border-t pt-4">
-      <h3 className="text-sm font-semibold">品質門檻（對照用）</h3>
+      <h3 className="flex items-center gap-1 text-sm font-semibold">
+        品質門檻（對照用）
+        <InfoTip text="只用來對照「該不該請使用者重拍」（結果的品質門檻檢視），不影響解碼與定位。" />
+      </h3>
       <ParamForm
         schema={quality}
         overrides={config}
@@ -455,7 +456,7 @@ export function SweepMode({
       : target === 'label'
         ? labelSchema &&
           quality && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               <ParamForm
                 schema={labelSchema}
                 overrides={labelCfg}
@@ -469,7 +470,7 @@ export function SweepMode({
         : ladderSchema &&
           zxingSchema &&
           quality && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               <LadderControls
                 schema={ladderSchema}
                 overrides={ladder}
@@ -546,7 +547,7 @@ export function SweepMode({
   // 左側面板由上而下：評估對象 → 掃描範圍 → 基準影像（品質）或合成樣本（條碼、標示）→ 參數 → 匯入／匯出
   const panel = (
     <PanelStack>
-      <PanelSection title="評估對象">
+      <PanelSection title="評估對象" hint={TARGET_TEXT[target]}>
         <Segmented
           label="評估對象"
           value={target}
@@ -558,15 +559,18 @@ export function SweepMode({
             { value: 'label', label: '營養標示' },
           ]}
         />
-        <p className="text-muted text-xs">{TARGET_TEXT[target]}</p>
       </PanelSection>
-      <PanelSection title="掃描範圍">{sweepControls}</PanelSection>
+      <PanelSection title="掃描範圍" hint={`可用範圍 ${axis.lo}–${axis.hi}；在範圍內等距取點。`}>
+        {sweepControls}
+      </PanelSection>
       {target === 'quality' ? (
         <PanelSection title="基準影像">
           <ImageSourcePanel pipeline={pipeline} scene="label" />
         </PanelSection>
       ) : (
-        <PanelSection title="合成樣本">{sampleControls}</PanelSection>
+        <PanelSection title="合成樣本" hint={`${SAMPLE_TEXT[target]}${SCOPE_NOTE}`}>
+          {sampleControls}
+        </PanelSection>
       )}
       <Disclosure
         open={paramsOpen}
@@ -680,7 +684,7 @@ function Thumbs({ thumbs, axisLabel }: { thumbs: Thumb[]; axisLabel: string }) {
     <ReadoutBlock title="退化樣本">
       <div className="space-y-2">
         {thumbs.map((t) => (
-          <figure key={t.image_id} className="bg-sunken overflow-hidden rounded-2xl">
+          <figure key={t.image_id} className="bg-sunken overflow-hidden rounded-lg">
             <div className="viewport-grid">
               <img
                 src={artifactUrl(t.image_id)}
@@ -1016,25 +1020,27 @@ function QualityThresholdView({
 }) {
   return (
     <div className="space-y-4">
-      <p className="text-muted text-xs">
-        門檻設得好時，品質不通過率應在成功率下滑處才開始上升：太早上升是誤報（白白請使用者重拍），
-        太晚是漏報。請先調好前處理，再依此調整左側的品質門檻。
-      </p>
-      <LineChart
-        label={`${successName}與品質不通過率隨${axisLabel}變化`}
-        xLabel={axisLabel}
-        yDomain={[0, 1]}
-        yFormat={pct}
-        series={[
-          { name: successName, color: PALETTE[1]!, points: success },
-          {
-            name: '品質不通過率',
-            color: PALETTE[3]!,
-            dashed: true,
-            points: r.quality_rates.map((q) => ({ x: q.level, y: q.rate })),
-          },
-        ]}
-      />
+      <Section
+        title={`${successName}與品質不通過率`}
+        hint="門檻設得好時，品質不通過率應在成功率下滑處才開始上升：太早上升是誤報（白白請使用者重拍），太晚是漏報。請先調好前處理，再依此調整左側的品質門檻。"
+        className="mb-0"
+      >
+        <LineChart
+          label={`${successName}與品質不通過率隨${axisLabel}變化`}
+          xLabel={axisLabel}
+          yDomain={[0, 1]}
+          yFormat={pct}
+          series={[
+            { name: successName, color: PALETTE[1]!, points: success },
+            {
+              name: '品質不通過率',
+              color: PALETTE[3]!,
+              dashed: true,
+              points: r.quality_rates.map((q) => ({ x: q.level, y: q.rate })),
+            },
+          ]}
+        />
+      </Section>
       <ReadoutBlock title="各警告首次在半數樣本出現的等級">
         <MetricGrid>
           {Object.entries(r.quality_triggers).map(([code, level]) => (
