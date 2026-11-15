@@ -20,18 +20,21 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import os
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from dietai.evaluation.barcode import Outcome
 from dietai.evaluation.image_names import ImageName, parse_name
-from dietai.evaluation.manifest import TEST_SPLIT, write_manifest
+from dietai.evaluation.manifest import SOURCE_COLUMN, TEST_SPLIT, read_manifest, write_manifest
 
 DEV_SPLIT = "dev"
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
-SOURCE_TAGS = ("category", "batch")  # 來源 manifest 的標籤欄（分析時可依類別分組）
+# 來源 manifest 的標籤欄（分析時可依類別、號碼種類分組）
+SOURCE_TAGS = ("category", "batch", "code_type")
 MOVE_LOG_COLUMNS = ("time", "old", "new")
 
 
@@ -48,6 +51,21 @@ class SplitAssignment:
     def label(self) -> str:
         """``<類別>_<批次>``，即 ``test_fractions`` 的鍵與輸出子資料夾名稱。"""
         return f"{self.name.category}_{self.name.batch}"
+
+
+def code_type(code: str) -> str:
+    """條碼號碼的種類：``gtin``（商品條碼）、``store``（店內碼）或 ``none``（負樣本）。
+
+    店內碼是 GS1 保留給店家自行編碼的範圍（生鮮秤重、店內貼的價格標籤等），同一商品在不同店、
+    不同天號碼都不同，查不到產品資料庫：EAN-13（含補成 13 位的 UPC-A）開頭 ``2``，或 UPC-A
+    number system 2、4（補成 13 位後開頭 ``02``、``04``）；EAN-8 開頭 ``0`` 或 ``2``。
+    """
+    if not code:
+        return "none"
+    if len(code) == 8:
+        return "store" if code[0] in "02" else "gtin"
+    c13 = code.zfill(13)
+    return "store" if c13[0] == "2" or c13[:2] in ("02", "04") else "gtin"
 
 
 def parse_fractions(spec: str) -> dict[str, float]:
@@ -160,7 +178,7 @@ def source_rows(root: Path, plan: Sequence[SplitAssignment]) -> list[dict[str, s
     """來源 manifest 的各列（``image`` 為相對 ``root`` 的路徑，manifest 寫在 ``root`` 之下）。
 
     ``id`` 為主檔名（即變體的 ``source_id``），``truth`` 為檔名中的條碼（負樣本為空字串），
-    標籤欄 ``category``、``batch``。依 id 排序。
+    標籤欄 ``category``、``batch``、``code_type``（``code_type()``）。依 id 排序。
     """
     rows = [
         {
@@ -170,10 +188,50 @@ def source_rows(root: Path, plan: Sequence[SplitAssignment]) -> list[dict[str, s
             "split": a.split,
             "category": a.name.category,
             "batch": a.name.batch,
+            "code_type": code_type(a.name.code or ""),
         }
         for a in plan
     ]
     return sorted(rows, key=lambda r: r["id"])
+
+
+def scan_splits(root: Path) -> list[SplitAssignment]:
+    """讀出 ``<root>/splits/<split>/<類別>_<批次>/`` 中已切分的照片（split 由所在資料夾決定）。
+
+    只列路徑、不開啟影像，因此也會列出測試集；檔名不合規、條碼未定或主檔名重複時丟 ``ValueError``。
+    """
+    base = root / "splits"
+    if not base.is_dir():
+        raise FileNotFoundError(f"找不到已切分的資料夾：{base}")
+    out: list[SplitAssignment] = []
+    problems: list[str] = []
+    seen: set[str] = set()
+    for split_dir in sorted(d for d in base.iterdir() if d.is_dir()):
+        for p in list_images(sorted(d for d in split_dir.iterdir() if d.is_dir())):
+            name = parse_name(p.name)
+            if name is None or name.code is None:
+                problems.append(f"檔名不合規或條碼未定：{p}")
+            elif p.stem in seen:
+                problems.append(f"主檔名重複：{p}")
+            elif p.parent.name != f"{name.category}_{name.batch}":
+                problems.append(f"所在資料夾與檔名的類別、批次不符：{p}")
+            else:
+                seen.add(p.stem)
+                out.append(SplitAssignment(p, name, _group_key(name, p.stem), split_dir.name))
+    if problems:
+        raise ValueError("無法讀出切分：\n" + "\n".join(problems))
+    return out
+
+
+def refresh_sources(root: Path, manifest_name: str = "sources.csv") -> Path:
+    """依 ``splits/`` 目前的內容重寫來源 manifest（不搬檔案、不改變切分），回傳路徑。
+
+    用於新增標籤欄等格式變更；照片的 split 一律以所在資料夾為準。
+    """
+    plan = scan_splits(root)
+    if not plan:
+        raise ValueError(f"{root / 'splits'} 中沒有照片")
+    return write_manifest(root / manifest_name, source_rows(root, plan), SOURCE_TAGS)
 
 
 def check_destinations(root: Path, plan: Sequence[SplitAssignment]) -> list[str]:
@@ -270,3 +328,39 @@ def summarize(plan: Sequence[SplitAssignment]) -> list[dict[str, object]]:
         }
         for label in sorted({a.label for a in plan})
     ]
+
+
+def select_sources(
+    sources: str | Path,
+    methods_rows: Iterable[Mapping[str, str]],
+    out: str | Path,
+    *,
+    arm: str,
+    method: str = "raw",
+) -> tuple[Path, int, int]:
+    """挑出可當變體來源的清楚原圖，寫成另一份來源 manifest；回傳（路徑, 保留數, 原圖數）。
+
+    ``methods_rows`` 為 ``run_methods`` 對 ``--clean-only`` 資料集的結果表；``arm``／``method``
+    的判定為 ``correct``（只讀出真值一個號碼）的原圖才保留（以 ``source_id`` 對應來源的 ``id``）。
+    來源中的測試集列一律不寫出（規則 7：變體來源只依 dev 挑選）。欄位與順序照抄來源 manifest；
+    ``out`` 已存在時丟 ``FileExistsError``。
+    """
+    out = Path(out)
+    if out.exists():
+        raise FileExistsError(f"輸出檔已存在（不覆寫）：{out}")
+    keep = {
+        r.get(SOURCE_COLUMN) or r["id"]
+        for r in methods_rows
+        if r["arm"] == arm and r["method"] == method and r["outcome"] == Outcome.CORRECT
+    }
+    src = read_manifest(sources)
+    if not keep:
+        raise ValueError(f"結果表中沒有 {arm}／{method} 判為正確的原圖")
+    with Path(sources).open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        rows = [r for r in reader if r.get("split", "").lower() != TEST_SPLIT and r["id"] in keep]
+    tags = tuple(c for c in (reader.fieldnames or ()) if c not in ("id", "image", "truth", "split"))
+    # image 是相對來源 manifest 的路徑；寫到別的資料夾時改成相對新位置
+    for r in rows:
+        r["image"] = Path(os.path.relpath(src.path.parent / r["image"], out.parent)).as_posix()
+    return write_manifest(out, rows, tags), len(rows), len(src.items)
