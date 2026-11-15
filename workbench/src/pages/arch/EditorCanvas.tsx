@@ -538,7 +538,7 @@ export function EditorCanvas({
       </svg>
 
       {/* 左下角縮放控制 */}
-      <div className="bg-card shadow-card absolute bottom-3 left-3 flex items-center gap-0.5 rounded-full p-1">
+      <div className="bg-card shadow-card border-card-border border absolute bottom-3 left-3 flex items-center gap-0.5 rounded-full p-1">
         <ZoomButton
           label="縮小"
           onClick={() => {

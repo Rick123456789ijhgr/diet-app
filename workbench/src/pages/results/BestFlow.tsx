@@ -13,7 +13,7 @@ import { PageHeader } from '@/components/layout/Workspace'
 import { Stepper } from '@/components/layout/Stepper'
 import { ErrorBox } from '@/components/results'
 import { Dialog } from '@/components/ui/Dialog'
-import { Badge, Button } from '@/components/ui/primitives'
+import { Badge, Button, InfoTip } from '@/components/ui/primitives'
 import { useStream } from '@/hooks/useStream'
 import { truthsOf, uploadIds } from '@/lib/barcodeTruth'
 import { cn } from '@/lib/cn'
@@ -411,7 +411,7 @@ export function BestFlow({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col pr-3 pb-3">
+    <div className="flex h-full min-h-0 flex-col p-3">
       <PageHeader
         title="找最佳流程"
         description="選圖片、逐張確認條碼真值、選擇要比較的處理流程方案，再選出讀得最多又不增加誤讀的流程。"
@@ -438,7 +438,7 @@ export function BestFlow({
       />
       <section
         aria-label="找最佳流程的步驟"
-        className="bg-card shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px]"
+        className="bg-card shadow-card border-card-border border flex min-h-0 flex-1 flex-col overflow-hidden rounded-card"
       >
         <div className="border-card-border flex shrink-0 items-center gap-3 overflow-x-auto border-b px-4 py-2.5">
           <Stepper
@@ -481,7 +481,7 @@ export function BestFlow({
           </>
         }
       >
-        <ul className="text-ink-2 list-disc space-y-1 pl-5 text-[13px] leading-relaxed">
+        <ul className="text-ink-2 list-disc space-y-1 pl-5 text-sm leading-relaxed">
           {busy && <li>正在進行的比較會停止，不留下結果。</li>}
           {unsavedAnswers && <li>你確認的真值還沒寫進任何一次執行，會一起消失。</li>}
           {unsaved && (
@@ -530,7 +530,7 @@ function RunScreen({
     )
   }
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-5 p-8">
+    <div className="flex h-full flex-col items-center justify-center gap-5 p-6">
       <p className="readout text-[40px] leading-none font-semibold tracking-tight">
         {total > 0 ? `${done}／${total}` : '…'}
       </p>
@@ -548,11 +548,14 @@ function RunScreen({
             style={{ width: `${total > 0 ? progressPercent(done, total) : 4}%` }}
           />
         </div>
-        <p className="text-ink-2 mt-2 text-center text-[13px]">{label}</p>
+        <p className="text-ink-2 mt-2.5 flex items-center justify-center gap-1 text-sm">
+          {label}
+          <InfoTip
+            label="執行說明"
+            text="包含多尺度與疊加流程，一張圖約需數秒。可以切到「進階」看其他結果，回來時進度還在；離開實驗結果頁會停止比較。"
+          />
+        </p>
       </div>
-      <p className="text-muted max-w-md text-center text-xs leading-relaxed">
-        包含多尺度與疊加流程，一張圖約需數秒。可以切到「進階」看其他結果，回來時進度還在；離開實驗結果頁會停止比較。
-      </p>
     </div>
   )
 }
@@ -608,7 +611,7 @@ function PastRuns({
                   }}
                   className="hover:bg-hover focus-visible:ring-primary/40 flex w-full items-center gap-2 rounded-lg px-2 py-2.5 text-left focus-visible:ring-2 focus-visible:outline-none"
                 >
-                  <span className="readout min-w-0 flex-1 truncate text-[13px]">{r.name}</span>
+                  <span className="readout min-w-0 flex-1 truncate text-sm">{r.name}</span>
                   {r.name === current && <Badge tone="primary">正在看</Badge>}
                   <ArrowRight className="text-muted size-4" aria-hidden />
                 </button>

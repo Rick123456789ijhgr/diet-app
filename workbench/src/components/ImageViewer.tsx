@@ -3,7 +3,7 @@
 import { Maximize, Scan } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
-import { Button } from '@/components/ui/primitives'
+import { Button, InfoTip } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { fitView, toImage, zoomAt, type View } from '@/lib/viewport'
 
@@ -119,7 +119,7 @@ export function ImageViewer({
       <div
         ref={boxRef}
         className={cn(
-          'viewport-grid relative cursor-crosshair touch-none overflow-hidden rounded-2xl select-none active:cursor-grabbing',
+          'viewport-grid relative cursor-crosshair touch-none overflow-hidden rounded-lg select-none active:cursor-grabbing',
           fill ? 'min-h-[280px] flex-1' : 'h-[min(62vh,640px)]',
         )}
         // className 的 touch-none：讓觸控拖曳交給這裡處理，而不是被瀏覽器當成頁面捲動／縮放
@@ -182,7 +182,7 @@ export function ImageViewer({
       </div>
       <div
         className={cn(
-          'text-muted flex h-8 shrink-0 items-center gap-4 overflow-hidden text-[11px] whitespace-nowrap',
+          'text-muted flex h-8 shrink-0 items-center gap-4 overflow-hidden text-xs whitespace-nowrap',
           'mt-1 px-1',
         )}
       >
@@ -190,9 +190,11 @@ export function ImageViewer({
           {width}×{height}
         </span>
         <span className="readout w-16">{Math.round(view.scale * 100)}%</span>
-        <span className={cn('min-w-0 truncate', inside && 'readout text-ink')}>
-          {inside ? `x ${inside.x}  y ${inside.y}` : '滾輪縮放、拖曳移動、雙擊置中'}
-        </span>
+        <InfoTip text="滾輪縮放、拖曳移動、雙擊置中" label="操作說明" />
+        {/* 游標在影像上時顯示影像座標 */}
+        {inside && (
+          <span className="readout text-ink min-w-0 truncate">{`x ${inside.x}  y ${inside.y}`}</span>
+        )}
         <span className="flex-1" />
         <Button size="sm" variant="ghost" className="shrink-0" onClick={fit}>
           <Maximize className="size-3.5" aria-hidden />

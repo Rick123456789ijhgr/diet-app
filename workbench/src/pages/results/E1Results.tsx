@@ -20,7 +20,7 @@ import { ImageViewer } from '@/components/ImageViewer'
 import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelSections'
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { DataTable, ErrorBox, Metric, MetricGrid } from '@/components/results'
-import { Badge, Button, DraftNumberInput, Segmented } from '@/components/ui/primitives'
+import { Badge, Button, DraftNumberInput, InfoTip, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useLocalImage } from '@/hooks/useLocalImage'
 import { useStream } from '@/hooks/useStream'
@@ -248,10 +248,12 @@ export function E1Results({
         title="快速執行"
       >
         <div className="space-y-3 text-sm">
-          <p className="text-muted text-xs">
-            以合成條碼產生資料（寫到
-            e1_barcode/synthetic/）並執行選取的實驗組，結果存到「執行結果」的資料夾。
-            合成資料只供驗證流程與觀察趨勢，不可作為結論。
+          <p className="text-muted flex items-center gap-1 text-xs">
+            合成資料只供驗證流程，不可作為結論
+            <InfoTip
+              label="快速執行說明"
+              text="以合成條碼產生資料（寫到 e1_barcode/synthetic/）並執行選取的實驗組，結果存到「執行結果」的資料夾。合成資料只供驗證流程與觀察趨勢，不可作為結論。"
+            />
           </p>
           <fieldset>
             <legend className="text-muted mb-1 text-xs">實驗組（已選 {arms.length} 個）</legend>
@@ -427,14 +429,18 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
       {misreads > 0 && (
         <div
           role="alert"
-          className="bg-danger-soft text-danger shrink-0 rounded-[20px] px-4 py-3 text-xs"
+          className="bg-danger-soft text-danger flex shrink-0 items-center gap-1 rounded-card px-4 py-2.5 text-xs"
         >
-          共有 {misreads}{' '}
-          次誤讀（檢查碼正確但內容錯誤）：會被當成另一個商品，比漏讀更危險。請在「失敗影像」檢視。
+          <span className="min-w-0 flex-1">共有 {misreads} 次誤讀，請在「失敗影像」檢視。</span>
+          <InfoTip
+            label="誤讀說明"
+            className="text-danger"
+            text="誤讀＝檢查碼正確但內容錯誤：會被當成另一個商品，比漏讀更危險。"
+          />
         </div>
       )}
       {data.meta.include_test && (
-        <div className="bg-warn-soft text-warn flex shrink-0 items-start gap-1.5 rounded-[20px] px-4 py-3 text-xs">
+        <div className="bg-warn-soft text-warn flex shrink-0 items-start gap-1.5 rounded-card px-4 py-2.5 text-xs">
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           此執行納入測試集（正式實驗），失敗影像不提供檢視。
         </div>
@@ -452,9 +458,8 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
           />
         </MetricGrid>
       </ReadoutBlock>
-      <ReadoutBlock title="基準實驗組">
-        <p className="readout text-[13px]">{base}</p>
-        <p className="text-muted mt-1 text-xs">McNemar 檢定的比較對象，可在左側切換。</p>
+      <ReadoutBlock title="基準實驗組" hint="McNemar 檢定的比較對象，可在左側切換。">
+        <p className="readout text-sm">{base}</p>
       </ReadoutBlock>
     </>
   )
@@ -490,8 +495,12 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
                   high: r.ci_high,
                 }))}
               />
-              <p className="text-muted text-xs">
-                誤差線為 Wilson 95% 信賴區間；p 值為對基準組 {base} 的 McNemar 精確檢定。
+              <p className="text-muted flex items-center gap-1 text-xs">
+                對照基準組 <span className="readout text-ink-2">{base}</span>
+                <InfoTip
+                  label="統計說明"
+                  text={`誤差線為 Wilson 95% 信賴區間；p 值為對基準組 ${base} 的 McNemar 精確檢定。`}
+                />
               </p>
               <DataTable
                 label="各實驗組的整體彙整"
@@ -535,8 +544,9 @@ function RunView({ data, base, group }: { data: Run; base: string; group: string
               <EmptyState>沒有成功的影像。</EmptyState>
             ) : (
               <>
-                <p className="text-muted mb-2 text-xs">
-                  各階由原圖獨立產生，因此成功階就是救回該影像的步驟。
+                <p className="text-muted mb-2 flex items-center gap-1 text-xs">
+                  各實驗組成功於各階的影像數
+                  <InfoTip text="各階由原圖獨立產生，因此成功階就是救回該影像的步驟。" />
                 </p>
                 {/* 堆疊的階依 RUNG_ORDER 排序（不在其中的新階接在最後），只留這次執行實際出現的階；
                     每個實驗組一列，值為 {rung: 影像數} */}
@@ -626,7 +636,7 @@ function Failures({ data }: { data: Run }) {
                 aria-pressed={on}
                 onClick={() => setKinds(on ? kinds.filter((x) => x !== k) : [...kinds, k])}
                 className={cn(
-                  'h-7 rounded-lg border px-2 text-xs',
+                  'h-8 rounded-lg border px-2.5 text-sm',
                   on
                     ? 'border-danger/50 bg-danger-soft text-danger'
                     : 'border-card-border text-muted',
@@ -644,7 +654,7 @@ function Failures({ data }: { data: Run }) {
         <>
           {/* 失敗清單：沒有選取時撐滿；選取後縮到 38% 高，留空間給下方的影像與嘗試紀錄 */}
           <div className={cn('overflow-auto', selected ? 'max-h-[38%] shrink-0' : 'flex-1')}>
-            <table className="w-full text-[13px]" aria-label="失敗影像清單">
+            <table className="w-full text-sm" aria-label="失敗影像清單">
               <thead className="bg-card sticky top-0">
                 <tr className="text-muted bg-sunken text-left text-xs">
                   {['影像', '結果', '真值', '解出', '成功階', ...data.tags].map((c) => (

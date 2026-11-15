@@ -115,7 +115,13 @@ describe('參數表單與退化計數', () => {
 describe('影像檢視器', () => {
   it('觸控被中斷（pointercancel）後，下次移動不會被當成拖曳', async () => {
     const { ImageViewer } = await import('./ImageViewer')
-    render(<ImageViewer src="x.png" width={100} height={80} alt="影像" />)
+    const { TooltipProvider } = await import('./ui/primitives')
+    // 底部列的操作說明是 InfoTip（Radix Tooltip），需要 Provider
+    render(
+      <TooltipProvider>
+        <ImageViewer src="x.png" width={100} height={80} alt="影像" />
+      </TooltipProvider>,
+    )
     const box = screen.getByAltText('影像').parentElement!.parentElement!
     const layer = screen.getByAltText('影像').parentElement!
     const before = layer.style.transform

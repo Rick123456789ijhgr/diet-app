@@ -64,7 +64,7 @@ export function SubmissionPage() {
 
   if (query.isError && !query.data) {
     return (
-      <div className="p-5">
+      <div className="p-3">
         <BackLink />
         <ColdstartError error={query.error} className="mt-3" />
       </div>
@@ -303,7 +303,7 @@ function Editor({ initial, onReload }: { initial: Submission; onReload: () => Pr
   const busy = saving > 0 || confirming
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(340px,5fr)_minmax(440px,6fr)] gap-3 pr-3 pb-3">
+    <div className="grid h-full min-h-0 grid-cols-[minmax(340px,5fr)_minmax(440px,6fr)] gap-3 p-3">
       <section aria-label="照片" className="flex min-h-0 flex-col gap-3 overflow-y-auto px-1">
         <BackLink />
         {IMAGE_KINDS.map((k) => (
@@ -323,7 +323,7 @@ function Editor({ initial, onReload }: { initial: Submission; onReload: () => Pr
 
       <section
         aria-label="人工確認"
-        className="bg-card shadow-card min-w-0 overflow-y-auto rounded-[20px] p-5"
+        className="bg-card shadow-card border-card-border rounded-card min-w-0 overflow-y-auto border p-4"
       >
         <div className="mb-4 flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -368,7 +368,7 @@ function Editor({ initial, onReload }: { initial: Submission; onReload: () => Pr
         {stale && (
           <div
             role="alert"
-            className="bg-danger-soft mb-4 flex items-center gap-3 rounded-2xl px-4 py-3 text-sm"
+            className="bg-danger-soft mb-4 flex items-center gap-3 rounded-lg px-4 py-3 text-sm"
           >
             <div className="flex-1">
               <div className="text-danger font-semibold">{errorText(stale.code)}</div>
@@ -407,7 +407,10 @@ function Editor({ initial, onReload }: { initial: Submission; onReload: () => Pr
           </Card>
         )}
 
-        <Section title="標示內容">
+        <Section
+          title="標示內容"
+          hint="照包裝標示原樣輸入，空白代表未填。這裡只標出不是數字的欄位；缺漏與數值是否一致在按「確認並建立產品」時由後端檢查。"
+        >
           <DraftForm
             form={form}
             setForm={setForm}

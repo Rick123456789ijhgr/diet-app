@@ -20,7 +20,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, artifactUrl, unwrap, type ImageRef } from '@/api/client'
 import { ImageViewer } from '@/components/ImageViewer'
 import { EmptyState } from '@/components/layout/Workspace'
-import { Button } from '@/components/ui/primitives'
+import { Button, InfoTip } from '@/components/ui/primitives'
 import { checkCode, type Answer } from '@/lib/barcodeTruth'
 import { cn } from '@/lib/cn'
 
@@ -154,7 +154,7 @@ function Viewer({ item, upload }: { item: Item; upload: (item: Item) => Promise<
           alt={item.file.name}
         />
       ) : (
-        <div className="viewport-grid flex flex-1 items-center justify-center rounded-2xl">
+        <div className="viewport-grid flex flex-1 items-center justify-center rounded-lg">
           <span className="text-muted text-xs">載入影像…</span>
         </div>
       )}
@@ -212,7 +212,7 @@ function Desk({
     >
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          <p className="readout text-[13px] font-semibold">
+          <p className="readout text-sm font-semibold">
             第 {index + 1} 張<span className="text-muted font-normal">，共 {total} 張</span>
           </p>
           <p className="readout text-muted truncate text-xs leading-5" title={item.file.name}>
@@ -236,9 +236,18 @@ function Desk({
           if (check.ok) onAnswer({ kind: 'code', code: check.code })
         }}
       >
-        <label htmlFor={`code-${item.key}`} className="block text-[13px] font-semibold">
-          條碼號碼
-        </label>
+        <div className="flex items-center gap-1">
+          <label htmlFor={`code-${item.key}`} className="text-sm font-semibold">
+            條碼號碼
+          </label>
+          <InfoTip
+            label="條碼號碼說明"
+            text={
+              '看圖輸入條碼下方的數字，按 Enter 確認並換下一張；「看不清楚」交給多數方法的共識決定。\n' +
+              '要把原始照片改名成條碼號碼，比較完後在結論按「把原始照片改名」，用 Python 工具改。檔名就是號碼的照片，下次放進來會自動帶入。'
+            }
+          />
+        </div>
         <input
           ref={input}
           id={`code-${item.key}`}
@@ -251,7 +260,7 @@ function Desk({
           aria-describedby={`code-${item.key}-msg`}
           aria-invalid={value !== '' && !check.ok}
           className={cn(
-            'readout bg-sunken focus-visible:bg-card h-12 w-full rounded-2xl border-2 px-4 text-[20px] tracking-[0.06em] focus-visible:outline-none',
+            'readout bg-sunken focus-visible:bg-card h-12 w-full rounded-lg border-2 px-4 text-[20px] tracking-[0.06em] focus-visible:outline-none',
             value !== '' && !check.ok
               ? 'border-danger/60'
               : 'border-card-border focus-visible:border-primary',
@@ -354,11 +363,6 @@ function Desk({
           </dd>
         </div>
       </dl>
-
-      <p className="text-muted mt-auto text-xs leading-relaxed">
-        要把原始照片改名成條碼號碼，比較完後在結論按「把原始照片改名」，用 Python
-        工具改。檔名就是號碼的照片，下次放進來會自動帶入。
-      </p>
     </aside>
   )
 }
@@ -414,7 +418,7 @@ function Filmstrip({
               aria-current={i === cursor ? 'true' : undefined}
               aria-label={`第 ${i + 1} 張 ${it.file.name}：${answerText(a)}`}
               className={cn(
-                'bg-sunken relative block size-12 overflow-hidden rounded-xl outline-offset-2 focus-visible:outline-2 focus-visible:outline-[var(--primary)]',
+                'bg-sunken relative block size-12 overflow-hidden rounded-lg outline-offset-2 focus-visible:outline-2 focus-visible:outline-[var(--primary)]',
                 i === cursor && 'ring-ink ring-2',
               )}
             >
@@ -422,7 +426,7 @@ function Filmstrip({
               <span
                 aria-hidden
                 className={cn(
-                  'absolute right-0.5 bottom-0.5 grid size-4 place-items-center rounded-full text-[10px]',
+                  'absolute right-0.5 bottom-0.5 grid size-4 place-items-center rounded-full text-xs',
                   !a && 'bg-card/90 text-muted',
                   a?.kind === 'code' && 'bg-ok-mark text-white',
                   a?.kind === 'none' && 'bg-ink text-on-ink',

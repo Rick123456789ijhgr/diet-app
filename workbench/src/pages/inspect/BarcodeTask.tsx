@@ -28,7 +28,7 @@ import {
   StatusCard,
   WarningBadges,
 } from '@/components/results'
-import { Badge, Segmented } from '@/components/ui/primitives'
+import { Badge, InfoTip, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { useAnalysis, usePairedResult } from '@/hooks/useAnalysis'
 import { useConfigClass, useConfigSchemas } from '@/hooks/useConfigSchemas'
@@ -170,7 +170,7 @@ export function BarcodeTask({
       busy={pipeline.pending || analysis.busy}
       params={
         ladderSchema && zxingSchema ? (
-          <div className="space-y-6">
+          <div className="space-y-5">
             {/* 序列欄位（rungs 順序、formats）由 LadderControls 管理；OTHER 不是可選的條碼格式 */}
             <LadderControls
               schema={ladderSchema}
@@ -189,8 +189,10 @@ export function BarcodeTask({
               invalidMessage={configError?.message}
             />
             <div className="border-card-border border-t pt-4">
-              <h3 className="mb-1 text-sm font-semibold">解碼器（zxing-cpp）</h3>
-              <p className="text-muted mb-3 text-xs">E1 消融時可全部關閉，量測階梯本身的貢獻。</p>
+              <h3 className="mb-3 flex items-center gap-1 text-sm font-semibold">
+                解碼器（zxing-cpp）
+                <InfoTip text="E1 消融時可全部關閉，量測階梯本身的貢獻。" />
+              </h3>
               <ParamForm
                 schema={zxingSchema}
                 overrides={zxing}
@@ -353,14 +355,23 @@ export function BarcodeTask({
                     ['左碼', r.data.left],
                     ['右碼', r.data.right],
                   ] as const
-                ).map(([label, hit]) => (
-                  <Section key={label} title={label}>
+                ).map(([label, hit], i) => (
+                  <Section
+                    key={label}
+                    title={label}
+                    // 說明只放在第一段標題旁，避免重複
+                    hint={
+                      i === 0
+                        ? '只顯示原始位元組；中文解碼與欄位解析由之後的發票模組負責。'
+                        : undefined
+                    }
+                  >
                     {hit ? (
                       <>
-                        <pre className="bg-sunken border-card-border readout rounded-lg border p-2 text-xs whitespace-pre-wrap">
+                        <pre className="bg-sunken border-card-border readout rounded-lg border px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap">
                           {hexPreview(fromBase64(hit.raw))}
                         </pre>
-                        <pre className="bg-sunken border-card-border readout mt-1 rounded-lg border p-2 text-xs whitespace-pre-wrap">
+                        <pre className="bg-sunken border-card-border readout mt-1.5 rounded-lg border px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap">
                           {asciiPreview(fromBase64(hit.raw))}
                         </pre>
                       </>
@@ -369,9 +380,6 @@ export function BarcodeTask({
                     )}
                   </Section>
                 ))}
-                <p className="text-muted text-xs">
-                  只顯示原始位元組；中文解碼與欄位解析由之後的發票模組負責。
-                </p>
               </div>
             ) : variant.error ? (
               <div className="p-4">
@@ -406,7 +414,7 @@ export function BarcodeTask({
                           aria-label="嘗試"
                           value={shownAttempt}
                           onChange={(e) => setAttempt(Number(e.target.value))}
-                          className="border-card-border bg-card h-7 rounded-lg border px-2 text-xs"
+                          className="border-card-border bg-card h-8 rounded-lg border px-2.5 text-sm"
                         >
                           {attempts.map((a, i) => (
                             <option key={i} value={i}>

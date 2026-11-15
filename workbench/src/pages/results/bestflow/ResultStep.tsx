@@ -24,7 +24,7 @@ import { CodeBlock } from '@/components/ConfigIO'
 import { EmptyState, Section } from '@/components/layout/Workspace'
 import { DataTable, ErrorBox } from '@/components/results'
 import { Dialog } from '@/components/ui/Dialog'
-import { Badge, Button, DraftNumberInput, Segmented } from '@/components/ui/primitives'
+import { Badge, Button, DraftNumberInput, InfoTip, Segmented } from '@/components/ui/primitives'
 import { withIcon } from '@/components/ui/withIcon'
 import { cn } from '@/lib/cn'
 import { parseClampedInt } from '@/lib/number'
@@ -183,7 +183,7 @@ function RunView({
           <div
             role="alert"
             aria-label="真值沒有寫入"
-            className="bg-danger-soft mb-4 rounded-2xl px-4 py-3 text-[13px]"
+            className="bg-danger-soft mb-4 rounded-lg px-4 py-3 text-sm"
           >
             <div className="flex flex-wrap items-center gap-2">
               <TriangleAlert className="text-danger size-4 shrink-0" aria-hidden />
@@ -201,25 +201,30 @@ function RunView({
             </p>
           </div>
         )}
-        <p className="text-ink-2 mb-4 text-xs">
-          共 {c.images} 張：已確定 {c.decided} 張（有條碼 {c.positives}、沒有條碼 {c.negatives}；
-          人工 {manual}、程式推定 {c.decided - manual}）
-          {c.undecided > 0 ? `，${c.undecided} 張待確認。` : '。'}
-          <span className="text-muted">
-            {' '}
-            至少 {data.meta.min_methods} 個方法讀出相同且檢查碼正確的號碼，程式就自動採用。
+        <p className="text-ink-2 mb-3 flex flex-wrap items-center gap-x-1 text-xs leading-relaxed">
+          <span>
+            共 {c.images} 張：已確定 {c.decided} 張（有條碼 {c.positives}、沒有條碼 {c.negatives}
+            ；人工 {manual}、程式推定 {c.decided - manual}）
+            {c.undecided > 0 ? `，${c.undecided} 張待確認。` : '。'}
           </span>
+          <InfoTip
+            label="真值推定說明"
+            text={`至少 ${data.meta.min_methods} 個方法讀出相同且檢查碼正確的號碼，程式就自動採用。`}
+          />
         </p>
         {c.undecided > 0 && tab !== 'truth' && (
           <div
             role="alert"
-            className="bg-warn-soft text-warn mb-4 flex flex-wrap items-center gap-2 rounded-2xl px-4 py-3 text-xs"
+            className="bg-warn-soft text-warn mb-3 flex flex-wrap items-center gap-2 rounded-lg px-4 py-2.5 text-xs"
           >
             <CircleHelp className="size-4 shrink-0" aria-hidden />
-            <span className="flex-1">
-              有 {c.undecided}{' '}
-              張圖片尚未確認真值，沒有納入統計。這些多半是讀不出來或讀法不一致的難題，
-              不確認的話成功率會偏高。
+            <span className="flex flex-1 items-center gap-1">
+              有 {c.undecided} 張圖片尚未確認真值，沒有納入統計，成功率會偏高。
+              <InfoTip
+                label="未確認真值說明"
+                className="text-warn"
+                text="這些多半是讀不出來或讀法不一致的難題；不確認的話，統計只剩容易的圖片，成功率會偏高。"
+              />
             </span>
             <Button size="sm" onClick={() => setTab('truth')}>
               去確認
@@ -238,9 +243,6 @@ function RunView({
         ) : (
           <MethodTable result={result} />
         )}
-        <p className="text-muted mt-6 text-xs">
-          推薦流程是在這批圖片上選出來的；要寫成結論，請另外用鎖定的測試集驗證。
-        </p>
       </div>
     </div>
   )
@@ -280,7 +282,7 @@ function CriteriaDialog({
         </Button>
       }
     >
-      <div className="space-y-4 text-[13px]">
+      <div className="space-y-4 text-sm">
         <CriteriaInput
           label="每一步至少多救回"
           unit="張"
@@ -327,8 +329,11 @@ function CriteriaInput({
   onCommit: (v: number) => void
 }) {
   return (
-    <label className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-0.5">
-      <span className="font-medium">{label}</span>
+    <div className="flex items-center gap-3">
+      <span className="flex min-w-0 flex-1 items-center gap-1 font-medium">
+        {label}
+        <InfoTip text={help} />
+      </span>
       <span className="flex items-center gap-1">
         <DraftNumberInput
           aria-label={label}
@@ -340,8 +345,7 @@ function CriteriaInput({
         />
         <span className="text-muted w-6 text-xs">{unit}</span>
       </span>
-      <span className="text-muted col-span-2 text-xs">{help}</span>
-    </label>
+    </div>
   )
 }
 
@@ -374,7 +378,7 @@ function RenameDialog({ data }: { data: Run }) {
         </Button>
       }
     >
-      <div className="space-y-4 text-[13px]">
+      <div className="space-y-4 text-sm">
         <ul className="text-ink-2 list-disc space-y-1 pl-5 text-xs leading-relaxed">
           <li>
             有條碼 → <span className="readout">號碼.jpg</span>（同一個號碼有多張時加 _2、_3）
@@ -390,20 +394,23 @@ function RenameDialog({ data }: { data: Run }) {
         </ul>
         {uploaded ? (
           <div className="flex flex-col gap-1.5">
-            <span className="font-semibold">照片所在的資料夾</span>
+            <span className="flex items-center gap-1 font-semibold">
+              照片所在的資料夾
+              <InfoTip
+                label="資料夾說明"
+                text="這次的圖片是上傳的，工具以檔名在這個資料夾裡找到原始照片。"
+              />
+            </span>
             <div className="flex gap-2">
               <input
                 aria-label="照片所在的資料夾"
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
                 placeholder="D:\photos\barcodes"
-                className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-9 min-w-0 flex-1 rounded-xl border px-3 focus-visible:outline-none"
+                className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-9 min-w-0 flex-1 rounded-lg border px-3 focus-visible:outline-none"
               />
               <FolderPicker value={folder} onPick={setFolder} size="md" />
             </div>
-            <span className="text-muted text-xs">
-              這次的圖片是上傳的，工具以檔名在這個資料夾裡找到原始照片。
-            </span>
           </div>
         ) : (
           <p className="text-muted text-xs">
@@ -414,11 +421,14 @@ function RenameDialog({ data }: { data: Run }) {
         <div className="space-y-1.5">
           <p className="font-semibold">在專案根目錄執行（先看預覽）</p>
           <CodeBlock text={base} />
-          <p className="font-semibold">預覽無誤後真的改名</p>
-          <CodeBlock text={`${base} --apply`} />
-          <p className="text-muted text-xs">
-            每一筆改名都記在執行資料夾的 rename_log.csv；改錯了把 --apply 換成 --undo 還原。
+          <p className="flex items-center gap-1 pt-1 font-semibold">
+            預覽無誤後真的改名
+            <InfoTip
+              label="還原說明"
+              text="每一筆改名都記在執行資料夾的 rename_log.csv；改錯了把 --apply 換成 --undo 還原。"
+            />
           </p>
+          <CodeBlock text={`${base} --apply`} />
         </div>
       </div>
     </Dialog>
@@ -465,23 +475,30 @@ function Conclusion({ result, onGoTruth }: { result: Result | null; onGoTruth: (
   const compare = result.compare.summary
   return (
     <>
-      <Section title="推薦流程">
+      <Section
+        title="推薦流程"
+        hint="先試原圖，讀不到才依序換下一個方法。推薦流程是在這批圖片上選出來的；要寫成結論，請另外用鎖定的測試集驗證。"
+      >
         <ol className="flex flex-wrap items-center gap-1.5" aria-label="推薦流程">
           {g.order.map((m, i) => (
             <li key={m} className="flex items-center gap-1.5">
               {i > 0 && <ArrowRight className="text-muted size-4" aria-hidden />}
-              <span className="bg-primary-soft text-primary-ink rounded-full px-3.5 py-1.5 text-[13px] font-semibold">
+              <span className="bg-primary-soft text-primary-ink rounded-full px-3.5 py-1.5 text-sm font-semibold">
                 {methodText(m)}
               </span>
             </li>
           ))}
         </ol>
         <p className="text-muted mt-2 text-xs">
-          先試原圖，讀不到才依序換下一個方法。停止原因：{STOP_TEXT[g.stop] ?? g.stop}。
+          停止原因：{STOP_TEXT[g.stop] ?? g.stop}。
           {g.excluded > 0 && ` 有 ${g.excluded} 張圖因處理錯誤未納入。`}
         </p>
       </Section>
-      <Section title="與其他做法比較" className="max-w-3xl">
+      <Section
+        title="與其他做法比較"
+        hint="信賴區間為 Wilson 95%；p 值為與「只用原圖」配對的 McNemar 精確檢定。同一個條碼拍多張時圖片不獨立，區間會偏窄，僅供參考。"
+        className="max-w-3xl"
+      >
         <BarList
           label="三種做法的成功率，附 95% 信賴區間"
           rows={compare.map((r) => ({
@@ -541,10 +558,6 @@ function Conclusion({ result, onGoTruth }: { result: Result | null; onGoTruth: (
             r.arm === 'raw' ? '基準' : r.p_value != null ? Number(r.p_value.toPrecision(3)) : '—',
           ])}
         />
-        <p className="text-muted mt-2 text-xs">
-          信賴區間為 Wilson 95%；p 值為與「只用原圖」配對的 McNemar
-          精確檢定。同一個條碼拍多張時圖片不獨立，區間會偏窄，僅供參考。
-        </p>
       </Details>
     </>
   )
@@ -553,8 +566,8 @@ function Conclusion({ result, onGoTruth }: { result: Result | null; onGoTruth: (
 /** 可展開的細節（原生 details：預設收起，鍵盤與螢幕閱讀器都支援）。 */
 function Details({ summary, children }: { summary: string; children: ReactNode }) {
   return (
-    <details className="group border-card-border mb-3 rounded-2xl border">
-      <summary className="hover:bg-hover focus-visible:ring-primary/40 flex cursor-pointer list-none items-center gap-2 rounded-2xl px-4 py-3 text-[14px] font-semibold focus-visible:ring-2 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+    <details className="group border-card-border mb-3 rounded-lg border">
+      <summary className="hover:bg-hover focus-visible:ring-primary/40 flex cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-3 text-[15px] font-semibold focus-visible:ring-2 focus-visible:outline-none [&::-webkit-details-marker]:hidden">
         <ArrowRight
           className="text-muted size-4 transition-transform group-open:rotate-90"
           aria-hidden
@@ -571,11 +584,10 @@ function MethodTable({ result }: { result: Result | null }) {
   if (!result) return <EmptyState>確認真值後才能比較。</EmptyState>
   const rows = [...result.methods].sort((a, b) => (b.rate ?? -1) - (a.rate ?? -1))
   return (
-    <>
-      <p className="text-muted mb-1 text-xs">
-        每個方法都從原圖獨立處理一次。「救回」為原圖讀不到、這個方法讀得到的張數；「退步」相反。
-        deskew 在傾斜角太小時會略過，單獨的成功率偏低屬正常。
-      </p>
+    <Section
+      title="單一方法比較"
+      hint="每個方法都從原圖獨立處理一次。「救回」為原圖讀不到、這個方法讀得到的張數；「退步」相反。deskew 在傾斜角太小時會略過，單獨的成功率偏低屬正常。"
+    >
       <DataTable
         label="單一方法比較"
         columns={[
@@ -599,7 +611,7 @@ function MethodTable({ result }: { result: Result | null }) {
           r.median_ms?.toFixed(1) ?? '—',
         ])}
       />
-    </>
+    </Section>
   )
 }
 
@@ -663,8 +675,8 @@ function TruthRow({
   const applied = img.applied
   const set = (v: string | null) => onTruth({ [img.id]: v })
   return (
-    <li className="border-card-border flex gap-3 rounded-2xl border p-3">
-      <div className="bg-sunken flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-xl">
+    <li className="border-card-border flex gap-3 rounded-lg border p-3">
+      <div className="bg-sunken flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-lg">
         {img.thumb_id ? (
           <img
             src={artifactUrl(img.thumb_id)}
@@ -709,10 +721,7 @@ function TruthRow({
                 >
                   <span className="readout block">{c.code}</span>
                   <span
-                    className={cn(
-                      'block text-[11px]',
-                      c.checksum_ok ? 'text-muted' : 'text-danger',
-                    )}
+                    className={cn('block text-xs', c.checksum_ok ? 'text-muted' : 'text-danger')}
                   >
                     {c.methods.length} 個方法・{c.checksum_ok ? '檢查碼正確' : '檢查碼錯誤'}
                   </span>

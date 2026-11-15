@@ -1,9 +1,9 @@
 // 模擬退化面板：只列出已加入的退化，其餘收成「加入」按鈕；另可一次套用常見情境。
-import { CircleHelp, Plus, TriangleAlert, X } from 'lucide-react'
+import { Plus, TriangleAlert, X } from 'lucide-react'
 import { useState } from 'react'
 
 import type { ConfigClass, ConfigField, ConfigOverride } from '@/api/client'
-import { Button, DraftNumberInput, Hint, Slider } from '@/components/ui/primitives'
+import { Button, DraftNumberInput, Hint, InfoTip, Slider } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { formatValue, setOverride, valueOf } from '@/lib/config'
 import {
@@ -65,15 +65,10 @@ export function DegradationPicker({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-semibold">模擬退化</h3>
-        <Hint text="依序套用：旋轉 → 曲面 → 縮小 → 模糊 → 亮度、對比 → 梯度 → 光斑 → 雜訊 → JPEG。">
-          <button
-            type="button"
-            aria-label="模擬退化說明"
-            className="text-muted hover:text-ink rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            <CircleHelp className="size-3.5" aria-hidden />
-          </button>
-        </Hint>
+        <InfoTip
+          label="模擬退化說明"
+          text="從下方「＋」加入退化，或從「常見情境」一次套用一組。依序套用：旋轉 → 曲面 → 縮小 → 模糊 → 亮度、對比 → 梯度 → 光斑 → 雜訊 → JPEG。"
+        />
         <span className="flex-1" />
         <select
           aria-label="常見情境"
@@ -91,16 +86,16 @@ export function DegradationPicker({
             <option key={p.name}>{p.name}</option>
           ))}
         </select>
-        {active.length > 0 && (
+        {active.length > 0 ? (
           <Button size="sm" variant="ghost" onClick={clear}>
             清除
           </Button>
+        ) : (
+          <span className="text-muted text-xs">目前是原圖</span>
         )}
       </div>
 
-      {active.length === 0 ? (
-        <p className="text-muted text-xs">目前是原圖。從下方加入退化，或選一個常見情境。</p>
-      ) : (
+      {active.length > 0 && (
         <ul className="space-y-2" aria-label="已加入的退化">
           {active.map((f) => {
             const dependents = Object.entries(DEPENDENT)
@@ -108,7 +103,7 @@ export function DegradationPicker({
               .map(([dep]) => byName.get(dep))
               .filter((d): d is ConfigField => !!d)
             return (
-              <li key={f.name} className="bg-sunken space-y-2 rounded-xl px-3 py-2">
+              <li key={f.name} className="bg-sunken space-y-2 rounded-lg px-3 py-2">
                 <FieldControl
                   field={f}
                   value={valueOf(f, overrides) as number}

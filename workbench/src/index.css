@@ -4,42 +4,47 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * 柔和卡片風（參考 Finexy／Wink 儀表板）：
- * - 淺灰畫布上的白色大圓角卡片（20px），幾乎不用陰影；導覽與分段按鈕都是膠囊形。
- * - 主要按鈕與選中的導覽為黑色；強調色為橘（primary：滑桿、焦點、重點數字卡）。
- * - 狀態色 ok／warn／danger 一律搭配圖示與文字，不單靠顏色；趨勢以綠／紅小膠囊標示。
- * - 圖表系列色（series-1…8）為經色盲驗證的固定順序（橘在第一），依序取用、不循環（見 charts.tsx）。
+ * 羅勒＋紙（2026-11 改版）：
+ * - 帶灰綠的畫布上放白色卡片（12px 圓角）；控制項 8px 圓角，只有徽章是膠囊形。圓角大小代表層級。
+ * - 左側欄為深墨綠實色欄（--rail），是畫面唯一的重色塊；主色為羅勒綠（primary：主要按鈕、選中、滑桿、焦點、重點數字卡）。
+ * - 基礎字級 14px、最小 12px；說明文字收進 InfoTip（滑過圖示才顯示），介面上不放大段說明。
+ * - 狀態色 ok／warn／danger 一律搭配圖示與文字，不單靠顏色。
+ * - 圖表系列色（series-1…8）為經色盲驗證的固定順序，依序取用、不循環（見 charts.tsx）；疊圖「找到」用 series-1。
  */
 :root {
-  --canvas: #efefed;
+  --canvas: #eceeea;
   --card: #ffffff;
-  --sunken: #f5f5f4;
-  --card-border: #ebebea;
-  --line-strong: #d6d6d3;
-  --ink: #141414;
-  --ink-2: #4a4a48;
-  --muted: #74736f;
-  --hover: #f1f1f0;
+  --sunken: #f3f5f2;
+  --card-border: #e0e4de;
+  --line-strong: #c9d0c8;
+  --ink: #17201b;
+  --ink-2: #414c46;
+  --muted: #68736c;
+  --hover: #eef1ed;
   --on-ink: #ffffff;
   --switch-thumb: #ffffff;
-  --primary: #f05a28;
+  --rail: #18241e;
+  --rail-ink: #b9c7bf;
+  --rail-hover: #24342b;
+  --rail-active: #2f7a57;
+  --primary: #2f7a57;
   --on-primary: #ffffff;
-  --primary-ink: #c2410c;
-  --primary-soft: #fff0ea;
-  --primary-grad: linear-gradient(135deg, #f26b3a 0%, #ea4c1d 100%);
-  --ok: #15803d;
-  --ok-mark: #22c55e;
-  --ok-soft: #e8f7ed;
-  --warn: #a16207;
-  --warn-mark: #eab308;
-  --warn-soft: #fdf5d8;
-  --danger: #dc2626;
-  --danger-mark: #ef4444;
-  --danger-soft: #fdecec;
-  --viewport: #f3f3f2;
-  --viewport-dot: #dcdcd9;
+  --primary-ink: #1f5c40;
+  --primary-soft: #e2efe7;
+  --primary-grad: linear-gradient(135deg, #34855f 0%, #24654a 100%);
+  --ok: #17723f;
+  --ok-mark: #22a55a;
+  --ok-soft: #e4f4ea;
+  --warn: #94600a;
+  --warn-mark: #e3a21a;
+  --warn-soft: #fbf1d9;
+  --danger: #c42b2b;
+  --danger-mark: #e54848;
+  --danger-soft: #fbe9e8;
+  --viewport: #f1f3f0;
+  --viewport-dot: #d8ddd6;
   --overlay-halo: rgb(255 255 255 / 0.9);
-  --shadow: 0 1px 2px rgb(20 20 20 / 0.03);
+  --shadow: 0 1px 2px rgb(23 32 27 / 0.05);
   --series-1: #eb6834;
   --series-2: #2a78d6;
   --series-3: #1baf7a;
@@ -52,34 +57,38 @@
 }
 
 .dark {
-  --canvas: #0c0c0d;
-  --card: #18181a;
-  --sunken: #202022;
-  --card-border: #29292c;
-  --line-strong: #3a3a3e;
-  --ink: #f2f2f0;
-  --ink-2: #c4c4c0;
-  --muted: #8e8d89;
-  --hover: #242427;
-  --on-ink: #141414;
-  --switch-thumb: #f2f2f0;
-  --primary: #f26b3a;
-  --on-primary: #ffffff;
-  --primary-ink: #ff8a5c;
-  --primary-soft: #3a1d12;
-  --primary-grad: linear-gradient(135deg, #f26b3a 0%, #d9481a 100%);
-  --ok: #4ade80;
-  --ok-mark: #22c55e;
-  --ok-soft: #12261a;
-  --warn: #facc15;
-  --warn-mark: #eab308;
-  --warn-soft: #2b2410;
-  --danger: #f87171;
-  --danger-mark: #ef4444;
-  --danger-soft: #331a1a;
-  --viewport: #111112;
-  --viewport-dot: #26262a;
-  --overlay-halo: rgb(15 15 16 / 0.85);
+  --canvas: #0e1210;
+  --card: #171d1a;
+  --sunken: #1f2622;
+  --card-border: #29312c;
+  --line-strong: #3a443e;
+  --ink: #edf1ee;
+  --ink-2: #c2cbc5;
+  --muted: #8d9891;
+  --hover: #232b26;
+  --on-ink: #101512;
+  --switch-thumb: #edf1ee;
+  --rail: #0a0d0b;
+  --rail-ink: #9aa8a0;
+  --rail-hover: #1a221d;
+  --rail-active: #3f9a70;
+  --primary: #4aa77b;
+  --on-primary: #08130d;
+  --primary-ink: #7fd0a7;
+  --primary-soft: #183326;
+  --primary-grad: linear-gradient(135deg, #3f9a70 0%, #2c7553 100%);
+  --ok: #5ad48a;
+  --ok-mark: #2fbf68;
+  --ok-soft: #13281b;
+  --warn: #f2c14e;
+  --warn-mark: #e3a21a;
+  --warn-soft: #2c2410;
+  --danger: #f37b7b;
+  --danger-mark: #e54848;
+  --danger-soft: #331b1b;
+  --viewport: #101412;
+  --viewport-dot: #252d28;
+  --overlay-halo: rgb(14 18 16 / 0.85);
   --shadow: none;
   --series-1: #d95926;
   --series-2: #3987e5;
@@ -104,6 +113,10 @@
   --color-hover: var(--hover);
   --color-on-ink: var(--on-ink);
   --color-switch-thumb: var(--switch-thumb);
+  --color-rail: var(--rail);
+  --color-rail-ink: var(--rail-ink);
+  --color-rail-hover: var(--rail-hover);
+  --color-rail-active: var(--rail-active);
   --color-primary: var(--primary);
   --color-on-primary: var(--on-primary);
   --color-primary-ink: var(--primary-ink);
@@ -119,6 +132,13 @@
   --color-danger-soft: var(--danger-soft);
   --color-viewport: var(--viewport);
   --shadow-card: var(--shadow);
+  /* 字級：最小 12px；xs 用於次要資訊，sm 為一般介面文字（與 body 相同） */
+  --text-xs: 12px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 13.5px;
+  --text-sm--line-height: 1.5;
+  --text-base: 14px;
+  --radius-card: 12px;
   --font-sans:
     'Inter', 'Noto Sans TC', ui-sans-serif, system-ui, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
   --font-mono:
@@ -135,7 +155,8 @@ body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 

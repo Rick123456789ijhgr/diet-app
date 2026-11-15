@@ -12,7 +12,7 @@ import { Disclosure, PanelSection, PanelStack } from '@/components/layout/PanelS
 import { EmptyState, MainView, ReadoutBlock, Split, Workspace } from '@/components/layout/Workspace'
 import { ErrorBox, Metric, MetricGrid } from '@/components/results'
 import { Dialog, DialogClose } from '@/components/ui/Dialog'
-import { Badge, Button, DraftNumberInput, Segmented } from '@/components/ui/primitives'
+import { Badge, Button, DraftNumberInput, InfoTip, Segmented } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 import { parseClampedInt } from '@/lib/number'
 
@@ -62,7 +62,7 @@ const STATUS: Record<NamingItem['status'], { text: string; tone: 'primary' | 'mu
 }
 
 const fieldClass =
-  'border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card h-7 rounded-lg border px-2 text-xs focus-visible:outline-none aria-[invalid=true]:border-danger'
+  'border-card-border bg-card focus-visible:border-primary h-8 rounded-lg border px-2.5 text-sm focus-visible:outline-none aria-[invalid=true]:border-danger'
 
 const preview = (o: Options) =>
   unwrap(
@@ -140,39 +140,49 @@ export function NamingPage() {
           if (current.folder) run()
         }}
       >
-        <PanelSection title="資料夾">
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="text-muted text-xs">
-              照片所在的資料夾（伺服器本機路徑，不含子資料夾）
-            </span>
-            <div className="flex gap-2">
-              <input
-                aria-label="資料夾"
-                aria-invalid={invalid('folder')}
-                value={folder}
-                onChange={(e) => setFolder(e.target.value)}
-                placeholder="D:\photos\food"
-                className={cn(fieldClass, 'readout min-w-0 flex-1')}
-              />
-              <FolderPicker value={folder} onPick={setFolder} />
-            </div>
+        <PanelSection
+          title="資料夾"
+          hint={
+            <>
+              照片所在的資料夾（伺服器本機路徑，不含子資料夾）。檔名要先是條碼（
+              <span className="readout">4710088410108.jpg</span>、
+              <span className="readout">沒有條碼_IMG_1.jpg</span>
+              ），工具保留條碼、改成規則化檔名。
+            </>
+          }
+        >
+          <div className="flex gap-2">
+            <input
+              aria-label="資料夾"
+              aria-invalid={invalid('folder')}
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              placeholder="D:\photos\food"
+              className={cn(fieldClass, 'readout min-w-0 flex-1')}
+            />
+            <FolderPicker value={folder} onPick={setFolder} />
           </div>
-          <p className="text-muted mt-2 text-xs">
-            檔名要先是條碼（<span className="readout">4710088410108.jpg</span>、
-            <span className="readout">沒有條碼_IMG_1.jpg</span>），工具保留條碼、改成規則化檔名。
-          </p>
         </PanelSection>
 
-        <PanelSection title="命名規則">
-          <div className="space-y-3 text-xs">
-            <div className="flex flex-col gap-1">
-              <span className="text-muted">類別</span>
+        <PanelSection title="命名規則" hint="類別、批次只用小寫英數字與連字號。">
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-muted text-xs">類別</span>
               <Segmented
                 label="類別"
                 value={preset}
                 onChange={setPreset}
                 options={[
-                  ...PRESETS.map((p) => ({ value: p.value, label: `${p.label}（${p.value}）` })),
+                  // 類別代碼以淡色小字附在名稱後，不用全形括號，三個選項才放得進控制面板
+                  ...PRESETS.map((p) => ({
+                    value: p.value,
+                    label: (
+                      <>
+                        {p.label}
+                        <span className="text-muted readout text-xs">{p.value}</span>
+                      </>
+                    ),
+                  })),
                   { value: CUSTOM, label: '自訂' },
                 ]}
               />
@@ -187,9 +197,9 @@ export function NamingPage() {
                 />
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <label className="flex flex-1 flex-col gap-1">
-                <span className="text-muted">批次</span>
+            <div className="flex items-end gap-3">
+              <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <span className="text-muted text-xs">批次</span>
                 <input
                   aria-label="批次"
                   aria-invalid={invalid('batch')}
@@ -198,8 +208,15 @@ export function NamingPage() {
                   className={cn(fieldClass, 'readout')}
                 />
               </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-muted">起始序號</span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-muted flex h-4 items-center gap-0.5 text-xs">
+                  起始序號
+                  <InfoTip
+                    text="0＝接在這個類別批次既有的最大序號之後。"
+                    label="起始序號說明"
+                    className="size-4"
+                  />
+                </span>
                 <DraftNumberInput
                   aria-label="起始序號"
                   aria-invalid={invalid('start')}
@@ -208,11 +225,8 @@ export function NamingPage() {
                   parse={(t) => parseClampedInt(t, 0, 999_999)}
                   onCommit={setStart}
                 />
-              </label>
+              </div>
             </div>
-            <p className="text-muted">
-              類別、批次只用小寫英數字與連字號。起始序號 0＝接在這個類別批次既有的最大序號之後。
-            </p>
           </div>
         </PanelSection>
         <Disclosure
@@ -221,9 +235,9 @@ export function NamingPage() {
           icon={SlidersHorizontal}
           title="進階"
         >
-          <div className="space-y-3 text-xs">
+          <div className="space-y-3 text-sm">
             <label className="flex items-center justify-between gap-2">
-              <span className="text-muted">序號位數（3–6）</span>
+              <span className="text-muted text-xs">序號位數（3–6）</span>
               <DraftNumberInput
                 aria-label="序號位數"
                 aria-invalid={invalid('width')}
@@ -234,8 +248,8 @@ export function NamingPage() {
                 onCommit={setWidth}
               />
             </label>
-            <div className="flex flex-col gap-1">
-              <span className="text-muted">編號順序</span>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-muted text-xs">編號順序</span>
               <Segmented
                 label="編號順序"
                 value={order}
@@ -246,8 +260,8 @@ export function NamingPage() {
                 ]}
               />
             </div>
-            <label className="flex flex-col gap-1">
-              <span className="text-muted">「沒有條碼」的標記（小寫字母）</span>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-muted text-xs">「沒有條碼」的標記（小寫字母）</span>
               <input
                 aria-label="沒有條碼的標記"
                 aria-invalid={invalid('no_code')}
@@ -256,7 +270,7 @@ export function NamingPage() {
                 className={cn(fieldClass, 'readout')}
               />
             </label>
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 leading-snug">
               <input
                 type="checkbox"
                 checked={includeUnknown}
@@ -411,7 +425,7 @@ function ConfirmButton({
         </>
       }
     >
-      <p className="text-ink-2 text-[13px] break-all">{body}</p>
+      <p className="text-ink-2 text-sm break-all">{body}</p>
     </Dialog>
   )
 }

@@ -8,7 +8,7 @@ import { LadderControls } from '@/components/LadderControls'
 import { ParamForm } from '@/components/ParamForm'
 import { ErrorBox } from '@/components/results'
 import { Dialog } from '@/components/ui/Dialog'
-import { Badge, Button } from '@/components/ui/primitives'
+import { Badge, Button, InfoTip } from '@/components/ui/primitives'
 import { useConfigSchemas } from '@/hooks/useConfigSchemas'
 import { cn } from '@/lib/cn'
 import {
@@ -75,7 +75,7 @@ export function FlowStep({
           entries={custom}
           selected={selected}
           onSelect={onSelect}
-          empty="還沒有自訂方案。可以從任何方案複製一份再修改。"
+          empty="還沒有自訂方案，可複製任一方案再修改。"
         />
         <Button
           size="sm"
@@ -91,7 +91,7 @@ export function FlowStep({
         </Button>
       </nav>
 
-      <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5">
+      <div className="min-w-0 flex-1 overflow-y-auto px-5 py-4">
         {selected ? (
           <PresetDetail
             entry={selected}
@@ -143,7 +143,7 @@ export function FlowStep({
           </>
         }
       >
-        <p className="text-ink-2 text-[13px]">過去用這個方案跑出的結果不受影響。</p>
+        <p className="text-ink-2 text-sm">過去用這個方案跑出的結果不受影響。</p>
       </Dialog>
     </div>
   )
@@ -181,7 +181,7 @@ function PresetList({
                   aria-pressed={on}
                   onClick={() => onSelect(e.preset.id)}
                   className={cn(
-                    'focus-visible:ring-primary/40 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] focus-visible:ring-2 focus-visible:outline-none',
+                    'focus-visible:ring-primary/40 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm focus-visible:ring-2 focus-visible:outline-none',
                     on ? 'bg-ink text-on-ink' : 'hover:bg-hover',
                   )}
                 >
@@ -234,7 +234,7 @@ function PresetDetail({
           {modified && <Badge tone="warn">已修改，可還原</Badge>}
         </div>
         {preset.description && (
-          <p className="text-ink-2 mt-1.5 text-[13px] leading-relaxed">{preset.description}</p>
+          <p className="text-ink-2 mt-1.5 text-sm leading-relaxed">{preset.description}</p>
         )}
       </div>
 
@@ -262,9 +262,12 @@ function PresetDetail({
       </div>
 
       <section aria-label="會執行的方法">
-        <h4 className="mb-2 text-xs font-semibold">
-          會執行的方法 <span className="readout text-muted">{methods.length}</span> 個
-        </h4>
+        <div className="mb-2 flex items-center gap-1">
+          <h4 className="text-xs font-semibold">
+            會執行的方法 <span className="readout text-muted">{methods.length}</span> 個
+          </h4>
+          <InfoTip text="每張圖都會用每個方法各解碼一次，方法越多越慢。" />
+        </div>
         <ul className="flex flex-wrap gap-1.5">
           {methods.map((m) => (
             <li key={m} className="border-card-border rounded-lg border px-2 py-0.5 text-xs">
@@ -272,10 +275,9 @@ function PresetDetail({
             </li>
           ))}
         </ul>
-        <p className="text-muted mt-2 text-xs">每張圖都會用每個方法各解碼一次，方法越多越慢。</p>
       </section>
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         <dt className="text-muted">zxing 內建嘗試</dt>
         <dd>{zxingOn.length ? zxingOn.join('、') : '全部關閉'}</dd>
         <dt className="text-muted">採用格式</dt>
@@ -366,7 +368,7 @@ function EditDialog({
       ) : !ladderSchema || !zxingSchema ? (
         <p className="text-muted text-sm">載入參數結構中…</p>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           <div className="space-y-3">
             <div>
               <label htmlFor={nameId} className="mb-1 block text-xs font-semibold">
@@ -376,7 +378,7 @@ function EditDialog({
                 id={nameId}
                 value={draft.name}
                 onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                className="border-card-border bg-card focus-visible:ring-primary/40 w-full rounded-lg border px-2.5 py-1.5 text-[13px] focus-visible:ring-2 focus-visible:outline-none"
+                className="border-card-border bg-card focus-visible:ring-primary/40 w-full rounded-lg border px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
               />
             </div>
             <div>
@@ -388,7 +390,7 @@ function EditDialog({
                 rows={2}
                 value={draft.description}
                 onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-                className="border-card-border bg-card focus-visible:ring-primary/40 w-full rounded-lg border px-2.5 py-1.5 text-[13px] focus-visible:ring-2 focus-visible:outline-none"
+                className="border-card-border bg-card focus-visible:ring-primary/40 w-full rounded-lg border px-2.5 py-1.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
               />
             </div>
           </div>
@@ -410,10 +412,10 @@ function EditDialog({
 
           {rungs.includes('pipeline') && (
             <section className="border-card-border space-y-2 border-t pt-4">
-              <h3 className="text-sm font-semibold">疊加流程</h3>
-              <p className="text-muted text-xs">
-                每條流程在同一張影像上依序做多個處理（至少兩個步驟、不重複）。
-              </p>
+              <div className="flex items-center gap-1">
+                <h3 className="text-sm font-semibold">疊加流程</h3>
+                <InfoTip text="每條流程在同一張影像上依序做多個處理（至少兩個步驟、不重複）。" />
+              </div>
               <PipelinesEditor
                 pipelines={pipelines}
                 onChange={(next) => setLadder({ ...ladder, pipelines: next })}
@@ -422,10 +424,10 @@ function EditDialog({
           )}
 
           <section className="border-card-border space-y-2 border-t pt-4">
-            <h3 className="text-sm font-semibold">解碼器（zxing-cpp）</h3>
-            <p className="text-muted text-xs">
-              全部關閉時只看前處理本身的效果；開啟後解碼器會自己嘗試旋轉、縮小與反色。
-            </p>
+            <div className="flex items-center gap-1">
+              <h3 className="text-sm font-semibold">解碼器（zxing-cpp）</h3>
+              <InfoTip text="全部關閉時只看前處理本身的效果；開啟後解碼器會自己嘗試旋轉、縮小與反色。" />
+            </div>
             <ParamForm
               schema={zxingSchema}
               overrides={overridesOf(zxingSchema, draft.arm.zxing) as ConfigOverride}
@@ -466,7 +468,7 @@ function PipelinesEditor({
         {pipelines.map((p, i) => (
           <li
             key={i}
-            className="border-card-border space-y-1.5 rounded-lg border px-2.5 py-2 text-[13px]"
+            className="border-card-border space-y-1.5 rounded-lg border px-2.5 py-2 text-sm"
           >
             <div className="flex items-center gap-2">
               <span className="text-muted tabular w-4 text-xs">{i + 1}</span>

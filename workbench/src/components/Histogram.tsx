@@ -49,7 +49,7 @@ export function Histogram({ counts, thresholds }: { counts: number[]; thresholds
               x={PAD.left - 6}
               y={y(max * t) + 4}
               textAnchor="end"
-              className="fill-muted text-[10px]"
+              className="fill-muted text-xs"
             >
               {Math.round(max * t).toLocaleString()}
             </text>
@@ -75,7 +75,7 @@ export function Histogram({ counts, thresholds }: { counts: number[]; thresholds
             x={x(v) + bar / 2}
             y={H - 10}
             textAnchor="middle"
-            className="fill-muted text-[10px]"
+            className="fill-muted text-xs"
           >
             {v}
           </text>
@@ -95,7 +95,7 @@ export function Histogram({ counts, thresholds }: { counts: number[]; thresholds
               x={x(t.value) + bar / 2 + 4}
               y={PAD.top + 10}
               fill={t.color}
-              className="text-[11px] font-medium"
+              className="text-xs font-medium"
             >
               {t.label} {t.value}
             </text>

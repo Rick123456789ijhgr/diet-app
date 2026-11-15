@@ -86,7 +86,7 @@ export function ImageSlot({
               }
             />
           ) : (
-            <div className="bg-sunken flex justify-center rounded-2xl">
+            <div className="bg-sunken flex justify-center rounded-lg">
               <img
                 src={src}
                 alt={`${name}照片`}

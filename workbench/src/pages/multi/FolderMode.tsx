@@ -184,7 +184,10 @@ export function FolderMode({
 
   const panel = (
     <PanelStack>
-      <PanelSection title="資料夾">
+      <PanelSection
+        title="資料夾"
+        hint="伺服器本機路徑：相對於 ai/ 或絕對路徑。splits/test 會被拒絕（測試集鎖定）。"
+      >
         <form
           className="space-y-3 text-sm"
           // 用 form 讓輸入框按 Enter 也能執行；路徑空白時不送出
@@ -193,24 +196,18 @@ export function FolderMode({
             if (folder.trim()) run()
           }}
         >
-          <div className="flex flex-col gap-1">
-            <span className="text-muted text-xs">資料夾（伺服器本機路徑）</span>
-            <div className="flex gap-2">
-              <input
-                aria-label="資料夾"
-                value={folder}
-                onChange={(e) => setFolder(e.target.value)}
-                placeholder="..\research\data\splits\dev"
-                className="border-card-border bg-sunken focus-visible:border-primary focus-visible:bg-card readout h-7 min-w-0 flex-1 rounded-lg border px-2 text-xs focus-visible:outline-none"
-              />
-              <FolderPicker value={folder} onPick={setFolder} />
-            </div>
+          <div className="flex gap-2">
+            <input
+              aria-label="資料夾"
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              placeholder="..\research\data\splits\dev"
+              className="border-card-border bg-card focus-visible:border-primary readout h-8 min-w-0 flex-1 rounded-lg border px-2.5 text-sm focus-visible:outline-none"
+            />
+            <FolderPicker value={folder} onPick={setFolder} />
           </div>
-          <p className="text-muted text-xs">
-            相對於 ai/ 或絕對路徑。splits/test 會被拒絕（測試集鎖定）。
-          </p>
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-xs">
+            <label className="flex items-center gap-2 text-sm">
               <span className="text-muted">最多張數</span>
               {/* 限制在 1–5000；可暫時清空，失焦時才顯示夾過的值（見 parseClampedInt） */}
               <DraftNumberInput
@@ -222,7 +219,7 @@ export function FolderMode({
                 onCommit={setLimit}
               />
             </label>
-            <label className="flex items-center gap-2 text-xs">
+            <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={recursive}
@@ -276,7 +273,7 @@ export function FolderMode({
 
   // 每張結果表格；只畫前 MAX_TABLE_ROWS 列。讀取失敗的列以一格合併顯示錯誤，且不可選取
   const table = (
-    <table className="w-full text-[13px]" aria-label="每張影像的品質檢查結果">
+    <table className="w-full text-sm" aria-label="每張影像的品質檢查結果">
       <thead className="bg-card sticky top-0">
         <tr className="text-muted bg-sunken text-left text-xs">
           {['檔案', '模糊分數', '過暗', '過亮', '短邊', '通過', '警告'].map((c) => (
@@ -471,7 +468,7 @@ export function FolderMode({
                       {selected ? (
                         <Detail row={selected} config={ranWith ?? config} />
                       ) : (
-                        <p className="text-muted shrink-0 px-1 pt-3 text-xs">
+                        <p className="text-muted shrink-0 px-1 pt-3 text-sm">
                           點選一列即可在下方檢視該影像。
                         </p>
                       )}

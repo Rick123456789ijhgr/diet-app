@@ -1,4 +1,4 @@
-// 外框（柔和卡片風）：左側浮動圖示欄（深淺色切換＋模組）、頂部列（標誌、頁面膠囊、服務狀態、登入者）、內容區。
+// 外框：左側深色側欄（標誌、模組、深淺色切換）、頂部白色列（模組名稱、頁面分頁、服務狀態、登入者）、內容區。
 import { useQuery } from '@tanstack/react-query'
 import { LogOut, Moon, Sun, UserRound } from 'lucide-react'
 import { useState } from 'react'
@@ -12,7 +12,7 @@ import { errorText } from '@/lib/text'
 import { HOME, locate, MODULES, modulePath, toolPath } from '@/nav'
 
 // 頂部列高度（px）；雖有匯出，目前只在本檔使用
-export const TOPBAR_HEIGHT = 64
+export const TOPBAR_HEIGHT = 56
 
 /**
  * 整個工作台的外框（路由的版面元件）：子路由頁面經 <Outlet /> 渲染在 <main> 內。
@@ -24,43 +24,47 @@ export function AppShell() {
     <div className="flex h-full">
       <Rail activeId={module.id} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center gap-3 pr-3" style={{ height: TOPBAR_HEIGHT }}>
-          <Link
-            to="/"
-            className="bg-card shadow-card flex h-11 shrink-0 items-center gap-2 rounded-full pr-4 pl-1.5"
-            aria-label="開發工作台總覽"
-          >
-            {/* 裝飾性標誌：alt="" 讓螢幕閱讀器略過，連結名稱由 aria-label 提供 */}
-            <img src="/icon.svg" alt="" className="size-8" />
-            <span className="text-[14px] font-semibold tracking-tight">開發工作台</span>
-          </Link>
-          <div className="flex min-w-0 flex-1 justify-center">
-            {/* 目前模組的工具頁膠囊；沒有工具頁的模組（例如總覽）不顯示。頁面多時可橫向捲動 */}
-            {module.tools.length > 0 && (
-              <nav
-                aria-label="頁面"
-                className="bg-card shadow-card flex min-w-0 gap-0.5 overflow-x-auto rounded-full p-1"
-              >
-                {module.tools.map((t) => (
-                  <NavLink
-                    key={t.slug}
-                    to={toolPath(module, t)}
-                    className={cn(
-                      'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[13px] transition-colors',
-                      t.slug === tool?.slug
-                        ? 'bg-ink text-on-ink font-medium'
-                        : 'text-ink-2 hover:bg-hover hover:text-ink',
-                      // 尚未完成的頁面淡化（仍可點進去）；正在看的那頁不淡化
-                      !t.ready && t.slug !== tool?.slug && 'opacity-50',
-                    )}
-                  >
-                    <t.icon className="size-3.5" aria-hidden />
-                    {t.name}
-                  </NavLink>
-                ))}
-              </nav>
-            )}
+        <header
+          className="bg-card border-card-border flex shrink-0 items-center gap-4 border-b px-5"
+          style={{ height: TOPBAR_HEIGHT }}
+        >
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
+            <span className="bg-primary-soft text-primary-ink grid size-8 place-items-center rounded-lg">
+              <module.icon className="size-[18px]" aria-hidden />
+            </span>
+            <div className="leading-tight">
+              <div className="text-[15px] font-semibold">{module.name}</div>
+              {module.id && <div className="text-muted text-xs">{module.short}</div>}
+            </div>
           </div>
+          {/* 目前模組的頁面分頁；沒有工具頁的模組（例如總覽）不顯示。頁面多時可橫向捲動 */}
+          {module.tools.length > 0 && (
+            <nav
+              aria-label="頁面"
+              className="flex h-full min-w-0 items-stretch gap-1 overflow-x-auto"
+            >
+              {module.tools.map((t) => (
+                <NavLink
+                  key={t.slug}
+                  to={toolPath(module, t)}
+                  className={cn(
+                    'relative inline-flex shrink-0 items-center gap-1.5 px-3 text-sm transition-colors',
+                    // 選中的頁面：文字加深＋底部主色線
+                    "after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:content-['']",
+                    t.slug === tool?.slug
+                      ? 'text-ink after:bg-primary font-semibold'
+                      : 'text-muted hover:text-ink',
+                    // 尚未完成的頁面淡化（仍可點進去）；正在看的那頁不淡化
+                    !t.ready && t.slug !== tool?.slug && 'opacity-50',
+                  )}
+                >
+                  <t.icon className="size-4" aria-hidden />
+                  {t.name}
+                </NavLink>
+              ))}
+            </nav>
+          )}
+          <div className="flex-1" />
           <ServiceStatus />
           <UserMenu />
         </header>
@@ -72,15 +76,18 @@ export function AppShell() {
   )
 }
 
-/** 左側浮動圖示欄：深淺色切換、各模組（選中為黑色圓）。 */
+/** 左側深色側欄：標誌（回總覽）、各模組（選中為主色底）、底部深淺色切換。名稱以右側提示顯示。 */
 function Rail({ activeId }: { activeId: string }) {
   return (
-    <aside aria-label="模組" className="flex w-[76px] shrink-0 flex-col items-center gap-3 py-3">
-      <ThemeToggle />
-      <nav
-        aria-label="模組清單"
-        className="bg-card shadow-card mt-6 flex flex-col items-center gap-1 rounded-full p-1.5"
-      >
+    <aside
+      aria-label="模組"
+      className="bg-rail text-rail-ink flex w-16 shrink-0 flex-col items-center gap-1 py-3"
+    >
+      <Link to="/" aria-label="開發工作台總覽" className="mb-3 grid size-10 place-items-center">
+        {/* 裝飾性標誌：alt="" 讓螢幕閱讀器略過，連結名稱由 aria-label 提供 */}
+        <img src="/icon.svg" alt="" className="size-9" />
+      </Link>
+      <nav aria-label="模組清單" className="flex flex-col items-center gap-1">
         {/* 總覽（HOME）的 id 為空字串，key 改用 'home'；只有圖示，名稱以 aria-label 與右側提示提供 */}
         {[HOME, ...MODULES].map((m) => (
           <Hint key={m.id || 'home'} text={m.id ? `${m.short}・${m.name}` : m.name} side="right">
@@ -88,17 +95,19 @@ function Rail({ activeId }: { activeId: string }) {
               to={modulePath(m)}
               aria-label={m.name}
               className={cn(
-                'flex size-10 items-center justify-center rounded-full transition-colors',
+                'flex size-10 items-center justify-center rounded-lg transition-colors',
                 m.id === activeId
-                  ? 'bg-ink text-on-ink'
-                  : 'text-ink-2 hover:bg-hover hover:text-ink',
+                  ? 'bg-rail-active text-white'
+                  : 'hover:bg-rail-hover hover:text-white',
               )}
             >
-              <m.icon className="size-[18px]" aria-hidden />
+              <m.icon className="size-[19px]" aria-hidden />
             </NavLink>
           </Hint>
         ))}
       </nav>
+      <div className="flex-1" />
+      <ThemeToggle />
     </aside>
   )
 }
@@ -130,7 +139,7 @@ function ServiceStatus() {
       <span
         role="status"
         aria-label={detail}
-        className="bg-card shadow-card text-ink-2 flex h-11 shrink-0 items-center gap-2 rounded-full px-4 text-xs"
+        className="text-ink-2 border-card-border flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-xs"
       >
         <span
           className={cn(
@@ -152,7 +161,7 @@ function UserMenu() {
   // 查詢中或未登入時都沒有 data，一律不顯示
   if (!me.data) return null
   return (
-    <div className="bg-card shadow-card flex h-11 shrink-0 items-center gap-2 rounded-full pr-1.5 pl-4 text-[13px]">
+    <div className="border-card-border flex h-8 shrink-0 items-center gap-2 border-l pl-4 text-sm">
       <UserRound className="text-muted size-4" aria-hidden />
       <span title={me.data.username}>{me.data.display_name}</span>
       <Button size="sm" variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending}>
@@ -163,7 +172,7 @@ function UserMenu() {
   )
 }
 
-/** 深淺色切換：上下兩顆圓鈕，選中的一顆加底色。 */
+/** 深淺色切換：側欄底部一顆按鈕，按一下切換；圖示顯示切換後的主題。 */
 function ThemeToggle() {
   // 初始值讀 <html> 上的 dark class（index.html 的內嵌腳本在載入時已依 localStorage 套用），確保按鈕狀態與實際主題一致
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -177,29 +186,18 @@ function ThemeToggle() {
     }
     setDark(next)
   }
+  const label = dark ? '切換為淺色' : '切換為深色'
+  const Icon = dark ? Sun : Moon
   return (
-    <div className="bg-card shadow-card flex flex-col gap-1 rounded-full p-1.5">
-      {(
-        [
-          [false, Sun, '切換為淺色'],
-          [true, Moon, '切換為深色'],
-        ] as const
-      ).map(([value, Icon, label]) => (
-        <button
-          key={label}
-          type="button"
-          onClick={() => set(value)}
-          aria-label={label}
-          // aria-pressed 讓輔助技術知道目前是哪一個主題（兩顆按鈕互斥）
-          aria-pressed={dark === value}
-          className={cn(
-            'flex size-10 items-center justify-center rounded-full transition-colors',
-            dark === value ? 'bg-sunken text-ink' : 'text-muted hover:text-ink',
-          )}
-        >
-          <Icon className="size-[18px]" />
-        </button>
-      ))}
-    </div>
+    <Hint text={label} side="right">
+      <button
+        type="button"
+        onClick={() => set(!dark)}
+        aria-label={label}
+        className="hover:bg-rail-hover flex size-10 items-center justify-center rounded-lg transition-colors hover:text-white"
+      >
+        <Icon className="size-[18px]" aria-hidden />
+      </button>
+    </Hint>
   )
 }

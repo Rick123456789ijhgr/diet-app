@@ -3,7 +3,7 @@ import { Check, Copy, Download, FileUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import type { ConfigClass, ConfigOverride } from '@/api/client'
-import { Button } from '@/components/ui/primitives'
+import { Button, InfoTip } from '@/components/ui/primitives'
 import { ConfigImportError, exportJson, importJson, pythonCtor } from '@/lib/config'
 import { downloadBlob } from '@/lib/download'
 
@@ -45,11 +45,13 @@ export function ConfigIO({
   }
 
   return (
-    <div className="space-y-5 text-sm">
+    <div className="space-y-4 text-sm">
       {title && <h2 className="text-base font-semibold">{title}</h2>}
       <div className="space-y-2">
-        <h3 className="font-semibold">Python 建構式</h3>
-        <p className="text-muted text-xs">只列出與預設值不同的欄位，可直接貼回程式或實驗設定。</p>
+        <h3 className="flex items-center gap-1 font-semibold">
+          Python 建構式
+          <InfoTip text="只列出與預設值不同的欄位，可直接貼回程式或實驗設定。" />
+        </h3>
         <CodeBlock text={py} />
       </div>
       <div className="space-y-2">

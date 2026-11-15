@@ -322,7 +322,7 @@ export function FoodTask({
                     return (
                       <figure
                         key={c.image.artifact_id}
-                        className="bg-sunken overflow-hidden rounded-2xl"
+                        className="bg-sunken overflow-hidden rounded-lg"
                       >
                         <div className="viewport-grid rounded-t-2xl">
                           <img
@@ -355,7 +355,11 @@ export function FoodTask({
                   VLM 實際收到的 JPEG：{r.whole.image.width}×{r.whole.image.height} px、
                   {kb(r.whole.num_bytes)}（縮放 ×{r.whole.scale.toFixed(3)}）。
                 </p>
-                <Section title="尺寸試算" className="mt-5">
+                <Section
+                  title="尺寸試算"
+                  hint="最終尺寸由 E2 實驗依準確率決定；這裡只列出檔案大小的變化。"
+                  className="mt-5"
+                >
                   <DataTable
                     label="不同長邊上限下的輸出尺寸與 JPEG 大小"
                     columns={['長邊上限', '輸出尺寸', 'JPEG', '像素數（MP）']}
@@ -370,9 +374,6 @@ export function FoodTask({
                       ]
                     })}
                   />
-                  <p className="text-muted mt-2 text-xs">
-                    最終尺寸由 E2 實驗依準確率決定；這裡只列出檔案大小的變化。
-                  </p>
                 </Section>
               </>
             ) : (

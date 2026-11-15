@@ -3,13 +3,30 @@
 import { ChevronDown, type LucideIcon } from 'lucide-react'
 import { useId, type ReactNode } from 'react'
 
+import { InfoTip } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 
-/** 控制面板的一段（有標題時顯示小標）。 */
-export function PanelSection({ title, children }: { title?: string; children: ReactNode }) {
+/** 控制面板的一段：有標題時顯示小標；hint 為說明（放在標題旁的 ⓘ 提示裡）；aside 放在標題列右側。 */
+export function PanelSection({
+  title,
+  hint,
+  aside,
+  children,
+}: {
+  title?: string
+  hint?: ReactNode
+  aside?: ReactNode
+  children: ReactNode
+}) {
   return (
-    <section className="space-y-3 px-4 py-4">
-      {title && <h3 className="text-sm font-semibold">{title}</h3>}
+    <section className="space-y-2.5 px-4 py-3.5">
+      {title && (
+        <div className="flex min-h-6 items-center gap-1.5">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {hint && <InfoTip text={hint} />}
+          {aside && <div className="ml-auto flex items-center gap-1.5">{aside}</div>}
+        </div>
+      )}
       {children}
     </section>
   )
@@ -50,7 +67,7 @@ export function Disclosure({
         />
       </button>
       {open && (
-        <div id={contentId} className="px-4 pb-4">
+        <div id={contentId} className="px-4 pb-3.5">
           {children}
         </div>
       )}

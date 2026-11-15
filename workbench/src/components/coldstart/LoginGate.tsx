@@ -6,7 +6,7 @@ import { Outlet } from 'react-router'
 
 import { ApiError } from '@/api/client'
 import { EmptyState } from '@/components/layout/Workspace'
-import { Button, Card } from '@/components/ui/primitives'
+import { Button, Card, InfoTip } from '@/components/ui/primitives'
 import { useLogin, useMe } from '@/hooks/useAuth'
 import { errorText } from '@/lib/text'
 
@@ -17,7 +17,7 @@ export function LoginGate() {
   if (me.isPending) return <EmptyState>載入中…</EmptyState>
   if (me.isError) {
     return (
-      <div className="pr-3 pb-3">
+      <div className="p-3">
         <ColdstartError error={me.error} />
       </div>
     )
@@ -33,14 +33,14 @@ export function LoginForm() {
   const err = login.error
   const credentialError = err instanceof ApiError && err.code === 'INVALID_CREDENTIALS'
   return (
-    <div className="flex h-full items-start justify-center overflow-y-auto pr-3 pb-3 pt-16">
+    <div className="flex h-full items-start justify-center overflow-y-auto p-3 pt-12">
       <Card className="w-full max-w-sm p-6">
-        <h1 className="text-[22px] leading-tight font-semibold tracking-tight">登入</h1>
-        <p className="text-muted mt-1 text-sm">
-          冷啟動上傳需要登入。帳號由管理者以 wbuser 指令建立。
-        </p>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-[20px] leading-tight font-semibold">登入</h1>
+          <InfoTip text="冷啟動上傳需要登入。帳號由管理者以 wbuser 指令建立。" side="right" />
+        </div>
         <form
-          className="mt-5 flex flex-col gap-3"
+          className="mt-4 flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault()
             login.mutate({ username: username.trim(), password })
