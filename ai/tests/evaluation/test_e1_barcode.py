@@ -25,7 +25,7 @@ from dietai.evaluation import (
     write_image,
     write_manifest,
 )
-from dietai.evaluation.barcode import ATTEMPT_COLUMNS, RESULT_COLUMNS
+from dietai.evaluation.barcode import ATTEMPT_COLUMNS, RESULT_COLUMNS, is_ambiguous
 from dietai.preprocess import (
     DEFAULT_RUNGS,
     CodeFormat,
@@ -83,9 +83,22 @@ def test_judge_normalizes_upca_to_gtin13(fake_decoder, fmt, text, truth, expecte
     assert judge(_ladder([[hit]], fake_decoder), truth) is expected
 
 
-def test_judge_accepts_any_matching_hit(fake_decoder):
+def test_judge_multiple_codes_is_ambiguous_misread(fake_decoder):
+    # 同時讀出真值與其他號碼：APP 無法判斷哪個才對，判為誤讀，彙整時另列「多重結果」
     result = _ladder([[_hit("4712612300015"), _hit("4718652300015")]], fake_decoder)
+    assert judge(result, "4718652300015") is Outcome.MISREAD
+    row = {"outcome": "misread", "truth": "4718652300015", "decoded": "4712612300015|4718652300015"}
+    assert is_ambiguous(row)
+    assert not is_ambiguous({**row, "decoded": "4712612300015"})  # 真值不在結果中：一般誤讀
+    assert not is_ambiguous({**row, "outcome": "correct"})
+
+
+def test_judge_same_code_twice_is_correct(fake_decoder):
+    result = _ladder([[_hit("4718652300015"), _hit("4718652300015")]], fake_decoder)
     assert judge(result, "4718652300015") is Outcome.CORRECT
+    upca = DecodeHit("UPCA", "012345678905", b"012345678905", CORNERS)
+    ean = DecodeHit("EAN13", "0012345678905", b"0012345678905", CORNERS)
+    assert judge(_ladder([[upca, ean]], fake_decoder), "0012345678905") is Outcome.CORRECT
 
 
 def test_judge_negative_ignores_unconfirmed_decodes(fake_decoder):
