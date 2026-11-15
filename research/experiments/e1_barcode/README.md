@@ -143,6 +143,32 @@ python analyze.py runs/<資料夾> --baseline a0_raw --primary z2_default_v2
 紀錄方式採本地執行資料夾，不使用 MLflow／W&B，理由見 `docs/adr/0002-experiment-records.md`。
 正式結論請把 `summary.md` 的關鍵表格與 `run.json` 的 commit、manifest sha256 抄到下方「結論」。
 
+## 切分 dev／test 與來源 manifest（ADR 0005）
+
+照片依規則命名後（檔名中的條碼即真值），以原始樣本為單位切分，搬進 `data/e1/splits/` 並寫出 `data/e1/sources.csv`：
+
+```bash
+python make_sources.py ../../data/e1/incoming/o_a01 ../../data/e1/incoming/f_a01 --test o_a01=0.5          # 預覽
+python make_sources.py ../../data/e1/incoming/o_a01 ../../data/e1/incoming/f_a01 --test o_a01=0.5 --apply  # 真的搬
+python make_sources.py --undo                                                                              # 搬回原處
+```
+
+- 同一條碼的照片整組分在同一邊；`--test` 指定各批次分到 test 的「組」的比例，未列出的批次全部是 dev。
+- 每組依 `sha256(種子:條碼)` 排序後取前段，結果可重現、與檔案順序無關。邏輯在 `dietai.evaluation.splits`。
+- 照片搬到 `splits/<split>/<類別>_<批次>/`；`sources.csv` 欄位為 `id, image, truth, split, category, batch`。
+- **切分後不要改種子或比例重切**，也不要把 `splits/test` 下的照片丟進工作台（工作台會拒絕讀取）。
+
+### 本專題的切分（2026-11-15，方案 B）
+
+| 批次 | 內容 | dev | test | 說明 |
+| --- | --- | --- | --- | --- |
+| `f_a01` | 食品包裝 250 張（247 種條碼） | 250 | 0 | 已在「找最佳流程」用來設計 rotate、locate 階，不能當測試集 |
+| `o_a01` | 書籍等 100 張（99 種條碼） | 50 | 50 | 從未用於調整；依條碼分組對半切（種子 0） |
+
+指令：`make_sources.py incoming/o_a01 incoming/f_a01 --test o_a01=0.5 --seed 0 --apply`；`sources.csv` 的 sha256 為 `51a74c75bd436519afa2e1b553ef2618e8346541e53f259a4c67208ebb46e1de`（350 列）。
+
+研究限制：測試集只有書籍等其他物品，沒有食品包裝；test 的結論不能直接推到食品包裝。
+
 ## 由真實照片產生變體（ADR 0005）
 
 正式實驗的資料以真實照片為原圖，由程式產生參數已知的劣化變體（半合成）；真實拍攝的劣化照片另外收集、分開報告。
