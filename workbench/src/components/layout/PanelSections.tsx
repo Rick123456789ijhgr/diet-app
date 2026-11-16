@@ -19,10 +19,10 @@ export function PanelSection({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-2.5 px-4 py-3.5">
+    <section className="space-y-2.5 px-5 py-4">
       {title && (
         <div className="flex min-h-6 items-center gap-1.5">
-          <h3 className="text-sm font-semibold">{title}</h3>
+          <h3 className="text-[15px] font-semibold">{title}</h3>
           {hint && <InfoTip text={hint} />}
           {aside && <div className="ml-auto flex items-center gap-1.5">{aside}</div>}
         </div>
@@ -56,7 +56,7 @@ export function Disclosure({
         aria-expanded={open}
         aria-controls={contentId}
         onClick={() => onOpenChange(!open)}
-        className="hover:bg-hover focus-visible:ring-primary/40 flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-semibold focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+        className="hover:bg-hover focus-visible:ring-primary/40 flex w-full items-center gap-2 px-5 py-3.5 text-left text-[15px] font-semibold focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
       >
         <Icon className="text-muted size-4" aria-hidden />
         <span className="flex-1">{title}</span>
@@ -67,7 +67,7 @@ export function Disclosure({
         />
       </button>
       {open && (
-        <div id={contentId} className="px-4 pb-3.5">
+        <div id={contentId} className="px-5 pb-4">
           {children}
         </div>
       )}

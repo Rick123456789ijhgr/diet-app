@@ -83,7 +83,7 @@ export function ArchPage() {
           </a>
         }
       />
-      <div className="bg-card shadow-card border-card-border border flex min-h-0 flex-1 flex-col overflow-hidden rounded-card">
+      <div className="bg-card shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-card">
         <div className="flex shrink-0 items-center px-4 pt-3.5 pb-2.5">
           <Breadcrumb doc={doc} diagramId={diagram.id} onGo={go} />
         </div>

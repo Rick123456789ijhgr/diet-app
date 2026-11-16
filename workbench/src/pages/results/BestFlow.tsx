@@ -438,7 +438,7 @@ export function BestFlow({
       />
       <section
         aria-label="找最佳流程的步驟"
-        className="bg-card shadow-card border-card-border border flex min-h-0 flex-1 flex-col overflow-hidden rounded-card"
+        className="bg-card shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-card"
       >
         <div className="border-card-border flex shrink-0 items-center gap-3 overflow-x-auto border-b px-4 py-2.5">
           <Stepper

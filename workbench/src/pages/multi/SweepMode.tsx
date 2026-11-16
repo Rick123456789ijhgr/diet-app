@@ -321,7 +321,7 @@ export function SweepMode({
           aria-label="退化種類"
           value={axisKey}
           onChange={(e) => setAxis(e.target.value)}
-          className="border-card-border bg-card focus-visible:border-primary h-8 rounded-lg border px-2.5 text-sm focus-visible:outline-none"
+          className="border-card-border bg-card focus-visible:border-primary h-8 rounded-full border px-3 text-sm focus-visible:outline-none"
         >
           {SWEEP_AXES.map((a) => (
             <option key={a.key} value={a.key}>

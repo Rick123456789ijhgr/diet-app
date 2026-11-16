@@ -46,7 +46,7 @@ export function ColdstartError({ error, className }: { error: unknown; className
 }
 
 export const inputClass =
-  'border-card-border bg-card focus-visible:border-primary h-8 w-full rounded-lg border px-2.5 text-sm focus-visible:outline-none ' +
+  'border-card-border bg-card focus-visible:border-primary h-8 w-full rounded-full border px-3 text-sm focus-visible:outline-none ' +
   'read-only:bg-hover disabled:bg-hover aria-[invalid=true]:border-danger aria-[invalid=true]:bg-danger-soft'
 
 export function TextInput({ className, ...props }: ComponentProps<'input'>) {

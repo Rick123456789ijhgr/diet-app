@@ -414,7 +414,7 @@ export function BarcodeTask({
                           aria-label="嘗試"
                           value={shownAttempt}
                           onChange={(e) => setAttempt(Number(e.target.value))}
-                          className="border-card-border bg-card h-8 rounded-lg border px-2.5 text-sm"
+                          className="border-card-border bg-card h-8 rounded-full border px-3 text-sm"
                         >
                           {attempts.map((a, i) => (
                             <option key={i} value={i}>

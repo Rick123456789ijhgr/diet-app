@@ -41,8 +41,9 @@ export function Stepper<T extends string>({
               <li
                 aria-hidden
                 className={cn(
-                  'h-px min-w-3 flex-1 max-w-16',
-                  done(steps[i - 1]!.id) ? 'bg-primary/50' : 'bg-card-border',
+                  // 已完成的連接線為主色實線；還沒到的以斜線紋表示「待處理」
+                  'h-1.5 min-w-3 max-w-16 flex-1 rounded-full',
+                  done(steps[i - 1]!.id) ? 'bg-primary' : 'hatch',
                 )}
               />
             )}
@@ -53,19 +54,19 @@ export function Stepper<T extends string>({
                 disabled={isCurrent || !canGo(s.id)}
                 onClick={() => onSelect(s.id)}
                 className={cn(
-                  'group flex items-center gap-2 rounded-lg py-1 pr-2.5 pl-1 text-sm transition-colors',
+                  'group flex items-center gap-2 rounded-full py-1 pr-3.5 pl-1 text-sm transition-colors',
                   'focus-visible:ring-primary/40 focus-visible:ring-2 focus-visible:outline-none',
-                  isCurrent ? 'text-ink font-semibold' : 'text-ink-2',
+                  isCurrent ? 'bg-primary-soft text-ink font-semibold' : 'text-ink-2',
                   !isCurrent && canGo(s.id) && 'hover:bg-hover hover:text-ink',
                   !isCurrent && !canGo(s.id) && 'text-muted',
                 )}
               >
                 <span
                   className={cn(
-                    'readout grid size-6 place-items-center rounded-full text-xs font-semibold',
+                    'readout grid size-7 place-items-center rounded-full text-xs font-semibold',
                     isCurrent && 'bg-primary text-on-primary',
                     isDone && 'bg-primary-soft text-primary-ink',
-                    !isCurrent && !isDone && 'bg-sunken',
+                    !isCurrent && !isDone && 'bg-card ring-card-border ring-1',
                   )}
                 >
                   {isDone ? <Check className="size-3.5" aria-label="已完成" /> : i + 1}
