@@ -20,7 +20,7 @@ export function ToolsHome() {
               key={t.slug}
               to={toolPath(module, t)}
               title={t.description}
-              className="bg-card shadow-card border-card-border group hover:bg-hover focus-visible:ring-primary/40 rounded-card flex items-center gap-3 border px-4 py-3.5 focus-visible:ring-2 focus-visible:outline-none"
+              className="bg-card shadow-card group hover:bg-hover focus-visible:ring-primary/40 rounded-card flex items-center gap-3 px-4 py-3.5 focus-visible:ring-2 focus-visible:outline-none"
             >
               <span className="bg-sunken group-hover:bg-card grid size-10 shrink-0 place-items-center rounded-lg">
                 <t.icon className="size-5" aria-hidden />

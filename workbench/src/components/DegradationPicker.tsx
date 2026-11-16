@@ -64,7 +64,7 @@ export function DegradationPicker({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold">模擬退化</h3>
+        <h3 className="shrink-0 text-[15px] font-semibold whitespace-nowrap">模擬退化</h3>
         <InfoTip
           label="模擬退化說明"
           text="從下方「＋」加入退化，或從「常見情境」一次套用一組。依序套用：旋轉 → 曲面 → 縮小 → 模糊 → 亮度、對比 → 梯度 → 光斑 → 雜訊 → JPEG。"
@@ -91,7 +91,7 @@ export function DegradationPicker({
             清除
           </Button>
         ) : (
-          <span className="text-muted text-xs">目前是原圖</span>
+          <span className="text-muted text-xs whitespace-nowrap">目前是原圖</span>
         )}
       </div>
 

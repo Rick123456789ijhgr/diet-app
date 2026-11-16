@@ -323,7 +323,7 @@ function Editor({ initial, onReload }: { initial: Submission; onReload: () => Pr
 
       <section
         aria-label="人工確認"
-        className="bg-card shadow-card border-card-border rounded-card min-w-0 overflow-y-auto border p-4"
+        className="bg-card shadow-card rounded-card min-w-0 overflow-y-auto p-4"
       >
         <div className="mb-4 flex flex-wrap items-start gap-3">
           <div className="min-w-0 flex-1">

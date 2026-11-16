@@ -396,7 +396,7 @@ function EditDialog({
           </div>
 
           <section className="border-card-border space-y-2 border-t pt-4">
-            <h3 className="text-sm font-semibold">要比較的方法</h3>
+            <h3 className="text-[15px] font-semibold">要比較的方法</h3>
             <LadderControls
               schema={ladderSchema}
               overrides={sequences}
@@ -413,7 +413,7 @@ function EditDialog({
           {rungs.includes('pipeline') && (
             <section className="border-card-border space-y-2 border-t pt-4">
               <div className="flex items-center gap-1">
-                <h3 className="text-sm font-semibold">疊加流程</h3>
+                <h3 className="text-[15px] font-semibold">疊加流程</h3>
                 <InfoTip text="每條流程在同一張影像上依序做多個處理（至少兩個步驟、不重複）。" />
               </div>
               <PipelinesEditor
@@ -425,7 +425,7 @@ function EditDialog({
 
           <section className="border-card-border space-y-2 border-t pt-4">
             <div className="flex items-center gap-1">
-              <h3 className="text-sm font-semibold">解碼器（zxing-cpp）</h3>
+              <h3 className="text-[15px] font-semibold">解碼器（zxing-cpp）</h3>
               <InfoTip text="全部關閉時只看前處理本身的效果；開啟後解碼器會自己嘗試旋轉、縮小與反色。" />
             </div>
             <ParamForm

@@ -97,7 +97,7 @@ export function StatusCard({
 }) {
   const Icon = tone === 'ok' ? CircleCheck : tone === 'warn' ? TriangleAlert : CircleAlert
   return (
-    <div className="bg-card shadow-card border-card-border border shrink-0 rounded-card p-3.5">
+    <div className="bg-card shadow-card shrink-0 rounded-card p-4">
       <div className="flex items-center gap-2.5">
         <span
           className={cn(
@@ -182,7 +182,12 @@ export function Metric({
   wide?: boolean
 }) {
   return (
-    <div className={cn('bg-sunken relative min-w-0 rounded-lg px-3 py-2', wide && 'col-span-full')}>
+    <div
+      className={cn(
+        'bg-sunken relative min-w-0 rounded-2xl px-3.5 py-2.5',
+        wide && 'col-span-full',
+      )}
+    >
       {/* 說明圖示放在右上角，標籤後面緊接數值（頁面測試以 nextElementSibling 取數值） */}
       {help && <InfoTip text={help} className="absolute top-1.5 right-1.5 size-4" />}
       <div className={cn('text-muted truncate text-xs', help && 'pr-4')}>{label}</div>
@@ -227,7 +232,7 @@ export function ErrorBox({
 }) {
   const e = error instanceof ApiError ? error : undefined
   return (
-    <div role="alert" className={cn('bg-danger-soft rounded-lg px-4 py-3 text-sm', className)}>
+    <div role="alert" className={cn('bg-danger-soft rounded-2xl px-4 py-3 text-sm', className)}>
       <div className="text-danger font-semibold">
         {e ? errorText(e.code) : '發生錯誤'}
         {e?.field && `（${e.field}）`}
@@ -272,7 +277,7 @@ export function DataTable({
       <thead>
         <tr className="text-muted bg-sunken text-left text-xs">
           {columns.map((c) => (
-            <th key={c} className="px-2 py-2 font-medium first:rounded-l-lg last:rounded-r-lg">
+            <th key={c} className="px-2 py-2 font-medium first:rounded-l-full last:rounded-r-full">
               {c}
             </th>
           ))}

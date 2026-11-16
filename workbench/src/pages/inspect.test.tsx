@@ -147,7 +147,8 @@ describe('外框', () => {
 
   it('總覽列出各模組的工具', () => {
     renderAt('/')
-    expect(screen.getByText('影像前處理')).toBeInTheDocument()
+    // 側欄也有模組名稱，只在主區找
+    expect(within(screen.getByRole('main')).getByText('影像前處理')).toBeInTheDocument()
     // 模組一的三個工具（單張檢視、多張測試、實驗結果），另有冷啟動的上傳清單、
     // 通用工具的圖片批次命名與架構圖
     expect(screen.getAllByText('可用')).toHaveLength(6)

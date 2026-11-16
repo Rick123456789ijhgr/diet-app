@@ -636,7 +636,7 @@ function Failures({ data }: { data: Run }) {
                 aria-pressed={on}
                 onClick={() => setKinds(on ? kinds.filter((x) => x !== k) : [...kinds, k])}
                 className={cn(
-                  'h-8 rounded-lg border px-2.5 text-sm',
+                  'h-8 rounded-full border px-3 text-sm',
                   on
                     ? 'border-danger/50 bg-danger-soft text-danger'
                     : 'border-card-border text-muted',
