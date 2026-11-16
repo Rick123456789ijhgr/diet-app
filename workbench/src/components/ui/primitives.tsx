@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn'
 type ButtonVariant = 'primary' | 'outline' | 'ghost'
 
 /**
- * 按鈕：膠囊形；primary 為森林綠底，outline 為綠框白底，ghost 只在滑過時有底色。
+ * 按鈕：6px 圓角；primary 為光學青底，outline 為白底細框，ghost 只在滑過時有底色。
  * 預設 type="button"，避免放在 <form> 內時被當成送出鈕；呼叫端仍可用 props 覆寫（{...props} 在後）。
  * 焦點只在鍵盤操作時顯示外框（focus-visible）；disabled 時同時關閉滑鼠事件。
  */
@@ -22,14 +22,14 @@ export function Button({
     <button
       type="button"
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-full font-medium whitespace-nowrap transition-colors',
+        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium whitespace-nowrap transition-colors',
         'focus-visible:ring-primary/40 focus-visible:ring-2 focus-visible:outline-none',
         'disabled:pointer-events-none disabled:opacity-40',
-        size === 'sm' ? 'h-7 px-3 text-xs [&_svg]:size-3.5' : 'h-9 px-4 text-sm [&_svg]:size-4',
+        size === 'sm' ? 'h-7 px-2.5 text-xs [&_svg]:size-3.5' : 'h-8 px-3 text-sm [&_svg]:size-4',
         variant === 'primary' &&
           'bg-primary text-on-primary hover:bg-primary-ink dark:hover:brightness-110',
         variant === 'outline' &&
-          'border-primary/70 bg-card text-primary-ink hover:bg-primary-soft border',
+          'border-line-strong/80 bg-card text-ink hover:bg-hover hover:border-line-strong border',
         variant === 'ghost' && 'text-ink-2 hover:bg-hover hover:text-ink',
         className,
       )}
@@ -38,9 +38,14 @@ export function Button({
   )
 }
 
-/** 白色卡片（20px 圓角、無框，放在淺灰面板上）。 */
+/** 白色面板（8px 圓角＋髮絲框）。 */
 export function Card({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('bg-card shadow-card rounded-card', className)} {...props} />
+  return (
+    <div
+      className={cn('bg-card shadow-card border-card-border rounded-card border', className)}
+      {...props}
+    />
+  )
 }
 
 type BadgeTone = 'primary' | 'accent' | 'ok' | 'warn' | 'danger' | 'muted'
@@ -54,7 +59,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex h-[22px] items-center gap-1 rounded-full px-2 text-xs font-medium whitespace-nowrap [&_svg]:size-3',
+        'inline-flex h-5 items-center gap-1 rounded px-1.5 text-xs font-medium whitespace-nowrap [&_svg]:size-3',
         tone === 'primary' && 'bg-primary-soft text-primary-ink',
         tone === 'ok' && 'bg-ok-soft text-ok',
         (tone === 'warn' || tone === 'accent') && 'bg-warn-soft text-warn',
@@ -83,12 +88,12 @@ export function Slider({
       className={cn('relative flex h-4 w-full touch-none items-center select-none', className)}
       {...props}
     >
-      <RSlider.Track className="bg-line-strong/60 relative h-1.5 grow overflow-hidden rounded-full">
+      <RSlider.Track className="bg-line-strong/70 relative h-1 grow overflow-hidden rounded-full">
         <RSlider.Range className="bg-primary absolute h-full rounded-full" />
       </RSlider.Track>
       <RSlider.Thumb
         aria-label={ariaLabel}
-        className="border-primary bg-card focus-visible:ring-primary/30 block size-4 rounded-full border-[3px] focus-visible:ring-4 focus-visible:outline-none"
+        className="border-primary bg-card focus-visible:ring-primary/30 block size-3.5 rounded-full border-2 focus-visible:ring-4 focus-visible:outline-none"
       />
     </RSlider.Root>
   )
@@ -113,13 +118,13 @@ export function Switch({ className, ...props }: ComponentProps<typeof RSwitch.Ro
 // Tabs 根元件與內容直接沿用 Radix（鍵盤左右鍵切換、aria 關聯都由 Radix 處理），只為 List／Trigger 套樣式
 export const Tabs = RTabs.Root
 
-/** 分頁：淺灰膠囊軌道，選中的一格為白色膠囊。 */
+/** 分頁：淺灰軌道（6px 圓角），選中的一格為白底。 */
 export function TabsList({ className, ...props }: ComponentProps<typeof RTabs.List>) {
   return (
     // grid-flow-col＋auto-cols-fr：分頁數不固定，每個分頁自動等寬
     <RTabs.List
       className={cn(
-        'bg-sunken grid auto-cols-fr grid-flow-col gap-0.5 rounded-full p-1',
+        'bg-sunken border-card-border grid auto-cols-fr grid-flow-col gap-0.5 rounded-md border p-0.5',
         className,
       )}
       {...props}
@@ -127,13 +132,13 @@ export function TabsList({ className, ...props }: ComponentProps<typeof RTabs.Li
   )
 }
 
-/** 單一分頁按鈕；選中時 Radix 設定 data-state=active，樣式據此變成白色膠囊。 */
+/** 單一分頁按鈕；選中時 Radix 設定 data-state=active，樣式據此變成白底。 */
 export function TabsTrigger({ className, ...props }: ComponentProps<typeof RTabs.Trigger>) {
   return (
     <RTabs.Trigger
       className={cn(
-        'text-muted hover:text-ink inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors',
-        'data-[state=active]:bg-card data-[state=active]:text-ink data-[state=active]:shadow-[0_1px_3px_rgb(0_0_0/0.1)]',
+        'text-muted hover:text-ink inline-flex h-7 items-center justify-center gap-1.5 rounded px-2.5 text-sm font-medium transition-colors',
+        'data-[state=active]:bg-card data-[state=active]:text-ink data-[state=active]:shadow-[0_1px_2px_rgb(0_0_0/0.12)]',
         'focus-visible:ring-primary/40 focus-visible:ring-2 focus-visible:outline-none',
         className,
       )}
@@ -145,7 +150,7 @@ export function TabsTrigger({ className, ...props }: ComponentProps<typeof RTabs
 export const TabsContent = RTabs.Content
 
 /**
- * 單選的分段按鈕（例如檢視切換）：淺灰膠囊軌道，選中的一格為白色膠囊。
+ * 單選的分段按鈕（例如檢視切換）：淺灰軌道（6px 圓角），選中的一格為白底。
  * 以 Radix ToggleGroup（type="single"）實作，鍵盤可用方向鍵切換；label 作為整組的 aria-label。
  * options[].value 同時作為 key，須唯一。
  */
@@ -169,15 +174,18 @@ export function Segmented<T extends string>({
       // 再點一次已選的項目時 Radix 會回傳空字串（取消選取）；忽略它，確保永遠有一項被選取
       onValueChange={(v) => v && onChange(v as T)}
       aria-label={label}
-      className={cn('bg-sunken inline-flex gap-0.5 rounded-full p-1', className)}
+      className={cn(
+        'bg-sunken border-card-border inline-flex gap-0.5 rounded-md border p-0.5',
+        className,
+      )}
     >
       {options.map((o) => (
         <ToggleGroup.Item
           key={o.value}
           value={o.value}
           className={cn(
-            'text-muted hover:text-ink inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-full px-3 text-sm font-medium whitespace-nowrap transition-colors',
-            'data-[state=on]:bg-card data-[state=on]:text-ink data-[state=on]:shadow-[0_1px_3px_rgb(0_0_0/0.1)]',
+            'text-muted hover:text-ink inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded px-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+            'data-[state=on]:bg-card data-[state=on]:text-ink data-[state=on]:shadow-[0_1px_2px_rgb(0_0_0/0.12)]',
             'focus-visible:ring-primary/40 focus-visible:ring-2 focus-visible:outline-none',
             '[&_svg]:size-3.5',
           )}
@@ -214,7 +222,7 @@ export function Hint({
           side={side}
           sideOffset={6}
           collisionPadding={8}
-          className="bg-ink text-on-ink z-50 max-w-80 rounded-xl px-3 py-2 text-xs leading-relaxed whitespace-pre-line shadow-lg"
+          className="bg-ink text-on-ink z-50 max-w-80 rounded-md px-3 py-2 text-xs leading-relaxed whitespace-pre-line shadow-lg"
         >
           {text}
         </Tooltip.Content>
@@ -268,7 +276,7 @@ export function NumberInput({ className, ...props }: Omit<ComponentProps<'input'
     <input
       type="number"
       className={cn(
-        'border-card-border bg-card tabular h-8 w-20 rounded-full border px-3 text-right text-sm',
+        'border-card-border bg-card readout h-8 w-20 rounded-md border px-2 text-right text-sm',
         'focus-visible:border-primary focus-visible:bg-card focus-visible:outline-none',
         'aria-[invalid=true]:border-danger',
         className,

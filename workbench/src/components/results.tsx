@@ -97,11 +97,11 @@ export function StatusCard({
 }) {
   const Icon = tone === 'ok' ? CircleCheck : tone === 'warn' ? TriangleAlert : CircleAlert
   return (
-    <div className="bg-card shadow-card shrink-0 rounded-card p-4">
+    <div className="shrink-0 px-4 py-4">
       <div className="flex items-center gap-2.5">
         <span
           className={cn(
-            'flex size-9 shrink-0 items-center justify-center rounded-full',
+            'flex size-8 shrink-0 items-center justify-center rounded-md',
             tone === 'ok'
               ? 'bg-ok-soft text-ok'
               : tone === 'warn'
@@ -112,7 +112,7 @@ export function StatusCard({
           <Icon className="size-[18px]" aria-hidden />
         </span>
         {/* role="status"（隱含 aria-live=polite）：結果標題改變時螢幕閱讀器會朗讀，不打斷使用者 */}
-        <span className="text-[16px] font-semibold" role="status">
+        <span className="text-[15px] font-semibold" role="status">
           {title}
         </span>
       </div>
@@ -184,23 +184,21 @@ export function Metric({
   return (
     <div
       className={cn(
-        'bg-sunken relative min-w-0 rounded-2xl px-3.5 py-2.5',
+        'border-card-border relative min-w-0 rounded-md border px-3 py-2',
         wide && 'col-span-full',
       )}
     >
       {/* 說明圖示放在右上角，標籤後面緊接數值（頁面測試以 nextElementSibling 取數值） */}
       {help && <InfoTip text={help} className="absolute top-1.5 right-1.5 size-4" />}
       <div className={cn('text-muted truncate text-xs', help && 'pr-4')}>{label}</div>
-      <div className="tabular truncate text-[19px] leading-snug font-semibold tracking-tight">
-        {value}
-      </div>
+      <div className="readout truncate text-[18px] leading-snug font-semibold">{value}</div>
       {delta && (
         // 差距可換行，不截斷（門檻值是判讀依據，不能被藏起來）
         <div className="mt-0.5 flex min-w-0 items-start gap-1.5 text-xs">
           {good !== undefined && (
             <span
               className={cn(
-                'inline-flex h-4 shrink-0 items-center rounded-full px-1 text-xs font-medium mt-px',
+                'inline-flex h-4 shrink-0 items-center rounded-md px-1 text-xs font-medium mt-px',
                 good ? 'bg-ok-soft text-ok' : 'bg-danger-soft text-danger',
               )}
               // ✓／✕ 只是視覺輔助，對螢幕閱讀器隱藏；判讀依據是旁邊的 delta 文字
@@ -209,7 +207,7 @@ export function Metric({
               {good ? '✓' : '✕'}
             </span>
           )}
-          <span className="text-muted tabular leading-snug">{delta}</span>
+          <span className="text-muted tabular leading-snug break-keep">{delta}</span>
         </div>
       )}
     </div>
@@ -232,7 +230,13 @@ export function ErrorBox({
 }) {
   const e = error instanceof ApiError ? error : undefined
   return (
-    <div role="alert" className={cn('bg-danger-soft rounded-2xl px-4 py-3 text-sm', className)}>
+    <div
+      role="alert"
+      className={cn(
+        'bg-danger-soft border-danger/25 rounded-md border px-3.5 py-2.5 text-sm',
+        className,
+      )}
+    >
       <div className="text-danger font-semibold">
         {e ? errorText(e.code) : '發生錯誤'}
         {e?.field && `（${e.field}）`}
@@ -277,7 +281,7 @@ export function DataTable({
       <thead>
         <tr className="text-muted bg-sunken text-left text-xs">
           {columns.map((c) => (
-            <th key={c} className="px-2 py-2 font-medium first:rounded-l-full last:rounded-r-full">
+            <th key={c} className="px-2 py-2 font-medium first:rounded-l last:rounded-r">
               {c}
             </th>
           ))}

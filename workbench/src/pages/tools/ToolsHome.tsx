@@ -9,18 +9,18 @@ import { MODULES, toolPath } from '@/nav'
 export function ToolsHome() {
   const module = MODULES.find((m) => m.id === 'tools')!
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-3">
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <PageHeader title={module.name} description={module.description} />
       {module.tools.length === 0 ? (
         <EmptyState icon={<Wrench className="size-8" aria-hidden />}>尚無工具。</EmptyState>
       ) : (
-        <nav aria-label="通用工具" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <nav aria-label="通用工具" className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
           {module.tools.map((t) => (
             <Link
               key={t.slug}
               to={toolPath(module, t)}
               title={t.description}
-              className="bg-card shadow-card group hover:bg-hover focus-visible:ring-primary/40 rounded-card flex items-center gap-3 px-4 py-3.5 focus-visible:ring-2 focus-visible:outline-none"
+              className="bg-card shadow-card border-card-border border group hover:bg-hover focus-visible:ring-primary/40 rounded-card flex items-center gap-3 px-4 py-3.5 focus-visible:ring-2 focus-visible:outline-none"
             >
               <span className="bg-sunken group-hover:bg-card grid size-10 shrink-0 place-items-center rounded-lg">
                 <t.icon className="size-5" aria-hidden />
