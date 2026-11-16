@@ -67,7 +67,7 @@ export function ArchPage() {
   const drill = (child?: string) => child && doc.diagrams[child] && go(child)
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-3">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title="架構圖"
         description="逐層放大的專案架構（類似 C4 Model）：點有疊層圖示的元件看內部組成與流程；滑過元件看說明。"
@@ -76,14 +76,14 @@ export function ArchPage() {
             href={editorUrl(doc, diagram.id)}
             target="_blank"
             rel="noopener"
-            className="bg-primary text-on-primary focus-visible:ring-primary/40 inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-sm font-medium hover:brightness-110 focus-visible:ring-2 focus-visible:outline-none"
+            className="bg-primary text-on-primary focus-visible:ring-primary/40 inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium hover:brightness-110 focus-visible:ring-2 focus-visible:outline-none"
           >
             <SquarePen className="size-4" aria-hidden />
             編輯
           </a>
         }
       />
-      <div className="bg-card shadow-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-card">
+      <div className="bg-card shadow-card border-card-border rounded-card m-3 flex min-h-0 flex-1 flex-col overflow-hidden border">
         <div className="flex shrink-0 items-center px-4 pt-3.5 pb-2.5">
           <Breadcrumb doc={doc} diagramId={diagram.id} onGo={go} />
         </div>

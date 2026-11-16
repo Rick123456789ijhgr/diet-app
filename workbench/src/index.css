@@ -4,56 +4,46 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * 森林綠儀表板（2026-11 第二版，參考 Donezo 儀表板）：
- * - 白色外框（canvas）裡放淺灰大圓角面板（panel，24px）：側欄、頂列、主區；面板上放白色無框卡片（card，20px）。
- * - 按鈕、分頁、分段按鈕、徽章、輸入框都是膠囊形；主要按鈕為森林綠底，次要按鈕為綠框白底。
- * - 重點卡（.hero-card）與側欄底部的狀態卡（.deep-card）為深綠，是畫面上的重色塊；未完成／待處理可用斜線紋（.hatch）。
- * - 基礎字級 14px、最小 12px；說明文字收進 InfoTip（滑過圖示才顯示），介面上不放大段說明。
- * - 狀態色 ok／warn／danger 一律搭配圖示與文字，不單靠顏色。
+ * 光學儀器（2026-11 第三版）：把工作台當成精密量測儀器的操作介面。
+ * - 冷灰底、白色表面、石墨字；唯一強調色為光學青（primary）。不用漸層、不用大陰影。
+ * - 版面是貼齊邊緣、以髮絲線（--line）分隔的欄位（控制面板｜觀景窗｜讀數），不是一張張浮動卡片。
+ * - 圓角分層：控制項 6px（rounded-md）、面板與彈窗 8px（rounded-card）、徽章 4px；不用膠囊形。
+ * - 只有量測讀數（.readout）用等寬數字；介面文字用系統黑體。基礎字級 14px、最小 12px。
+ * - 影像觀景窗（.viewport-grid）有細測量格線與四角對焦框，是畫面唯一的裝飾重點。
+ * - 說明文字收進 InfoTip；狀態色 ok／warn／danger 一律搭配圖示與文字，不單靠顏色。
  * - 圖表系列色（series-1…8）為經色盲驗證的固定順序，依序取用、不循環（見 charts.tsx）；疊圖「找到」用 series-1。
  */
 :root {
-  --canvas: #ffffff;
-  --panel: #f4f5f3;
+  --canvas: #f3f4f6;
   --card: #ffffff;
-  --sunken: #f2f4f1;
-  --card-border: #e5e8e4;
-  --line-strong: #cdd3cd;
-  --ink: #111a15;
-  --ink-2: #3b4640;
-  --muted: #6c766f;
-  --hover: #eceee9;
+  --sunken: #f5f6f8;
+  --card-border: #e2e5ea;
+  --line-strong: #c9ced6;
+  --ink: #1a1e24;
+  --ink-2: #434a55;
+  --muted: #6b7380;
+  --hover: #eef0f3;
   --on-ink: #ffffff;
   --switch-thumb: #ffffff;
-  --primary: #1c7a4a;
+  --primary: #0b7a8c;
   --on-primary: #ffffff;
-  --primary-ink: #14603a;
-  --primary-soft: #e1f1e7;
-  --primary-light: #5fbf8d;
-  --deep: #0f3f27;
-  --primary-grad: linear-gradient(150deg, #24935a 0%, #166a40 55%, #0e4a2c 100%);
-  --deep-grad:
-    radial-gradient(120% 90% at 100% 0%, rgb(46 160 98 / 0.35) 0%, transparent 55%),
-    repeating-radial-gradient(
-      circle at 110% 120%,
-      rgb(255 255 255 / 0.05) 0 1px,
-      transparent 1px 14px
-    ),
-    linear-gradient(160deg, #134d30 0%, #0b301d 100%);
-  --hatch: rgb(17 26 21 / 0.18);
-  --ok: #15703d;
+  --primary-ink: #075f6d;
+  --primary-soft: #e3f3f5;
+  --hatch: rgb(26 30 36 / 0.14);
+  --ok: #17733f;
   --ok-mark: #22a55a;
-  --ok-soft: #e3f4e9;
+  --ok-soft: #e5f4eb;
   --warn: #8f5d07;
   --warn-mark: #e3a21a;
   --warn-soft: #fbf1d9;
   --danger: #c42b2b;
   --danger-mark: #e54848;
   --danger-soft: #fbe9e8;
-  --viewport: #f2f4f1;
-  --viewport-dot: #d6dbd5;
+  --viewport: #eceef2;
+  --viewport-line: rgb(26 30 36 / 0.06);
+  --viewport-mark: rgb(26 30 36 / 0.45);
   --overlay-halo: rgb(255 255 255 / 0.9);
-  --shadow: none;
+  --shadow: 0 1px 2px rgb(26 30 36 / 0.04);
   --series-1: #eb6834;
   --series-2: #2a78d6;
   --series-3: #1baf7a;
@@ -66,34 +56,22 @@
 }
 
 .dark {
-  --canvas: #090c0a;
-  --panel: #111613;
-  --card: #181e1a;
-  --sunken: #20271f;
-  --card-border: #283029;
-  --line-strong: #3a443c;
-  --ink: #eef2ef;
-  --ink-2: #c3ccc5;
-  --muted: #8b968e;
-  --hover: #232b25;
-  --on-ink: #0d120f;
-  --switch-thumb: #eef2ef;
-  --primary: #3caf72;
-  --on-primary: #04140b;
-  --primary-ink: #7fd6a6;
-  --primary-soft: #15301f;
-  --primary-light: #2d8a58;
-  --deep: #0b2a1a;
-  --primary-grad: linear-gradient(150deg, #2a9a5f 0%, #1a6d43 55%, #0f4a2c 100%);
-  --deep-grad:
-    radial-gradient(120% 90% at 100% 0%, rgb(46 160 98 / 0.3) 0%, transparent 55%),
-    repeating-radial-gradient(
-      circle at 110% 120%,
-      rgb(255 255 255 / 0.04) 0 1px,
-      transparent 1px 14px
-    ),
-    linear-gradient(160deg, #11422a 0%, #08241a 100%);
-  --hatch: rgb(238 242 239 / 0.2);
+  --canvas: #0e1014;
+  --card: #15181d;
+  --sunken: #1b1f25;
+  --card-border: #262b33;
+  --line-strong: #3a414c;
+  --ink: #e8ebf0;
+  --ink-2: #bcc3cd;
+  --muted: #858e9b;
+  --hover: #20252c;
+  --on-ink: #0e1014;
+  --switch-thumb: #e8ebf0;
+  --primary: #3cc2d4;
+  --on-primary: #04161a;
+  --primary-ink: #7ad8e4;
+  --primary-soft: #102c31;
+  --hatch: rgb(232 235 240 / 0.14);
   --ok: #5ad48a;
   --ok-mark: #2fbf68;
   --ok-soft: #13281b;
@@ -103,9 +81,10 @@
   --danger: #f37b7b;
   --danger-mark: #e54848;
   --danger-soft: #331b1b;
-  --viewport: #0f1310;
-  --viewport-dot: #252d27;
-  --overlay-halo: rgb(14 18 16 / 0.85);
+  --viewport: #0b0d10;
+  --viewport-line: rgb(232 235 240 / 0.05);
+  --viewport-mark: rgb(232 235 240 / 0.45);
+  --overlay-halo: rgb(14 16 20 / 0.85);
   --shadow: none;
   --series-1: #d95926;
   --series-2: #3987e5;
@@ -130,9 +109,6 @@
   --color-hover: var(--hover);
   --color-on-ink: var(--on-ink);
   --color-switch-thumb: var(--switch-thumb);
-  --color-panel: var(--panel);
-  --color-deep: var(--deep);
-  --color-primary-light: var(--primary-light);
   --color-primary: var(--primary);
   --color-on-primary: var(--on-primary);
   --color-primary-ink: var(--primary-ink);
@@ -154,8 +130,7 @@
   --text-sm: 13.5px;
   --text-sm--line-height: 1.5;
   --text-base: 14px;
-  --radius-card: 20px;
-  --radius-panel: 24px;
+  --radius-card: 8px;
   --font-sans:
     'Inter', 'Noto Sans TC', ui-sans-serif, system-ui, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
   --font-mono:
@@ -178,33 +153,65 @@ body {
 }
 
 /* 數字對齊，方便比較 */
-.tabular,
-.readout {
+.tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* 重點數字卡（森林綠漸層） */
-.hero-card {
-  background: var(--primary-grad);
-  color: #ffffff;
-}
-
-/* 深綠紋理卡（側欄底部的服務狀態） */
-.deep-card {
-  background: var(--deep-grad);
-  color: #ffffff;
+/* 量測讀數：等寬數字，像儀器面板（只用在數值，不用在一般標籤） */
+.readout {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* 斜線紋：尚未開始、待處理、沒有資料的區塊 */
 .hatch {
-  background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 2px, transparent 2px 7px);
+  background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 6px);
 }
 
-/* 影像檢視區：淺色點陣底（深色模式為深底） */
+/*
+ * 影像觀景窗：細測量格線（每 8 格一條較深的主線）＋四角對焦框。
+ * 對焦框以四組 L 形漸層畫在背景上，不佔版面、不擋事件。
+ */
 .viewport-grid {
+  --mark: 14px;
   background-color: var(--viewport);
-  background-image: radial-gradient(var(--viewport-dot) 1px, transparent 1px);
-  background-size: 16px 16px;
+  background-image:
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-mark), var(--viewport-mark)),
+    linear-gradient(var(--viewport-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--viewport-line) 1px, transparent 1px);
+  background-repeat:
+    no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat,
+    repeat;
+  background-size:
+    var(--mark) 1.5px,
+    1.5px var(--mark),
+    var(--mark) 1.5px,
+    1.5px var(--mark),
+    var(--mark) 1.5px,
+    1.5px var(--mark),
+    var(--mark) 1.5px,
+    1.5px var(--mark),
+    16px 16px,
+    16px 16px;
+  background-position:
+    10px 10px,
+    10px 10px,
+    calc(100% - 10px) 10px,
+    calc(100% - 10px) 10px,
+    10px calc(100% - 10px),
+    10px calc(100% - 10px),
+    calc(100% - 10px) calc(100% - 10px),
+    calc(100% - 10px) calc(100% - 10px),
+    0 0,
+    0 0;
 }
 
 /* 細捲軸 */

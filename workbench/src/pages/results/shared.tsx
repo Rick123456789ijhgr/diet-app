@@ -27,7 +27,7 @@ export function RootInput({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder ?? 'research/experiments/e1_barcode/runs'}
-          className="border-card-border bg-card focus-visible:border-primary readout h-8 min-w-0 flex-1 rounded-full border px-3 text-sm focus-visible:outline-none"
+          className="border-card-border bg-card focus-visible:border-primary readout h-8 min-w-0 flex-1 rounded-md border px-2.5 text-sm focus-visible:outline-none"
         />
         <FolderPicker value={value || placeholder || ''} onPick={onChange} />
       </div>
@@ -68,7 +68,7 @@ export function Select({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={options.length === 0}
-        className="border-card-border bg-card focus-visible:border-primary h-8 rounded-full border px-3 text-sm focus-visible:outline-none"
+        className="border-card-border bg-card focus-visible:border-primary h-8 rounded-md border px-2.5 text-sm focus-visible:outline-none"
       >
         {options.length === 0 && <option>{empty}</option>}
         {options.map((o) => (

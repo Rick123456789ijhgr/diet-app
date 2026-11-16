@@ -202,7 +202,7 @@ export function FolderMode({
               value={folder}
               onChange={(e) => setFolder(e.target.value)}
               placeholder="..\research\data\splits\dev"
-              className="border-card-border bg-card focus-visible:border-primary readout h-8 min-w-0 flex-1 rounded-full border px-3 text-sm focus-visible:outline-none"
+              className="border-card-border bg-card focus-visible:border-primary readout h-8 min-w-0 flex-1 rounded-md border px-2.5 text-sm focus-visible:outline-none"
             />
             <FolderPicker value={folder} onPick={setFolder} />
           </div>

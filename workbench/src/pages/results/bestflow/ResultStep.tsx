@@ -483,7 +483,7 @@ function Conclusion({ result, onGoTruth }: { result: Result | null; onGoTruth: (
           {g.order.map((m, i) => (
             <li key={m} className="flex items-center gap-1.5">
               {i > 0 && <ArrowRight className="text-muted size-4" aria-hidden />}
-              <span className="bg-primary-soft text-primary-ink rounded-full px-3.5 py-1.5 text-sm font-semibold">
+              <span className="bg-primary-soft text-primary-ink rounded-md px-3.5 py-1.5 text-sm font-semibold">
                 {methodText(m)}
               </span>
             </li>

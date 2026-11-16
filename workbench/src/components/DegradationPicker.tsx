@@ -64,7 +64,7 @@ export function DegradationPicker({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <h3 className="shrink-0 text-[15px] font-semibold whitespace-nowrap">模擬退化</h3>
+        <h3 className="shrink-0 text-sm font-semibold whitespace-nowrap">模擬退化</h3>
         <InfoTip
           label="模擬退化說明"
           text="從下方「＋」加入退化，或從「常見情境」一次套用一組。依序套用：旋轉 → 曲面 → 縮小 → 模糊 → 亮度、對比 → 梯度 → 光斑 → 雜訊 → JPEG。"
@@ -79,7 +79,7 @@ export function DegradationPicker({
             setPinned(new Set())
             onChange({ ...preset.values })
           }}
-          className="border-card-border bg-sunken text-ink-2 h-7 rounded-full border px-2 text-xs"
+          className="border-card-border bg-sunken text-ink-2 h-7 rounded-md border px-2 text-xs"
         >
           <option value="">常見情境…</option>
           {PRESETS.map((p) => (
@@ -141,7 +141,7 @@ export function DegradationPicker({
               type="button"
               onClick={() => add(f)}
               aria-label={`加入${f.label}`}
-              className="border-card-border text-ink-2 hover:bg-hover hover:text-ink inline-flex h-7 items-center gap-1 rounded-full border border-dashed px-2.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="border-card-border text-ink-2 hover:bg-hover hover:text-ink inline-flex h-7 items-center gap-1 rounded-md border border-dashed px-2.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <Plus className="size-3" aria-hidden />
               {f.label}
