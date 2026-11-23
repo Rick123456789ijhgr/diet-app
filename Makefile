@@ -32,10 +32,10 @@ down:
 db-up:
 	docker compose -f deploy/docker-compose.yml --env-file .env up -d db minio migrate
 
-# 建立 ai/.venv 並安裝開發所需套件（含工作台與 gRPC 服務）
+# 建立 ai/.venv 並安裝開發所需套件（含工作台、gRPC 服務與 Tesseract OCR 的 pytesseract）
 setup:
 	cd ai && python -m venv .venv
-	cd ai && "$(VENV_BIN)/python" -m pip install -e ".[dev,vision,grpc]"
+	cd ai && "$(VENV_BIN)/python" -m pip install -e ".[dev,vision,grpc,ocr]"
 
 # PaddleOCR 的獨立環境 ai/.venv-paddle（與專案的 OpenCV 版本衝突，見 ai/requirements-paddle.txt）
 setup-paddle:
