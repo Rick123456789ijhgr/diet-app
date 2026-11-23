@@ -15,7 +15,7 @@
 | 文件 | 範圍 | 狀態 |
 | --- | --- | --- |
 | [`tasks/m1-preprocess.md`](tasks/m1-preprocess.md) | 模組一：影像前處理 | Phase 1–5 完成 |
-| [`tasks/m2-barcode-invoice-label.md`](tasks/m2-barcode-invoice-label.md) | 模組二：條碼查詢、電子發票、營養標示讀取 | 可開工；Phase 0、1 進行中 |
+| [`tasks/m2-barcode-invoice-label.md`](tasks/m2-barcode-invoice-label.md) | 模組二：條碼查詢、電子發票、營養標示讀取 | Phase 0、1 完成；下一步 Phase 2 |
 | [`tasks/workbench-react.md`](tasks/workbench-react.md) | 開發工作台改版（React＋Go）與冷啟動上傳 | 已實作 |
 
 ## 架構決策（`adr/`）
@@ -25,9 +25,9 @@
 | [`adr/0000-template.md`](adr/0000-template.md) | 範本 | — |
 | [`adr/0001-three-services-in-monorepo.md`](adr/0001-three-services-in-monorepo.md) | 三個服務放在同一個 repo | 已採納 |
 | [`adr/0002-experiment-records.md`](adr/0002-experiment-records.md) | 實驗紀錄寫成本機資料夾（不用 MLflow／W&B） | 已採納 |
-| [`adr/0003-workbench-react-go.md`](adr/0003-workbench-react-go.md) | 工作台改為 React，經 Go 存取 | 提議中 |
+| [`adr/0003-workbench-react-go.md`](adr/0003-workbench-react-go.md) | 工作台改為 React，經 Go 存取 | 已採納 |
 | [`adr/0004-preprocess-scope-static-photos.md`](adr/0004-preprocess-scope-static-photos.md) | 伺服器前處理只服務靜態照片；APP 即時掃描用現成套件 | 已採納 |
-| [`adr/0005-preprocess-experiment-design.md`](adr/0005-preprocess-experiment-design.md) | 前處理實驗改為「每個方法都執行」，以原始樣本為統計單位 | 提議中 |
+| [`adr/0005-preprocess-experiment-design.md`](adr/0005-preprocess-experiment-design.md) | 前處理實驗改為「每個方法都執行」，以原始樣本為統計單位 | 已採納 |
 
 ## 實驗設計
 
