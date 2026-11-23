@@ -43,8 +43,10 @@ make workbench-dev # 改工作台前端時用：另外啟動 Vite 熱更新（ht
 make e1-synthetic # E1 條碼消融：以合成資料端到端跑一次（research/experiments/e1_barcode）
 ```
 
-Windows 安裝 make：`winget install ezwinports.make`（裝完重開終端機）。
+新電腦一鍵安裝所有工具與套件：雙擊根目錄的 `安裝開發環境.bat`（`scripts/setup-dev.ps1`；可重複執行，參數 `-WithDocker`、`-SkipPaddle`、`-SkipOcr`）。改工具版本時，腳本、CI（`.github/workflows/ci.yml`）與 `ONBOARDING.md` 一起改。
 不想用指令時，雙擊根目錄的 `啟動工作台.bat`（自動安裝套件、建置前端、啟動 Python 與 Go，就緒後開啟工作台）。
+
+程式碼圖索引（選用）：`.mcp.json` 註冊了 codebase-memory-mcp（安裝見 `docs/codebase-memory-mcp.md`）。連線時，查呼叫鏈、跨服務路徑、修改影響範圍優先用它；字串常數與設定內容仍用 grep。不要使用其 `manage_adr`，ADR 一律寫在 `docs/adr/`。
 
 ## 工作流程
 
