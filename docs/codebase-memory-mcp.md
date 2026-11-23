@@ -8,7 +8,7 @@
 
 ## 安裝（Windows）
 
-在專案根目錄執行：
+`安裝開發環境.bat` 已包含這一步。單獨安裝時，在專案根目錄執行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install-codebase-memory.ps1

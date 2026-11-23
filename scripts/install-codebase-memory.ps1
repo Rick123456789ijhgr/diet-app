@@ -7,7 +7,10 @@
 # 升級版本：改下面的 $Version 與 $Sha256（取自該版 Release 的 checksums.txt），全隊一起升。
 # 所有 codebase-memory-mcp 程序必須是同一個版本，混用會被拒絕執行。
 
-$ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 在 Stop 模式下會把原生程式寫到 stderr 的訊息當成例外（例如未登入時的 gh auth status），
+# 所以全域用 Continue，只讓 cmdlet 出錯時中斷；原生程式以結束代碼判斷。
+$ErrorActionPreference = 'Continue'
+$PSDefaultParameterValues = @{ '*:ErrorAction' = 'Stop' }
 
 $Version = '0.12.1'
 $Sha256  = '4E4E0F16B45233AF5C757A1FCBE3C3B16E9056375B1FBE2CE020B6DE75DEDCC0'
