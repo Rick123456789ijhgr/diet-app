@@ -1,0 +1,16 @@
+# codebase-memory-mcp 索引排除清單（gitignore 語法；只影響索引，不影響 git）
+# .gitignore 已排除的路徑（research/data/、.venv/ 等）本來就不會被索引，這裡只補 .gitignore 沒擋到的。
+
+# Agent worktree 是整份 repo 的副本，索引會重複
+/.claude/
+
+# 研究資料：明確排除，避免 test split 內容進入 agent 上下文（CLAUDE.md 第 7 條）
+/research/data/
+/research/experiments/*/runs/
+/research/experiments/*/synthetic*/
+/research/experiments/*/.ocr_cache/
+*.dvc
+
+# 鎖定檔與建置產物：體積大、沒有程式結構可用
+package-lock.json
+/api/internal/webui/static/app/

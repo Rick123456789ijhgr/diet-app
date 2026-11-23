@@ -31,6 +31,7 @@ git --version; python --version; go version; node --version; make --version
 | --- | --- |
 | Docker Desktop | 要用 `make up`／`make db-up`（Postgres、MinIO、冷啟動上傳）時。只跑測試與工作台不需要。 |
 | Flutter | 開發 `app/` 時。 |
+| codebase-memory-mcp | 選用。讓 Claude Code 用程式碼圖查呼叫鏈與影響範圍：`powershell -ExecutionPolicy Bypass -File scripts\install-codebase-memory.ps1`，說明見 `docs/codebase-memory-mcp.md`。 |
 
 ## 3. 下載專案並設定
 

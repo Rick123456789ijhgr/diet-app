@@ -46,6 +46,8 @@ make e1-synthetic # E1 條碼消融：以合成資料端到端跑一次（resear
 Windows 安裝 make：`winget install ezwinports.make`（裝完重開終端機）。
 不想用指令時，雙擊根目錄的 `啟動工作台.bat`（自動安裝套件、建置前端、啟動 Python 與 Go，就緒後開啟工作台）。
 
+程式碼圖索引（選用）：`.mcp.json` 註冊了 codebase-memory-mcp（安裝見 `docs/codebase-memory-mcp.md`）。連線時，查呼叫鏈、跨服務路徑、修改影響範圍優先用它；字串常數與設定內容仍用 grep。不要使用其 `manage_adr`，ADR 一律寫在 `docs/adr/`。
+
 ## 工作流程
 
 - 從 `main` 開短命分支，命名：`feat/ai-preprocess-deskew`、`fix/api-barcode-checksum`。
