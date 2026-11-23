@@ -41,7 +41,7 @@ export function Dialog({
         <RDialog.Overlay className="wb-overlay fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/35 p-4">
           <RDialog.Content
             className={cn(
-              'wb-dialog bg-card text-ink flex max-h-[min(720px,calc(100vh-2rem))] w-full max-w-md flex-col rounded-card shadow-xl focus:outline-none',
+              'wb-dialog bg-card text-ink flex max-h-[min(720px,calc(100vh-2rem))] w-full max-w-md flex-col rounded-card border border-card-border shadow-xl focus:outline-none',
               className,
             )}
             onEscapeKeyDown={onEscapeKeyDown}
@@ -59,7 +59,7 @@ export function Dialog({
               </div>
               <RDialog.Close
                 aria-label="關閉"
-                className="text-muted hover:bg-hover hover:text-ink focus-visible:ring-primary/40 -mt-1 -mr-1 grid size-8 place-items-center rounded-full focus-visible:ring-2 focus-visible:outline-none"
+                className="text-muted hover:bg-hover hover:text-ink focus-visible:ring-primary/40 -mt-1 -mr-1 grid size-8 place-items-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
               >
                 <X className="size-4" aria-hidden />
               </RDialog.Close>

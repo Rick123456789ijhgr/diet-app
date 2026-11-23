@@ -1,4 +1,4 @@
-// 工具頁版面：淺灰主區面板上的白色卡片（20px 圓角、無框）。
+// 工具頁版面（光學儀器）：貼齊邊緣、以髮絲線分隔的欄位——控制面板｜標題列＋觀景窗｜讀數欄。
 //
 //   ┌ 控制面板卡 ┐  標題 ⓘ                              右側操作
 //   │            │  ┌ 主檢視卡（影像／圖表）────┐ ┌ 讀數卡 ┐
@@ -13,8 +13,8 @@ import { InfoTip } from '@/components/ui/primitives'
 import { cn } from '@/lib/cn'
 
 // 左側控制面板與右側讀數欄的固定寬度（px）；中間主檢視吃掉剩餘寬度
-export const PANEL_WIDTH = 316
-export const READOUT_WIDTH = 312
+export const PANEL_WIDTH = 300
+export const READOUT_WIDTH = 300
 
 /** 控制面板收起與否記在瀏覽器（每位使用者自己的偏好，所有工具頁共用）；讀不到時預設展開。 */
 const PANEL_KEY = 'wb.panelCollapsed'
@@ -64,13 +64,13 @@ export function Workspace({
   const Icon = collapsed ? PanelLeftOpen : PanelLeftClose
   return (
     // min-h-0：flex 子項預設 min-height 為內容高度，不設的話內容會把版面撐高、內部捲動失效
-    <div className="flex h-full min-h-0 gap-3 p-4">
+    <div className="flex h-full min-h-0">
       {/* 具名的 section（aria-label）成為地標，螢幕閱讀器可直接跳到控制面板 */}
       <section
         id={panelId}
         aria-label="控制面板"
         hidden={collapsed}
-        className="bg-card shadow-card rounded-card shrink-0 overflow-y-auto"
+        className="bg-card border-card-border shrink-0 overflow-y-auto border-r"
         style={{ width: PANEL_WIDTH }}
       >
         {panel}
@@ -88,7 +88,7 @@ export function Workspace({
               aria-controls={panelId}
               aria-label={collapsed ? '展開控制面板' : '收起控制面板'}
               title={collapsed ? '展開控制面板' : '收起控制面板'}
-              className="text-muted hover:bg-card hover:text-ink focus-visible:ring-primary/40 grid size-9 shrink-0 place-items-center rounded-full focus-visible:ring-2 focus-visible:outline-none"
+              className="text-muted hover:bg-hover hover:text-ink focus-visible:ring-primary/40 -ml-1 grid size-8 shrink-0 place-items-center rounded-md focus-visible:ring-2 focus-visible:outline-none"
             >
               <Icon className="size-[18px]" aria-hidden />
             </button>
@@ -100,7 +100,7 @@ export function Workspace({
   )
 }
 
-/** 頁面標題列：標題＋說明圖示（ⓘ），右側放操作。工具頁由 Workspace 帶入；沒有控制面板的頁面直接使用。 */
+/** 頁面標題列（白底、底部髮絲線）：標題＋說明圖示（ⓘ），右側放操作。工具頁由 Workspace 帶入；沒有控制面板的頁面直接使用。 */
 export function PageHeader({
   title,
   description,
@@ -114,10 +114,10 @@ export function PageHeader({
   leading?: ReactNode
 }) {
   return (
-    <div className="flex min-h-11 shrink-0 items-center gap-2 pb-4">
+    <div className="bg-card border-card-border flex min-h-12 shrink-0 items-center gap-2 border-b px-4 py-2">
       {leading}
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
-        <h1 className="truncate text-[26px] leading-tight font-bold tracking-tight">{title}</h1>
+        <h1 className="truncate text-[17px] leading-tight font-semibold">{title}</h1>
         {description && <InfoTip text={description} label="頁面說明" side="bottom" />}
       </div>
       {aside}
@@ -126,19 +126,22 @@ export function PageHeader({
 }
 
 /**
- * 主檢視卡＋右側讀數欄（多張小卡）。readout 為空時主檢視佔滿。
+ * 主檢視＋右側讀數欄。主檢視是畫布上的一塊白色面板（8px 圓角＋髮絲框）；
+ * 讀數欄貼齊右緣、白底，區塊之間以髮絲線分隔。readout 為空時主檢視佔滿。
  * 主檢視與讀數欄各自垂直捲動；主檢視外層 overflow-hidden 讓內容不超出圓角。
  */
 export function Split({ main, readout }: { main: ReactNode; readout?: ReactNode }) {
   return (
-    <div className="flex h-full min-h-0 gap-3">
-      <div className="bg-card shadow-card rounded-card min-w-0 flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto">{main}</div>
+    <div className="flex h-full min-h-0">
+      <div className="min-w-0 flex-1 p-3">
+        <div className="bg-card shadow-card border-card-border rounded-card h-full overflow-hidden border">
+          <div className="h-full overflow-y-auto">{main}</div>
+        </div>
       </div>
       {readout && (
         <aside
           aria-label="讀數"
-          className="flex shrink-0 flex-col gap-3 overflow-y-auto"
+          className="bg-card border-card-border divide-card-border flex shrink-0 flex-col divide-y overflow-y-auto border-l"
           style={{ width: READOUT_WIDTH }}
         >
           {readout}
@@ -167,17 +170,18 @@ export function MainView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {toolbar && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-4 pb-2">{toolbar}</div>
+        <div className="border-card-border flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
+          {toolbar}
+        </div>
       )}
-      <div
-        className={cn(
-          'flex min-h-0 flex-1 flex-col',
-          scroll ? 'overflow-y-auto px-5 pt-2 pb-5' : 'px-3 pt-1 pb-3',
-        )}
-      >
+      <div className={cn('flex min-h-0 flex-1 flex-col', scroll ? 'overflow-y-auto p-4' : 'p-2')}>
         {children}
       </div>
-      {footer && <div className="text-muted shrink-0 px-5 pb-3 text-xs">{footer}</div>}
+      {footer && (
+        <div className="border-card-border text-muted shrink-0 border-t px-3 py-1.5 text-xs">
+          {footer}
+        </div>
+      )}
     </div>
   )
 }
@@ -200,7 +204,7 @@ export function Section({
   return (
     <section className={cn('mb-5', className)}>
       <div className="mb-2 flex min-h-7 items-center gap-1.5">
-        <h2 className="text-[16px] font-semibold">{title}</h2>
+        <h2 className="text-[15px] font-semibold">{title}</h2>
         {hint && <InfoTip text={hint} />}
         {aside && <div className="ml-auto flex items-center gap-2">{aside}</div>}
       </div>
@@ -209,7 +213,7 @@ export function Section({
   )
 }
 
-/** 讀數欄裡的一張卡。 */
+/** 讀數欄裡的一個區塊（不是卡片：讀數欄本身是白底，區塊之間由 Split 以髮絲線分隔）。 */
 export function ReadoutBlock({
   title,
   hint,
@@ -223,10 +227,10 @@ export function ReadoutBlock({
   aside?: ReactNode
 }) {
   return (
-    <section className="bg-card shadow-card rounded-card shrink-0 p-4">
+    <section className="shrink-0 px-4 py-3.5">
       {title && (
-        <div className="mb-2.5 flex items-center gap-1.5">
-          <h2 className="text-[15px] font-semibold">{title}</h2>
+        <div className="mb-2.5 flex min-h-6 items-center gap-1.5">
+          <h2 className="text-sm font-semibold">{title}</h2>
           {hint && <InfoTip text={hint} />}
           {aside && <div className="ml-auto flex items-center gap-2">{aside}</div>}
         </div>

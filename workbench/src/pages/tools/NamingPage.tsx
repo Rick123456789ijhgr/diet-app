@@ -62,7 +62,7 @@ const STATUS: Record<NamingItem['status'], { text: string; tone: 'primary' | 'mu
 }
 
 const fieldClass =
-  'border-card-border bg-card focus-visible:border-primary h-8 rounded-full border px-3 text-sm focus-visible:outline-none aria-[invalid=true]:border-danger'
+  'border-card-border bg-card focus-visible:border-primary h-8 rounded-md border px-2.5 text-sm focus-visible:outline-none aria-[invalid=true]:border-danger'
 
 const preview = (o: Options) =>
   unwrap(

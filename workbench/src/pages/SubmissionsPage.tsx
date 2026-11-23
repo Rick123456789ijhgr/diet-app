@@ -47,7 +47,7 @@ export function SubmissionsPage() {
   })
 
   return (
-    <div className="h-full overflow-y-auto p-3">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title="上傳清單"
         description="上傳包裝正面、條碼、營養標示三張照片，人工確認條碼與營養數值後寫入產品資料庫。"
@@ -58,85 +58,87 @@ export function SubmissionsPage() {
           </Button>
         }
       />
-      {create.error && <ColdstartError error={create.error} className="mb-4" />}
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_360px]">
-        <Section
-          title="上傳"
-          aside={
-            <Segmented label="狀態篩選" value={filter} onChange={setFilter} options={FILTERS} />
-          }
-        >
-          <Card className="px-4 py-2">
-            {list.isError ? (
-              <ColdstartError error={list.error} className="my-2" />
-            ) : !list.data ? (
-              <EmptyState>載入中…</EmptyState>
-            ) : list.data.items.length === 0 ? (
-              <EmptyState>沒有符合的上傳。</EmptyState>
-            ) : (
-              <table className="w-full text-sm" aria-label="冷啟動上傳清單">
-                <thead>
-                  <tr className="text-muted border-card-border border-b text-left text-xs">
-                    {['條碼', '品名', '狀態', '照片', '建立者', '更新時間'].map((c) => (
-                      <th key={c} className="py-2 pr-3 font-medium">
-                        {c}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className={list.isPlaceholderData ? 'opacity-60' : undefined}>
-                  {list.data.items.map((s) => {
-                    const href = `/coldstart/submissions/${encodeURIComponent(s.id)}`
-                    return (
-                      <tr
-                        key={s.id}
-                        className="border-card-border hover:bg-hover border-b last:border-0"
-                      >
-                        <td className="tabular py-1.5 pr-3">
-                          <Link to={href} className="text-primary hover:underline">
-                            {s.barcode || '（未填）'}
-                          </Link>
-                        </td>
-                        <td className="py-1.5 pr-3">
-                          <Link to={href} className="hover:underline">
-                            {s.name || <span className="text-muted">（未填）</span>}
-                          </Link>
-                        </td>
-                        <td className="py-1.5 pr-3">
-                          <StatusBadge status={s.status} />
-                        </td>
-                        <td className="py-1.5 pr-3">
-                          <span className="flex flex-wrap gap-1">
-                            {IMAGE_KINDS.map((k) =>
-                              s.images.includes(k) ? (
-                                <Badge key={k} tone="primary">
-                                  {imageKindText(k)}
-                                </Badge>
-                              ) : (
-                                <Badge key={k} className="line-through opacity-60">
-                                  {imageKindText(k)}
-                                </Badge>
-                              ),
-                            )}
-                          </span>
-                        </td>
-                        <td className="py-1.5 pr-3">{s.created_by.display_name}</td>
-                        <td className="tabular text-muted py-1.5 pr-3 text-xs">
-                          {formatTime(s.updated_at)}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </Card>
-        </Section>
-        <Section title="以條碼查產品" hint="輸入條碼查詢產品資料庫中已確認的產品。">
-          <Card className="p-4">
-            <ProductLookup />
-          </Card>
-        </Section>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {create.error && <ColdstartError error={create.error} className="mb-4" />}
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1fr_360px]">
+          <Section
+            title="上傳"
+            aside={
+              <Segmented label="狀態篩選" value={filter} onChange={setFilter} options={FILTERS} />
+            }
+          >
+            <Card className="px-4 py-2">
+              {list.isError ? (
+                <ColdstartError error={list.error} className="my-2" />
+              ) : !list.data ? (
+                <EmptyState>載入中…</EmptyState>
+              ) : list.data.items.length === 0 ? (
+                <EmptyState>沒有符合的上傳。</EmptyState>
+              ) : (
+                <table className="w-full text-sm" aria-label="冷啟動上傳清單">
+                  <thead>
+                    <tr className="text-muted border-card-border border-b text-left text-xs">
+                      {['條碼', '品名', '狀態', '照片', '建立者', '更新時間'].map((c) => (
+                        <th key={c} className="py-2 pr-3 font-medium">
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className={list.isPlaceholderData ? 'opacity-60' : undefined}>
+                    {list.data.items.map((s) => {
+                      const href = `/coldstart/submissions/${encodeURIComponent(s.id)}`
+                      return (
+                        <tr
+                          key={s.id}
+                          className="border-card-border hover:bg-hover border-b last:border-0"
+                        >
+                          <td className="tabular py-1.5 pr-3">
+                            <Link to={href} className="text-primary hover:underline">
+                              {s.barcode || '（未填）'}
+                            </Link>
+                          </td>
+                          <td className="py-1.5 pr-3">
+                            <Link to={href} className="hover:underline">
+                              {s.name || <span className="text-muted">（未填）</span>}
+                            </Link>
+                          </td>
+                          <td className="py-1.5 pr-3">
+                            <StatusBadge status={s.status} />
+                          </td>
+                          <td className="py-1.5 pr-3">
+                            <span className="flex flex-wrap gap-1">
+                              {IMAGE_KINDS.map((k) =>
+                                s.images.includes(k) ? (
+                                  <Badge key={k} tone="primary">
+                                    {imageKindText(k)}
+                                  </Badge>
+                                ) : (
+                                  <Badge key={k} className="line-through opacity-60">
+                                    {imageKindText(k)}
+                                  </Badge>
+                                ),
+                              )}
+                            </span>
+                          </td>
+                          <td className="py-1.5 pr-3">{s.created_by.display_name}</td>
+                          <td className="tabular text-muted py-1.5 pr-3 text-xs">
+                            {formatTime(s.updated_at)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </Card>
+          </Section>
+          <Section title="以條碼查產品" hint="輸入條碼查詢產品資料庫中已確認的產品。">
+            <Card className="p-4">
+              <ProductLookup />
+            </Card>
+          </Section>
+        </div>
       </div>
     </div>
   )

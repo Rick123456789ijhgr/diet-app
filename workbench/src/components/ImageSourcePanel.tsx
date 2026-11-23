@@ -156,14 +156,14 @@ function SceneInput({
         aria-label={field.label}
         value={String(value)}
         onChange={(e) => onChange(e.target.value)}
-        className="border-card-border bg-card focus-visible:border-primary h-8 rounded-full border px-3 text-sm focus-visible:outline-none readout w-full"
+        className="border-card-border bg-card focus-visible:border-primary h-8 rounded-md border px-2.5 text-sm focus-visible:outline-none readout w-full"
       />
     ) : field.kind === 'select' ? (
       <select
         aria-label={field.label}
         value={String(value)}
         onChange={(e) => onChange(e.target.value)}
-        className="border-card-border bg-card focus-visible:border-primary h-8 rounded-full border px-3 text-sm focus-visible:outline-none"
+        className="border-card-border bg-card focus-visible:border-primary h-8 rounded-md border px-2.5 text-sm focus-visible:outline-none"
       >
         {field.options!.map((o) => (
           <option key={o}>{o}</option>

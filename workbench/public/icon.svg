@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-  <!-- 森林綠：綠色圓環＋葉片 -->
-  <circle cx="20" cy="20" r="16.5" fill="none" stroke="#1C7A4A" stroke-width="4"/>
-  <path d="M13.5 26c0-7.5 5-12 13-12-0.4 8-5.4 12.5-13 12z" fill="#1C7A4A"/>
-  <path d="M13.5 26c2.5-3.2 5.2-5.5 8.4-7.2" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  <!-- 光學儀器：光學青方塊＋白色準星（取景、對焦） -->
+  <rect x="2" y="2" width="36" height="36" rx="8" fill="#0B7A8C"/>
+  <circle cx="20" cy="20" r="8.5" fill="none" stroke="#FFFFFF" stroke-width="2.2"/>
+  <circle cx="20" cy="20" r="2.4" fill="#FFFFFF"/>
+  <path d="M20 6.5v5M20 28.5v5M6.5 20h5M28.5 20h5" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
 </svg>

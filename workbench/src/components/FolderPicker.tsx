@@ -259,7 +259,7 @@ function AddressBar({ path, onGo }: { path: string; onGo: (p: string) => void })
             setEditing(false)
           }
         }}
-        className="readout border-primary bg-card focus-visible:ring-primary/40 h-8 min-w-0 flex-1 rounded-full border px-3 text-sm focus-visible:ring-2 focus-visible:outline-none"
+        className="readout border-primary bg-card focus-visible:ring-primary/40 h-8 min-w-0 flex-1 rounded-md border px-2.5 text-sm focus-visible:ring-2 focus-visible:outline-none"
       />
     )
   }
