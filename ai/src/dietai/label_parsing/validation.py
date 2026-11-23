@@ -44,12 +44,22 @@ def check_serving_times_count(label: NutritionLabel, rel_tol: float = 0.05) -> R
     return RuleResult("serving_times_count", passed, f"{total} vs 淨重 {label.net_weight_g}")
 
 
-def validate(label: NutritionLabel) -> list[RuleResult]:
-    """對一張標示執行所有適用規則。"""
+def validate(
+    label: NutritionLabel,
+    *,
+    atwater_rel_tol: float = 0.2,
+    atwater_abs_tol: float = 10.0,
+    serving_rel_tol: float = 0.05,
+) -> list[RuleResult]:
+    """對一張標示執行所有適用規則；容許誤差見 ``label_parsing.config.LabelReadConfig``。"""
     results: list[RuleResult] = []
     for facts in (label.per_serving, label.per_100g):
         if facts is not None:
-            results += [check_atwater(facts), check_fat_breakdown(facts), check_sugar(facts)]
-    if (r := check_serving_times_count(label)) is not None:
+            results += [
+                check_atwater(facts, atwater_rel_tol, atwater_abs_tol),
+                check_fat_breakdown(facts),
+                check_sugar(facts),
+            ]
+    if (r := check_serving_times_count(label, serving_rel_tol)) is not None:
         results.append(r)
     return results

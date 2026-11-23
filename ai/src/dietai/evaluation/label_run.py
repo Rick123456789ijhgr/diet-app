@@ -1,8 +1,8 @@
 """營養標示 OCR 的批次評估：每張影像 × 每個前處理方法 × 每個 OCR 引擎辨識一次並評分。
 
-處理一律呼叫 ``dietai.preprocess.preprocess_label``、OCR 引擎（``label_parsing.ocr.OcrEngine``，
-實作在 ``dietai.adapters.ocr``）與 ``label_parsing.parse_fields``；這裡只負責「跑哪些組合、
-怎麼評分、怎麼記錄與彙整」。
+處理一律呼叫 ``dietai.label_parsing.read_label``（前處理 → OCR → 欄位解析，與上線的
+``LabelService.ParseLabel`` 同一個入口）；OCR 引擎實作在 ``dietai.adapters.ocr``。這裡只負責
+「跑哪些組合、怎麼評分、怎麼記錄與彙整」。
 
 - manifest 的 ``truth`` 欄為真值 JSON 的路徑（相對於 manifest，格式見 ``evaluation.label``）；
   空字串為負樣本（影像中沒有營養標示），只記錄讀到幾個欄位。
@@ -45,12 +45,13 @@ from dietai.evaluation.label import (
     score_fields,
 )
 from dietai.evaluation.manifest import SOURCE_COLUMN, Manifest, read_image
-from dietai.label_parsing.fields import format_fields, parse_fields
-from dietai.label_parsing.ocr import OcrEngine, group_lines
+from dietai.label_parsing.config import LabelReadConfig
+from dietai.label_parsing.fields import format_fields
+from dietai.label_parsing.ocr import OcrEngine
+from dietai.label_parsing.reader import OCR_STEP, PARSE_STEP, read_label
 from dietai.preprocess import ops
 from dietai.preprocess.config import LabelConfig
-from dietai.preprocess.label import preprocess_label
-from dietai.preprocess.types import Image, Quad
+from dietai.preprocess.types import Image
 
 EXPERIMENT = "e2_label"
 LABEL_RESULTS_FILE = "label_results.csv"
@@ -198,6 +199,16 @@ def run_label_ocr(
     return RunSummary(out, dict(counts), duration)
 
 
+# 「原圖」方法：前處理各段全部關閉，輸出等於輸入（副本）
+RAW_LABEL_CONFIG = LabelConfig(
+    enable_rectify=False,
+    enable_glare=False,
+    enable_denoise=False,
+    enable_contrast=False,
+    enable_binarize=False,
+)
+
+
 def _method_rows(
     img: Image | None,
     load_error: str,
@@ -206,47 +217,43 @@ def _method_rows(
     engines: Mapping[str, OcrEngine],
     quad_tol: float,
 ) -> list[tuple[str, dict[str, Any]]]:
-    """一張影像在一個前處理方法下，每個引擎的結果列。前處理只做一次，各引擎共用。"""
+    """一張影像在一個前處理方法下，每個引擎的結果列。
+
+    每個引擎各呼叫一次 ``read_label``（前處理是確定性的，重做的結果相同；OCR 經快取時鍵也相同）。
+    前處理或 OCR 失敗時，該引擎的列記為 error，不影響其他引擎。
+    """
     if img is None:
         return [(e, {"error": load_error}) for e in engines]
-    start = time.perf_counter()
-    found: Quad | None = None
-    try:
-        if cfg is None:
-            processed = img
-        else:
-            res = preprocess_label(img, cfg)
-            processed, found = res.image, res.quad
-    except Exception as e:  # 前處理失敗時，此方法的每個引擎都記為 error
-        return [(name, {"error": f"{type(e).__name__}: {e}"}) for name in engines]
-    pre_ms = (time.perf_counter() - start) * 1000
-    located_fields: dict[str, Any] = {}
-    if truth is not None and truth.quad is not None and cfg is not None and cfg.enable_rectify:
-        err = None if found is None else quad_error(found, truth.quad)
-        located_fields = {
-            "quad_error": "" if err is None else f"{err:.4f}",
-            "located": int(err is not None and err <= quad_tol),
-        }
+    read_cfg = LabelReadConfig(preprocess=RAW_LABEL_CONFIG if cfg is None else cfg)
+    # 有定位（且不是原圖）、真值有四角時才計算定位誤差
+    truth_quad = None if truth is None or cfg is None or not cfg.enable_rectify else truth.quad
     rows: list[tuple[str, dict[str, Any]]] = []
     for name, engine in engines.items():
-        row: dict[str, Any] = {"preprocess_ms": f"{pre_ms:.3f}", **located_fields}
-        start = time.perf_counter()
         try:
-            lines = group_lines(engine(processed))
-        except Exception as e:  # 單一引擎失敗不影響其他引擎
-            rows.append((name, {**row, "error": f"{type(e).__name__}: {e}"}))
+            reading = read_label(img, engine, read_cfg)
+        except Exception as e:  # 單一引擎（或前處理）失敗不中斷整批
+            rows.append((name, {"error": f"{type(e).__name__}: {e}"}))
             continue
-        row["ocr_ms"] = f"{(time.perf_counter() - start) * 1000:.3f}"
-        parsed = parse_fields(lines)
+        pre_ms = sum(s.elapsed_ms for s in reading.steps if s.name not in (OCR_STEP, PARSE_STEP))
+        ocr_ms = sum(s.elapsed_ms for s in reading.steps if s.name == OCR_STEP)
+        row: dict[str, Any] = {"preprocess_ms": f"{pre_ms:.3f}"}
+        if truth_quad is not None:
+            err = None if reading.quad is None else quad_error(reading.quad, truth_quad)
+            row.update(
+                quad_error="" if err is None else f"{err:.4f}",
+                located=int(err is not None and err <= quad_tol),
+            )
+        lines = list(reading.lines)
+        parsed = {k: list(v) for k, v in reading.fields.items()}
         row.update(
+            ocr_ms=f"{ocr_ms:.3f}",
             n_fields=len(parsed),
             fields=json.dumps(format_fields(parsed), ensure_ascii=False),
             lines=json.dumps(lines, ensure_ascii=False),
             error="",
         )
         if truth is not None:
-            score = _score(truth, parsed)
-            row.update(score)
+            row.update(_score(truth, parsed))
             if truth.text:
                 text = "\n".join(lines)
                 row["cer"] = f"{cer(truth.text, text):.4f}"
