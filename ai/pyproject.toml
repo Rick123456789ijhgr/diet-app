@@ -67,6 +67,7 @@ extend-immutable-calls = [
   "dietai.preprocess.config.InvoiceQrConfig",
   "dietai.preprocess.config.LabelConfig",
   "dietai.preprocess.config.FoodConfig",
+  "dietai.label_parsing.config.LabelReadConfig",
   "dietai.evaluation.methods.GreedyCriteria",
 ]
 

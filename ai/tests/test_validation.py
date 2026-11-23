@@ -36,3 +36,11 @@ def test_sugar_exceeding_carb_is_flagged():
 def test_serving_rule_skipped_when_fields_missing():
     rules = {r.rule for r in validate(NutritionLabel(per_serving=facts()))}
     assert "serving_times_count" not in rules
+
+
+def test_validate_takes_tolerances():
+    # 推算 10×4＋10×9＋30×4 = 250；標示 270 差 8%
+    label = NutritionLabel(per_serving=facts(energy_kcal=270))
+    loose = {r.rule: r.passed for r in validate(label)}
+    strict = {r.rule: r.passed for r in validate(label, atwater_rel_tol=0.05, atwater_abs_tol=0)}
+    assert loose["atwater"] is True and strict["atwater"] is False
