@@ -1,6 +1,6 @@
 # 飲食紀錄系統（專題）
 
-以結構化資料強化 AI 飲食辨識可靠性之紀錄系統。規劃書見 `docs/`。
+以結構化資料強化 AI 飲食辨識可靠性之紀錄系統。文件索引見 [`docs/README.md`](docs/README.md)。
 
 ## 目錄
 
@@ -14,7 +14,7 @@
 | `db/` | 資料庫 migration |
 | `research/` | 實驗設定與 notebook（只 import `ai/` 套件） |
 | `deploy/` | Docker Compose 與部署設定 |
-| `docs/` | ADR、模組對照表、標註規範 |
+| `docs/` | 文件索引、ADR、模組對照表、任務書、實驗設計、審查紀錄 |
 
 ## 快速開始
 
