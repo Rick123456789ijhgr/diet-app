@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package dietai.v1;
+
+import "dietai/v1/preprocess.proto";
+
+option go_package = "github.com/your-org/diet-app/api/gen/proto/dietai/v1;dietaiv1";
+
+// 營養標示讀取（模組二，Go → Python）：前處理 → OCR → 欄位解析 → 邏輯驗證，一次完成。
+// 前處理屬模組一（PreprocessService.PreprocessLabel），本服務在 Python 內直接呼叫，不另經 RPC。
+// 數值一律以十進位字串傳遞，不使用 double（任務書 docs/tasks/m2-barcode-invoice-label.md 2.2 節）。
+// 讀取結果只是候選值：寫入資料庫前須經人確認，並由 Go 寫入。
+service LabelService {
+  rpc ParseLabel(ParseLabelRequest) returns (ParseLabelResponse);
+}
+
+message ParseLabelRequest {
+  ImageInput image = 1;
+  ConfigOverride config = 2; // LabelReadConfig；巢狀的 preprocess 為 LabelConfig
+}
+
+// 一個數值與單位，照標示正規化後的寫法，例如 {"2.1", "g"}
+message LabelQuantity {
+  string value = 1; // 十進位字串
+  string unit = 2; // kcal／mg／g／ml／份；標示上沒有單位時為空
+}
+
+// 已確定欄基準的一格
+message LabelCell {
+  string field = 1; // serving_size、servings、energy、protein、fat、saturated_fat、trans_fat、carbohydrate、sugar、sodium
+  string basis = 2; // per_serving／per_100g／per_100ml；表頭欄位（serving_size、servings）為空
+  LabelQuantity quantity = 3;
+}
+
+// 一個欄位依標示上由左到右讀到的所有數值（欄基準判斷不出時，供人工指定）
+message LabelFieldValues {
+  string field = 1;
+  repeated LabelQuantity values = 2;
+}
+
+// OCR 找到的一段文字；座標為 ParseLabelResponse.image（OCR 的輸入影像）上的像素
+message OcrTextBox {
+  string text = 1;
+  double x = 2; // 左上角
+  double y = 3;
+  double w = 4;
+  double h = 5;
+  double score = 6; // 0–1
+}
+
+// 一條邏輯驗證規則的結果（只提示，不修改數值）
+message LabelRuleResult {
+  string rule = 1; // 例如 atwater、fat_breakdown、sugar_le_carb、serving_times_count
+  bool passed = 2;
+  string detail = 3;
+}
+
+message ParseLabelResponse {
+  repeated LabelCell cells = 1;
+  repeated string columns = 2; // 判斷出的欄基準，依標示上由左到右；判斷不出時為空
+  repeated LabelFieldValues fields = 3;
+  repeated string lines = 4; // OCR 文字框排成的文字行，由上到下
+  repeated OcrTextBox boxes = 5;
+  ImageOutput image = 6; // 前處理後、交給 OCR 的影像
+  repeated Point quad = 7; // 原圖上的表格四角（左上起順時針）；找不到或未定位時為空
+  repeated LabelRuleResult checks = 8;
+  string ocr_engine = 9; // 引擎、版本、模型與語言包
+  repeated string warnings = 10; // 例如 LABEL_NOT_LOCATED、LABEL_BASIS_UNKNOWN
+  repeated Step steps = 11;
+}

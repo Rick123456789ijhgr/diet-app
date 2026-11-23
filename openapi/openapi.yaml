@@ -23,6 +23,249 @@ paths:
               schema:
                 type: string
                 example: ok
+  /products/by-barcode/{code}:
+    get:
+      operationId: getProductByBarcode
+      summary: 以條碼查詢產品
+      description: |
+        輸入 APP 掃到的條碼字串（UPC-A、EAN-13、EAN-8 等），先驗證檢查碼並補成 14 碼 GTIN，
+        再查自建產品資料庫。只回傳目前有效的營養標示（未被新版取代者）。
+        營養數值以十進位字串表示，APP 只顯示、不自行計算。
+      tags: [product]
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9]{8,14}$"
+          description: 掃描到的條碼數字（原樣）
+      responses:
+        "200":
+          description: 找到產品
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: |
+            條碼無效：INVALID_BARCODE（長度或檢查碼錯誤）、BARCODE_STORE_CODE（店內碼，不查全域資料庫）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: PRODUCT_NOT_FOUND；`field` 為 gtin，`gtin` 為正規化後的 14 碼，供 APP 引導冷啟動上傳
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductNotFoundError"
+  /invoices/parse:
+    post:
+      operationId: parseInvoice
+      summary: 解析電子發票的左右兩個 QR
+      description: |
+        APP 即時掃到左右兩碼後送出原始字串，Go 依財政部電子發票證明聯二維條碼規格解析表頭與品項。
+        只解析、不儲存；品項不對應到產品（模組三）。
+      tags: [invoice]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoiceParseRequest"
+      responses:
+        "200":
+          description: 解析成功（品項可能不完整，見 warnings）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+        "400":
+          description: |
+            無法解析：INVOICE_LEFT_MISSING（缺左碼或左右顛倒）、INVOICE_FORMAT（欄位長度或格式錯誤）、
+            INVOICE_ENCODING（品項無法依編碼參數解碼）；`field` 為 left 或 right
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 tags:
   - name: system
     description: 系統狀態
+  - name: product
+    description: 產品查詢（模組二、三）
+  - name: invoice
+    description: 電子發票（模組二）
+components:
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: 英文錯誤代碼，例如 INVALID_BARCODE、PRODUCT_NOT_FOUND、INVOICE_FORMAT
+        message:
+          type: string
+          description: 給開發者看的說明
+        field:
+          type: string
+          description: 出錯的欄位名稱
+    ProductNotFoundError:
+      allOf:
+        - $ref: "#/components/schemas/Error"
+        - type: object
+          required: [gtin]
+          properties:
+            gtin:
+              type: string
+              pattern: "^[0-9]{14}$"
+    Decimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: 非負十進位數字字串，例如 "2.1"；不用浮點數以免失真
+      example: "2.1"
+    SignedDecimal:
+      type: string
+      pattern: '^-?[0-9]+(\.[0-9]+)?$'
+      description: 可為負的十進位數字字串（發票的折扣品項單價為負）
+      example: "-10"
+    Product:
+      type: object
+      required: [id, gtin, barcode, name, content_unit, nutrition]
+      properties:
+        id:
+          type: string
+          format: uuid
+        gtin:
+          type: string
+          pattern: "^[0-9]{14}$"
+          description: 補 0 到 14 碼；UPC-A 與 EAN-13 視為同一條碼
+        barcode:
+          type: string
+          description: 標示上的原樣
+        name:
+          type: string
+        brand:
+          type: string
+        net_content:
+          $ref: "#/components/schemas/Decimal"
+        content_unit:
+          type: string
+          enum: [g, ml]
+        serving_size:
+          $ref: "#/components/schemas/Decimal"
+        servings_per_package:
+          $ref: "#/components/schemas/Decimal"
+        nutrition:
+          type: array
+          description: 目前有效的營養標示，每種基準最多一筆
+          items:
+            $ref: "#/components/schemas/NutritionFacts"
+    NutritionFacts:
+      type: object
+      required:
+        - basis
+        - energy_kcal
+        - protein_g
+        - fat_g
+        - saturated_fat_g
+        - trans_fat_g
+        - carbohydrate_g
+        - sugar_g
+        - sodium_mg
+      properties:
+        basis:
+          type: string
+          enum: [per_serving, per_100]
+          description: per_100 的單位見 Product.content_unit（每 100 公克或每 100 毫升）
+        energy_kcal:
+          $ref: "#/components/schemas/Decimal"
+        protein_g:
+          $ref: "#/components/schemas/Decimal"
+        fat_g:
+          $ref: "#/components/schemas/Decimal"
+        saturated_fat_g:
+          $ref: "#/components/schemas/Decimal"
+        trans_fat_g:
+          $ref: "#/components/schemas/Decimal"
+        carbohydrate_g:
+          $ref: "#/components/schemas/Decimal"
+        sugar_g:
+          $ref: "#/components/schemas/Decimal"
+        sodium_mg:
+          $ref: "#/components/schemas/Decimal"
+    InvoiceParseRequest:
+      type: object
+      required: [left, right]
+      properties:
+        left:
+          type: string
+          description: 左碼原始字串（含 77 碼表頭）
+        right:
+          type: string
+          description: 右碼原始字串（以 ** 開頭）；只有左碼時傳空字串
+    Invoice:
+      type: object
+      required:
+        - number
+        - date
+        - random_code
+        - sales_amount
+        - total_amount
+        - seller_id
+        - items_in_qr
+        - items_total
+        - items
+        - warnings
+      properties:
+        number:
+          type: string
+          pattern: "^[A-Z]{2}[0-9]{8}$"
+          description: 發票字軌號碼
+        date:
+          type: string
+          format: date
+          description: 開立日期（已由民國年轉為西元）
+        random_code:
+          type: string
+          pattern: "^[0-9]{4}$"
+        sales_amount:
+          type: integer
+          format: int64
+          description: 銷售額（未稅，元）
+        total_amount:
+          type: integer
+          format: int64
+          description: 總計額（含稅，元）
+        buyer_id:
+          type: string
+          description: 買方統一編號；一般消費者（00000000）時省略
+        seller_id:
+          type: string
+          pattern: "^[0-9]{8}$"
+        items_in_qr:
+          type: integer
+          description: QR 內記載的品項數
+        items_total:
+          type: integer
+          description: 該張發票的品項總數；大於 items_in_qr 時品項不完整
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItem"
+        warnings:
+          type: array
+          description: 例如 INVOICE_ITEMS_INCOMPLETE
+          items:
+            type: string
+    InvoiceItem:
+      type: object
+      required: [name, quantity, unit_price]
+      properties:
+        name:
+          type: string
+        quantity:
+          $ref: "#/components/schemas/Decimal"
+        unit_price:
+          $ref: "#/components/schemas/SignedDecimal"
