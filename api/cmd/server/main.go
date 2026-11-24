@@ -66,7 +66,7 @@ func run(logger *slog.Logger) error {
 		defer db.Close()
 		opts.Auth = auth.NewService(db)
 		if objects != nil {
-			opts.Coldstart = coldstart.NewService(db, objects, workbench.NewPreprocessor(ai), logger)
+			opts.Coldstart = coldstart.NewService(db, objects, workbench.NewPreprocessor(ai, ai), logger)
 		}
 	}
 	mux.Handle("/workbench/", workbench.NewHTTPHandler(workbench.NewService(ai), opts))

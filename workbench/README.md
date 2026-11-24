@@ -29,6 +29,10 @@ cd api && WORKBENCH_DEV_TOOLS=1 go run ./cmd/server               # Go（含最�
 cd workbench && npm run dev                                       # Vite（/workbench 代理到 :8080）
 ```
 
+營養標示讀取（冷啟動上傳的營養標示照片自動預填草稿）用的 OCR 引擎由 Python 的環境變數 `AI_OCR_ENGINE` 決定：
+預設 `paddle:mobile`（需要 `ai/.venv-paddle`），可改成 `tesseract`，`off` 為關閉。引擎無法使用時其他功能照常，
+上傳的照片只會顯示「營養標示讀取失敗」。OCR 結果快取在 `AI_OCR_CACHE_DIR`（預設為系統暫存資料夾下的 `dietai-ocr`）。
+
 ## 冷啟動上傳
 
 冷啟動上傳（左欄「冷啟動」）要寫入產品資料庫，除了上面的服務外還需要 Postgres 與 MinIO，並且須登入。

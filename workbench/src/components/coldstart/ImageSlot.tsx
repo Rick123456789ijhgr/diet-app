@@ -1,5 +1,5 @@
 // 冷啟動上傳的照片槽：選檔上傳／重傳、縮圖、尺寸、品質與警告、條碼解碼結果、前處理錯誤。
-// 營養標示照片以 ImageViewer 顯示並疊上表格四角，方便人工對照輸入。
+// 營養標示照片以 ImageViewer 顯示並疊上表格四角，下方列出讀取結果（已預填到草稿），方便人工對照輸入。
 import { CircleAlert, ImageUp } from 'lucide-react'
 import { useRef } from 'react'
 
@@ -12,6 +12,7 @@ import { cn } from '@/lib/cn'
 import { imageKindText } from '@/lib/text'
 
 import { ColdstartError, formatTime } from './common'
+import { LabelReading } from './LabelReading'
 
 export function ImageSlot({
   submissionId,
@@ -123,10 +124,11 @@ export function ImageSlot({
           {kind === 'label' && pre && !pre.error && quad.length === 0 && (
             <p className="text-muted mt-1 text-xs">沒有找到表格框，請直接對照原圖輸入。</p>
           )}
+          {kind === 'label' && pre?.label_reading && <LabelReading reading={pre.label_reading} />}
           {pre?.error && (
             <p className="text-danger mt-2 flex items-start gap-1 text-xs" role="alert">
               <CircleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              前處理失敗（照片已保存）：{pre.error}
+              處理失敗（照片已保存）：{pre.error}
             </p>
           )}
         </>

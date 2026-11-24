@@ -980,8 +980,36 @@ export interface components {
             barcodes?: components["schemas"]["BarcodeHit"][];
             /** @description 營養標示照片中表格的四角（原圖座標） */
             label_quad?: components["schemas"]["Point"][];
+            label_reading?: components["schemas"]["LabelReadingSummary"];
             /** @description 前處理失敗的原因（照片仍已保存） */
             error?: string;
+        };
+        /** @description 營養標示讀取結果（LabelService.ParseLabel），只是候選值： 預填到草稿的空欄位，須經組員對照原圖確認後才寫入 */
+        LabelReadingSummary: {
+            /** @description 判斷出的欄基準（per_serving／per_100g／per_100ml），由左到右；判斷不出時為空 */
+            columns: string[];
+            cells: components["schemas"]["LabelReadingCell"][];
+            /** @description OCR 排成的文字行，由上到下，供對照原圖 */
+            lines: string[];
+            /** @description 邏輯驗證結果；只提示，不阻擋確認 */
+            checks: components["schemas"]["LabelRuleCheck"][];
+            ocr_engine: string;
+            /** @description 讀取階段的警告代碼，例如 LABEL_BASIS_UNKNOWN */
+            warnings: string[];
+        };
+        LabelReadingCell: {
+            /** @description serving_size、servings、energy、protein、fat、saturated_fat、trans_fat、carbohydrate、sugar、sodium */
+            field: string;
+            /** @description per_serving／per_100g／per_100ml；表頭欄位為空字串 */
+            basis: string;
+            /** @description 十進位字串，照標示原文，例如 "2.1" */
+            value: string;
+            unit: string;
+        };
+        LabelRuleCheck: {
+            rule: string;
+            passed: boolean;
+            detail: string;
         };
         SubmissionImage: {
             kind: components["schemas"]["ImageKind"];

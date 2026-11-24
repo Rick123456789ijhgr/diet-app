@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 import grpc
 import pytest
@@ -14,7 +15,9 @@ from dietai.server.app import create_server
 
 
 class RunningServer:
-    def __init__(self, dev_tools: bool) -> None:
+    def __init__(self, dev_tools: bool, ocr: Any = None, ocr_error: str = "OCR 引擎未設定") -> None:
+        self.ocr = ocr
+        self.ocr_error = ocr_error
         self.store = ImageStore(max_items=16) if dev_tools else None
         self._loop = asyncio.new_event_loop()
         self._ready = threading.Event()
@@ -32,7 +35,7 @@ class RunningServer:
         self._loop.run_forever()
 
     async def _start(self, dev_tools: bool) -> None:
-        self.server = await create_server(dev_tools, self.store)
+        self.server = await create_server(dev_tools, self.store, self.ocr, self.ocr_error)
         self.port = self.server.add_insecure_port("127.0.0.1:0")
         await self.server.start()
 
@@ -56,3 +59,18 @@ def prod_server() -> Iterator[RunningServer]:
     server = RunningServer(dev_tools=False)
     yield server
     server.close()
+
+
+@pytest.fixture
+def start_server() -> Iterator[Callable[..., RunningServer]]:
+    """依參數另開一個伺服器（例如注入不同的 OCR），測試結束時全部關閉。"""
+    started: list[RunningServer] = []
+
+    def start(dev_tools: bool = False, **kwargs: Any) -> RunningServer:
+        server = RunningServer(dev_tools, **kwargs)
+        started.append(server)
+        return server
+
+    yield start
+    for server in started:
+        server.close()

@@ -1,6 +1,6 @@
 # 任務書：模組二「條碼、發票、營養標示」實作
 
-> 狀態：Phase 0（#68）、Phase 1（#69）已完成；下一步 Phase 2（2026-11-24）
+> 狀態：Phase 0（#68）、Phase 1（#69）已完成；Phase 2 進行中（`feat/m2-parse-label-prefill`，2026-11-24）
 > 對應：`docs/module-map.md` 模組二那行、ADR 0004（即時掃描 vs 靜態照片）、ADR 0005（E2 指標）
 > 使用方式：每次只交給 AI 工具一個 Phase，一個 Phase 一個 PR。
 
@@ -288,6 +288,13 @@ func Parse(left, right []byte) (Invoice, error)   // right 可為 nil
 | Phase 順序 | 先做 1 → 2；3、4 與 Python 無關，可由另一人並行；5 在 2 之後 | 營養標示是主要貢獻，E2 也需要 `read_label` |
 
 開工後遇到的衝突或未定義處，比照模組一任務書第 9 節，依 Phase 記在本節之下。
+
+### 10.1 Phase 2（2026-11-24，Rick 同意）
+
+- 工作台 API 規格：`ImagePreprocess` 新增選用欄位 `label_reading`（`LabelReadingSummary`：欄基準、確定的格〔十進位字串〕、OCR 文字行、驗證結果、引擎、警告），存在既有的 `product_submissions.preprocess` JSONB，不需要 migration。規格變更與實作放同一個 PR。
+- OCR 引擎無法建立（例如沒有 `ai/.venv-paddle`）時 Python 服務照常啟動，只有 `ParseLabel` 回傳 `FAILED_PRECONDITION`／`OCR_UNAVAILABLE`；`AI_OCR_ENGINE=off` 可明確關閉。
+- 營養標示照片上傳時 Go 仍先呼叫 `PreprocessLabel`、再呼叫 `ParseLabel`（Python 內前處理跑兩次）：OCR 無法使用時照樣取得四角與前處理警告。
+- 預填規則：只填空欄位；`per_100g`／`per_100ml` 都填到 `per_100`，兩者同時出現時不填；`content_unit` 空著時依每 100 公克／毫升欄（沒有時依每份量的單位）填 g 或 ml；超出草稿允許範圍的值略過。
 
 ---
 

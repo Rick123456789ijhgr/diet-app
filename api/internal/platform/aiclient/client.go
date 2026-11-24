@@ -23,10 +23,11 @@ const MaxMessageBytes = 32 << 20
 // DefaultTimeout 是呼叫端沒有設定期限時的逾時。
 const DefaultTimeout = 30 * time.Second
 
-// Client 同時提供正式前處理與開發工作台兩個服務；Python 未開啟開發模式時，
+// Client 同時提供正式前處理、營養標示讀取與開發工作台三個服務；Python 未開啟開發模式時，
 // WorkbenchService 的呼叫會回傳 Unimplemented。
 type Client struct {
 	dietaiv1.PreprocessServiceClient
+	dietaiv1.LabelServiceClient
 	dietaiv1.WorkbenchServiceClient
 	conn *grpc.ClientConn
 }
@@ -48,6 +49,7 @@ func New(target string, opts ...grpc.DialOption) (*Client, error) {
 	}
 	return &Client{
 		PreprocessServiceClient: dietaiv1.NewPreprocessServiceClient(conn),
+		LabelServiceClient:      dietaiv1.NewLabelServiceClient(conn),
 		WorkbenchServiceClient:  dietaiv1.NewWorkbenchServiceClient(conn),
 		conn:                    conn,
 	}, nil

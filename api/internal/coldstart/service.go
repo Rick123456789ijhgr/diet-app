@@ -60,7 +60,8 @@ type Objects interface {
 	Delete(ctx context.Context, key string) error
 }
 
-// Preprocessor 對照片做前處理（Python）；失敗時把原因寫進 ImagePreprocess.Error，不回傳錯誤。
+// Preprocessor 對照片做前處理（Python）；營養標示照片另含讀取結果（ImagePreprocess.LabelReading）。
+// 失敗時把原因寫進 ImagePreprocess.Error，不回傳錯誤。
 type Preprocessor interface {
 	Preprocess(ctx context.Context, kind Kind, data []byte) ImagePreprocess
 }
@@ -145,7 +146,8 @@ func (s *Service) ImageData(ctx context.Context, id string, kind Kind) ([]byte, 
 	return data, img.ContentType, nil
 }
 
-// UploadImage 保存照片原檔並做前處理。條碼照片解出唯一的條碼、且草稿尚未填條碼時預先填入。
+// UploadImage 保存照片原檔並做前處理。條碼照片解出唯一的條碼、且草稿尚未填條碼時預先填入；
+// 營養標示照片的讀取值預填到草稿的空欄位（prefillFromLabel）。邏輯驗證結果只隨照片保存、供提示，不阻擋確認。
 func (s *Service) UploadImage(ctx context.Context, id string, kind Kind, data []byte) (Submission, error) {
 	if err := s.ready(); err != nil {
 		return Submission{}, err
@@ -208,6 +210,10 @@ func (s *Service) UploadImage(ctx context.Context, id string, kind Kind, data []
 				sub.Draft = sub.Draft.clone()
 				sub.Draft.Barcode = &code
 			}
+		}
+		// 營養標示讀取值只填空欄位（在交易內以最新的草稿判斷，不覆蓋組員剛存的值）
+		if kind == KindLabel {
+			sub.Draft = prefillFromLabel(sub.Draft, img.Preprocess.LabelReading)
 		}
 		out, err = tx.SaveSubmission(ctx, sub)
 		return err

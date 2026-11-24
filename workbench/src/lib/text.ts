@@ -14,6 +14,11 @@ export const WARNING_TEXT: Record<string, string> = {
   LABEL_NOT_LOCATED: '找不到標示表格框',
   GLARE_RETAKE: '反光過大，請重拍',
   DISH_NOT_FOUND: '切不出任何一道菜',
+  // 營養標示讀取（label_parsing.reader.LabelReadWarning）
+  LABEL_NO_FIELDS: '沒有讀到任何欄位',
+  LABEL_BASIS_UNKNOWN: '判斷不出每份／每 100 公克欄，營養素未預填',
+  LABEL_COLUMN_MISMATCH: '部分營養素的欄數不符，未預填',
+  LABEL_UNIT_MISMATCH: '部分數值單位不符，未預填',
 }
 
 /** 後端錯誤代碼（Error.code）。 */
@@ -28,6 +33,7 @@ export const ERROR_TEXT: Record<string, string> = {
   SPLIT_LOCKED: '測試集已鎖定，不得讀取',
   AI_UNAVAILABLE: 'Python 服務沒有回應，請確認已用 make workbench 啟動',
   AI_TIMEOUT: 'Python 服務處理逾時',
+  OCR_UNAVAILABLE: 'OCR 引擎無法使用',
   API_UNAVAILABLE: 'Go 主伺服器沒有回應，請確認已用 make workbench 啟動',
   NOT_IMPLEMENTED: '此功能尚未實作',
   NOT_FOUND: '找不到資源（開發工具可能未啟用）',
@@ -195,6 +201,14 @@ export const BASIS_TEXT: Record<string, string> = {
 }
 
 // 查詢函式：找不到對照時退回原始代碼，未知代碼至少看得到內容，不會變成空白
+/** 營養標示邏輯驗證規則（label_parsing.validation）。 */
+export const RULE_TEXT: Record<string, string> = {
+  atwater: '熱量與三大營養素推算',
+  fat_breakdown: '飽和＋反式脂肪 ≤ 脂肪',
+  sugar_le_carb: '糖 ≤ 碳水化合物',
+  serving_times_count: '每份 × 份數 ≈ 淨重',
+}
+
 export const warningText = (code: string) => WARNING_TEXT[code] ?? code
 export const errorText = (code: string) => ERROR_TEXT[code] ?? code
 export const groupText = (group: string) => GROUP_TEXT[group] ?? group
@@ -231,3 +245,4 @@ export const statusText = (s: string) => STATUS_TEXT[s] ?? s
 export const nutrientText = (n: string) => NUTRIENT_TEXT[n] ?? n
 export const issueText = (c: string) => ISSUE_TEXT[c] ?? c
 export const unitText = (u: string) => UNIT_TEXT[u] ?? u
+export const ruleText = (r: string) => RULE_TEXT[r] ?? r

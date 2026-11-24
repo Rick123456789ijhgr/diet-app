@@ -1833,9 +1833,69 @@ components:
           items:
             $ref: "#/components/schemas/Point"
           description: 營養標示照片中表格的四角（原圖座標）
+        label_reading:
+          $ref: "#/components/schemas/LabelReadingSummary"
         error:
           type: string
           description: 前處理失敗的原因（照片仍已保存）
+    LabelReadingSummary:
+      type: object
+      description: >-
+        營養標示讀取結果（LabelService.ParseLabel），只是候選值：
+        預填到草稿的空欄位，須經組員對照原圖確認後才寫入
+      required: [columns, cells, lines, checks, ocr_engine, warnings]
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+          description: 判斷出的欄基準（per_serving／per_100g／per_100ml），由左到右；判斷不出時為空
+        cells:
+          type: array
+          items:
+            $ref: "#/components/schemas/LabelReadingCell"
+        lines:
+          type: array
+          items:
+            type: string
+          description: OCR 排成的文字行，由上到下，供對照原圖
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/LabelRuleCheck"
+          description: 邏輯驗證結果；只提示，不阻擋確認
+        ocr_engine:
+          type: string
+        warnings:
+          type: array
+          items:
+            type: string
+          description: 讀取階段的警告代碼，例如 LABEL_BASIS_UNKNOWN
+    LabelReadingCell:
+      type: object
+      required: [field, basis, value, unit]
+      properties:
+        field:
+          type: string
+          description: serving_size、servings、energy、protein、fat、saturated_fat、trans_fat、carbohydrate、sugar、sodium
+        basis:
+          type: string
+          description: per_serving／per_100g／per_100ml；表頭欄位為空字串
+        value:
+          type: string
+          description: 十進位字串，照標示原文，例如 "2.1"
+        unit:
+          type: string
+    LabelRuleCheck:
+      type: object
+      required: [rule, passed, detail]
+      properties:
+        rule:
+          type: string
+        passed:
+          type: boolean
+        detail:
+          type: string
     SubmissionImage:
       type: object
       required: [kind, width, height, content_type, uploaded_at, preprocess]

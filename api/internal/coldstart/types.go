@@ -1,7 +1,8 @@
 // Package coldstart 是冷啟動上傳的領域邏輯：包裝照片 → 前處理 → 人工確認 → 寫入產品資料庫
 // （任務書 2.6 節）。
 //
-// 營養數值只來自人工輸入（根目錄 CLAUDE.md 規則 1）；前處理結果只供參考（例如預先填入條碼）。
+// 營養數值一律經人工確認才寫入（根目錄 CLAUDE.md 規則 1、2）。前處理結果只供參考：條碼照片預填條碼，
+// 營養標示照片以 Python 的規則式讀取（OCR → 欄位解析）預填草稿的空欄位，組員對照原圖確認或修改。
 // 本套件不 import 資料庫、HTTP、gRPC：儲存、物件儲存與前處理都透過介面接入（見 service.go）。
 package coldstart
 
@@ -102,11 +103,45 @@ type BarcodeHit struct {
 
 // ImagePreprocess 是一張照片的前處理摘要（只供參考）。
 type ImagePreprocess struct {
-	QualityPassed *bool        `json:"quality_passed,omitempty"`
-	Warnings      []string     `json:"warnings"`
-	Barcodes      []BarcodeHit `json:"barcodes,omitempty"`
-	LabelQuad     []Point      `json:"label_quad,omitempty"`
-	Error         string       `json:"error,omitempty"`
+	QualityPassed *bool         `json:"quality_passed,omitempty"`
+	Warnings      []string      `json:"warnings"`
+	Barcodes      []BarcodeHit  `json:"barcodes,omitempty"`
+	LabelQuad     []Point       `json:"label_quad,omitempty"`
+	LabelReading  *LabelReading `json:"label_reading,omitempty"`
+	Error         string        `json:"error,omitempty"`
+}
+
+// 營養標示讀取的欄基準（Python label_parsing.reader 的名稱）；per_100g／per_100ml 都對應 Per100。
+const (
+	LabelPerServing = "per_serving"
+	LabelPer100g    = "per_100g"
+	LabelPer100ml   = "per_100ml"
+)
+
+// LabelReading 是營養標示照片的讀取結果（Python LabelService.ParseLabel）。
+// 只是候選值：預填到草稿的空欄位，組員對照原圖確認後才寫入；JSON 欄位名稱與 API 的 LabelReadingSummary 相同。
+type LabelReading struct {
+	Columns   []string    `json:"columns"`    // 判斷出的欄基準，由左到右；判斷不出時為空
+	Cells     []LabelCell `json:"cells"`      // 已確定欄基準的格
+	Lines     []string    `json:"lines"`      // OCR 文字行，供對照原圖
+	Checks    []RuleCheck `json:"checks"`     // 邏輯驗證結果，只提示
+	OCREngine string      `json:"ocr_engine"` // 引擎、版本與模型
+	Warnings  []string    `json:"warnings"`   // 讀取階段的警告代碼
+}
+
+// LabelCell 是一格讀取值；Value 為十進位字串（照標示原文），不在 Python 與 Go 之間經過浮點數。
+type LabelCell struct {
+	Field string `json:"field"` // serving_size、servings、energy、protein、…、sodium
+	Basis string `json:"basis"` // per_serving／per_100g／per_100ml；表頭欄位為空字串
+	Value string `json:"value"`
+	Unit  string `json:"unit"`
+}
+
+// RuleCheck 是一條邏輯驗證規則的結果。
+type RuleCheck struct {
+	Rule   string `json:"rule"`
+	Passed bool   `json:"passed"`
+	Detail string `json:"detail"`
 }
 
 // UserRef 是建立者、確認者等的顯示資訊。
