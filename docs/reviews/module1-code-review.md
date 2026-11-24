@@ -39,7 +39,7 @@
 | --- | --- | --- | --- |
 | B1 | [barcode.py:240](../../ai/src/dietai/preprocess/barcode.py#L240) `min_agree` | 票數跨嘗試累計，多尺度同一階的兩個倍率就能湊滿 2 票。若「確認」本意是兩個不同前處理階同意，需改為依階計票。 | ☐ |
 | B2 | [evaluation/barcode.py:167](../../ai/src/dietai/evaluation/barcode.py#L167) `judge` | 模組 docstring 寫負樣本「有任何結果 → false_positive」，實際只看已達 `min_agree` 的 `hits`；`min_agree > 1` 時零星解碼判為 true_negative。行為或文件擇一修正。 | ☐ |
-| B3 | [invoice_qr.py:68](../../ai/src/dietai/preprocess/invoice_qr.py#L68) | 左右兩碼只依中心 x 座標區分，照片轉 90°／180° 時會判錯或對調。建議 Go 端解析時以內容再確認（右碼以 `**` 開頭）。 | ☐ |
+| B3 | [invoice_qr.py:68](../../ai/src/dietai/preprocess/invoice_qr.py#L68) | 左右兩碼只依中心 x 座標區分，照片轉 90°／180° 時會判錯或對調。建議 Go 端解析時以內容再確認（右碼以 `**` 開頭）。 | 修正：Python 端即依 `**` 指定左右，並以此決定階梯何時停止（`fix/ai-preprocess-invoice-qr`） |
 | B4 | [label.py:133](../../ai/src/dietai/preprocess/label.py#L133)、[label.py:149](../../ai/src/dietai/preprocess/label.py#L149) | 光斑比例與 `GLARE_RETAKE` 都用膨脹後遮罩，`glare_max_ratio` 實際比的是「光斑＋外圈」，細碎光斑較早觸發重拍。 | ☐ |
 | B5 | [food.py:199](../../ai/src/dietai/preprocess/food.py#L199) | 中心落在較大橢圓內的候選一律捨棄，大盤上的小碟（盤中盤）會漏掉。 | ☐ |
 | B6 | [server/workbench.py:116](../../ai/src/dietai/server/workbench.py#L116) | 只要有旋轉或縮放就丟掉整份真值，連與位置無關的 EAN-13 內容也丟。 | ☐ |

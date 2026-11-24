@@ -28,7 +28,7 @@ manifest 格式同 E1（`dietai.evaluation.manifest`）。`truth` 欄為左、�
 
 ## 判定（設計 3.3 節）
 
-比照上線的 `locate_invoice_qrs`，只取面積最大的兩個 QR（排除背景中的其他 QR）再比對：
+比照上線的 `locate_invoice_qrs`，以 `select_invoice_pair` 選出兩個 QR 再比對：有 `**` 開頭的右碼時取「面積最大的非 `**`＋面積最大的 `**`」，否則取面積最大的兩個（排除背景中的其他 QR）：
 
 | 結果 | 條件 |
 | --- | --- |
@@ -58,7 +58,7 @@ manifest 格式同 E1（`dietai.evaluation.manifest`）。`truth` 欄為左、�
 | `run.json` | 時間、git commit、套件版本、manifest 雜湊、各實驗組完整設定 |
 | `summary.md` | 單一方法比較（整體與依各標籤）、各實驗組原順序的逐步升級（離線計算） |
 
-逐步升級由結果表離線算出（`simulate_invoice_ladder`）：依序累積各方法找到的 QR，湊滿兩個即停止，
+逐步升級由結果表離線算出（`simulate_invoice_ladder`）：依序累積各方法找到的 QR，同時有左碼候選與 `**` 右碼才停止（背景 QR 不算數），
 與上線的 `locate_invoice_qrs` 逐張一致（測試 `test_invoice.py` 驗證）。
 
 ## 合成資料冒煙結果（不是結論）
