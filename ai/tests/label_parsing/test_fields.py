@@ -8,6 +8,7 @@ from dietai.label_parsing import (
     Quantity,
     format_fields,
     group_lines,
+    normalize_line,
     normalize_text,
     parse_fields,
     parse_quantity,
@@ -50,6 +51,24 @@ def q(value: str, unit: str) -> Quantity:
 )
 def test_normalize_text(raw, expected):
     assert normalize_text(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("1.5 9 5.0 g", "1.5 9 5.0g"),  # 數字之間的空白保留為一個
+        ("8.4 公克  28.0 公克", "8.4g28.0g"),  # 單位與數字之間照常去除
+        ("Per 100 g", "per100g"),
+        ("每 100 公克", "每100g"),
+        ("蛋 白 質 2.1\t7.0 公克", "蛋白質2.1 7.0g"),
+        ("１．５　５．０", "1.5 5.0"),  # 全形空白也算
+        ("1,200 毫克", "1200mg"),
+    ],
+)
+def test_normalize_line_keeps_gaps_between_numbers(raw, expected):
+    assert normalize_line(raw) == expected
+    # 比對用的 normalize_text 仍去除所有空白（實驗設計 8.2 節）
+    assert normalize_text(raw) == expected.replace(" ", "")
 
 
 def test_parse_quantity():

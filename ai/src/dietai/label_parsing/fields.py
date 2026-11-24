@@ -9,6 +9,11 @@
    （``2,1``，常見的 OCR 誤讀）；
 4. 數值以十進位比較，``2.10`` 與 ``2.1`` 相同。
 
+由 OCR 文字行取數值（``parse_fields``）時另用 ``normalize_line``：規則相同，
+但**兩個數字之間的空白保留為一個空白**。標示上相鄰兩欄的數值以空白分隔，
+OCR 漏掉或讀錯單位時（``1.5 9 5.0 g``，``g`` 讀成 ``9``），去除空白會讓兩欄黏成錯的數值
+（``1.595``、``0g``）；保留空白則讀成三個值，由欄數或單位檢查擋下，不產生錯值。
+
 欄位（``FIELDS``）依法規營養標示的項目：``serving_size``（每一份量）、``servings``（本包裝含幾份）
 兩個表頭欄位，與熱量、蛋白質、脂肪、飽和脂肪、反式脂肪、碳水化合物、糖、鈉八個營養素欄位。
 營養素可能有多欄（每份、每 100 公克），同一行中依出現順序取得各欄的數值；百分比（每日參考值）略過。
@@ -68,6 +73,8 @@ _UNIT_SYNONYMS = (
 _QUANTITY = re.compile(r"(\d+(?:\.\d+)?)(kcal|mg|ml|g|份)?(%)?")
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
 _DECIMAL_COMMA = re.compile(r"(?<=\d),(?=\d)")
+_SPACE_BETWEEN_DIGITS = re.compile(r"(?<=\d)\s+(?=\d)")
+_GAP = "\x00"  # 正規化時暫代「數字之間的空白」，不會出現在 OCR 文字中
 
 
 @dataclass(frozen=True)
@@ -86,8 +93,20 @@ class Quantity:
 
 def normalize_text(text: str) -> str:
     """比對用的正規化：NFKC、小寫、去除空白、統一單位與小數點（見模組說明）。"""
+    return _normalize(text, keep_number_gaps=False)
+
+
+def normalize_line(text: str) -> str:
+    """取數值用的正規化：同 ``normalize_text``，但兩個數字之間的空白保留為一個（見模組說明）。"""
+    return _normalize(text, keep_number_gaps=True)
+
+
+def _normalize(text: str, keep_number_gaps: bool) -> str:
     s = unicodedata.normalize("NFKC", text).lower()
-    s = re.sub(r"\s+", "", s)
+    if keep_number_gaps:
+        # 先把數字之間的空白換成暫代字元，去除其餘空白後再換回一個空白
+        s = _SPACE_BETWEEN_DIGITS.sub(_GAP, s)
+    s = re.sub(r"\s+", "", s).replace(_GAP, " ")
     for word, unit in _UNIT_SYNONYMS:
         s = s.replace(word, unit)
     s = _THOUSANDS.sub("", s)
@@ -109,11 +128,11 @@ def parse_fields(lines: Iterable[str]) -> dict[str, list[Quantity]]:
 
     同一行可有多個欄位（例如「每一份量 30 公克，本包裝含 6 份」），每個欄位取「它到下一個
     欄位名稱之間」的數值。同一欄位出現在多行時，以第一次有數值的那一行為準。
-    找不到的欄位不會出現在結果中。
+    找不到的欄位不會出現在結果中。以 ``normalize_line`` 正規化：以空白分隔的兩個數字不會黏在一起。
     """
     out: dict[str, list[Quantity]] = {}
     for line in lines:
-        s = normalize_text(line)
+        s = normalize_line(line)
         hits = _find_keywords(s)
         for i, (_, end, field) in enumerate(hits):
             stop = hits[i + 1][0] if i + 1 < len(hits) else len(s)

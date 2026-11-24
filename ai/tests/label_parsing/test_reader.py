@@ -132,11 +132,22 @@ def test_unit_mismatch_skips_the_whole_row():
     rows = list(ROWS)
     rows[2] = ("脂肪", "8.49", "28.0 公克")  # OCR 把 8.4g 讀成 8.49、漏掉單位
     r = read_label(image(), FakeOcr(two_columns(rows=rows)), RAW_READ)
-    # 去除空白後兩個數字黏在一起，解析成 8.4928 與 0g：第二格的 0g 是錯的，整列都不能填
-    assert r.fields["fat"] == (q("8.4928", ""), q("0", "g"))
+    # 數字之間的空白保留，兩欄不會黏成錯值；第一格沒有單位，整列不填
+    assert r.fields["fat"] == (q("8.49", ""), q("28.0", "g"))
     assert LabelReadWarning.LABEL_UNIT_MISMATCH in r.warnings
     assert ("fat", "per_serving") not in r.cells and ("fat", "per_100g") not in r.cells
     assert ("protein", "per_100g") in r.cells
+
+
+def test_unit_misread_as_digit_is_not_glued_to_next_column():
+    # PaddleOCR 實際讀到的行（E2 冒煙）：每份的 g 讀成 9。不保留空白時會變成 1.595、0g（錯值）
+    rows = list(ROWS)
+    rows[6] = ("糖", "1.5 9", "5.0 公克")
+    r = read_label(image(), FakeOcr(two_columns(rows=rows)), RAW_READ)
+    assert r.fields["sugar"] == (q("1.5", ""), q("9", ""), q("5.0", "g"))
+    assert LabelReadWarning.LABEL_COLUMN_MISMATCH in r.warnings
+    assert ("sugar", "per_serving") not in r.cells and ("sugar", "per_100g") not in r.cells
+    assert r.cells["protein", "per_serving"] == q("2.1", "g")
 
 
 def test_energy_must_be_kcal():
