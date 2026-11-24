@@ -483,8 +483,8 @@ describe('編輯操作', () => {
 describe('pathTo', () => {
   it('從最上層一路到細部圖', () => {
     const doc = sampleDoc()
-    expect(pathTo(doc, 'm1').map((p) => p.diagram.id)).toEqual(['system', 'ai', 'm1'])
-    expect(pathTo(doc, 'nope').map((p) => p.diagram.id)).toEqual(['system'])
+    expect(pathTo(doc, 'm1').map((p) => p.diagram.id)).toEqual(['overview', 'system', 'ai', 'm1'])
+    expect(pathTo(doc, 'nope').map((p) => p.diagram.id)).toEqual(['overview'])
   })
 })
 

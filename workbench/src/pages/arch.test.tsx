@@ -29,13 +29,15 @@ describe('架構圖・檢視', () => {
     expect(screen.queryByRole('button', { name: '新增元件' })).not.toBeInTheDocument()
 
     // 沒有細部圖的元件點了不會換頁
-    await user.click(within(view()).getByRole('button', { name: '資料庫' }))
+    await user.click(within(view()).getByRole('button', { name: '產品資料庫' }))
     expect(crumbs()).toEqual(['飲食紀錄 APP'])
 
+    await user.click(within(view()).getByRole('button', { name: '三個服務' }))
+    expect(crumbs()).toEqual(['飲食紀錄 APP', '三個服務'])
     await user.click(within(view()).getByRole('button', { name: 'Python 外掛' }))
-    expect(crumbs()).toEqual(['飲食紀錄 APP', 'Python 外掛'])
+    expect(crumbs()).toEqual(['飲食紀錄 APP', '三個服務', 'Python 外掛'])
     await user.click(within(view()).getByRole('button', { name: '影像前處理' }))
-    expect(crumbs()).toEqual(['飲食紀錄 APP', 'Python 外掛', '影像前處理'])
+    expect(crumbs()).toEqual(['飲食紀錄 APP', '三個服務', 'Python 外掛', '影像前處理'])
     expect(within(view()).getByText('品質門檻')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '飲食紀錄 APP' }))
@@ -53,7 +55,7 @@ describe('架構圖・檢視', () => {
     renderAt('/arch/diagram')
     await screen.findByRole('heading', { name: '架構圖' }, WAIT)
     const doc = sampleDoc()
-    doc.diagrams.system!.nodes[0]!.title = '一般使用者'
+    doc.diagrams.overview!.nodes[0]!.title = '一般使用者'
     act(() => {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(doc))
       window.dispatchEvent(new StorageEvent('storage', { key: STORAGE_KEY }))
@@ -115,16 +117,16 @@ describe('架構圖・編輯器', () => {
 
   it('建立細部圖後進入新的一層；點兩下有細部圖的元件進入、Esc 回上一層', async () => {
     const user = userEvent.setup()
-    renderAt('/arch/edit')
+    renderAt('/arch/edit?d=system')
     await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
     await user.dblClick(nodeBtn('Python 外掛'))
-    expect(crumbs()).toEqual(['飲食紀錄 APP', 'Python 外掛'])
+    expect(crumbs()).toEqual(['飲食紀錄 APP', '三個服務', 'Python 外掛'])
     await user.keyboard('{Escape}')
-    expect(crumbs()).toEqual(['飲食紀錄 APP'])
+    expect(crumbs()).toEqual(['飲食紀錄 APP', '三個服務'])
 
     fireEvent.pointerDown(nodeBtn('資料庫'))
     await user.click(screen.getByRole('button', { name: '建立細部圖' }))
-    expect(crumbs()).toEqual(['飲食紀錄 APP', '資料庫'])
+    expect(crumbs()).toEqual(['飲食紀錄 APP', '三個服務', '資料庫'])
     expect(nodeBtn('輸入')).toBeInTheDocument()
   })
 
@@ -187,7 +189,7 @@ describe('架構圖・編輯器', () => {
 
   it('「進入細部圖」與刪除固定在屬性面板最上方', async () => {
     const user = userEvent.setup()
-    renderAt('/arch/edit')
+    renderAt('/arch/edit?d=system')
     await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
     fireEvent.pointerDown(nodeBtn('Python 外掛'))
     const panel = screen.getByRole('complementary', { name: '屬性' })
@@ -199,12 +201,12 @@ describe('架構圖・編輯器', () => {
     ).toBeTruthy()
     expect(within(panel).getByRole('button', { name: '刪除元件' })).toBeInTheDocument()
     await user.click(drill)
-    expect(crumbs()).toEqual(['飲食紀錄 APP', 'Python 外掛'])
+    expect(crumbs()).toEqual(['飲食紀錄 APP', '三個服務', 'Python 外掛'])
   })
 
   it('連線標籤：文字、字級、粗體、位置與顏色', async () => {
     const user = userEvent.setup()
-    renderAt('/arch/edit')
+    renderAt('/arch/edit?d=system')
     await screen.findByRole('heading', { name: '架構圖編輯器' }, WAIT)
     fireEvent.pointerDown(screen.getByTestId('edge-app>api'))
     const saved = () =>
