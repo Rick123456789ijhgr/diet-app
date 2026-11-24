@@ -131,22 +131,36 @@ def invoice_qr_scene(
 
 
 _LABEL_PAPER = (212, 218, 222)  # 白色包裝，亮度低於預設的光斑亮度下限
+# 各列：（欄位名稱, 每份, 每 100 公克）。表頭欄位（份量、份數）只有一個值，放在每份欄；
+# 名稱為空字串的一列是欄標題（每份／每 100 公克），每 100 公克的值由每份 ÷ 30 g × 100 取一位小數。
 _LABEL_ROWS = [
-    ("Serving size", "30 g"),
-    ("Servings", "6"),
-    ("Calories", "152 kcal"),
-    ("Protein", "2.1 g"),
-    ("Fat", "8.4 g"),
-    ("  Saturated fat", "3.2 g"),
-    ("  Trans fat", "0 g"),
-    ("Carbohydrate", "17.0 g"),
-    ("  Sugar", "1.5 g"),
-    ("Sodium", "125 mg"),
+    ("Serving size", "30 g", ""),
+    ("Servings", "6", ""),
+    ("", "Per serving", "Per 100 g"),
+    ("Calories", "152 kcal", "507 kcal"),
+    ("Protein", "2.1 g", "7.0 g"),
+    ("Fat", "8.4 g", "28.0 g"),
+    ("  Saturated fat", "3.2 g", "10.7 g"),
+    ("  Trans fat", "0 g", "0 g"),
+    ("Carbohydrate", "17.0 g", "56.7 g"),
+    ("  Sugar", "1.5 g", "5.0 g"),
+    ("Sodium", "125 mg", "417 mg"),
 ]
+# 兩個數值欄的右緣（640 寬的基準座標）
+_LABEL_COLUMN_RIGHT = (420, 600)
+
+
+def label_text_lines() -> list[str]:
+    """``nutrition_label`` 上各列的文字（不含標題），同一列以空白串接。
+
+    即理想 OCR 會排出的文字行，供測試與真值全文使用。
+    """
+    return [" ".join(p.strip() for p in row if p.strip()) for row in _LABEL_ROWS]
 
 
 def nutrition_label(height: int = 900, width: int = 640) -> Image:
-    """營養標示表格（BGR）：黑色外框貼齊影像邊緣、標題、粗分隔線與 10 列「欄位 數值」。
+    """營養標示表格（BGR）：黑色外框貼齊影像邊緣、標題、粗分隔線，下方 11 列：
+    份量、份數、欄標題（每份／每 100 公克），以及八項營養素的兩欄數值。
 
     以 640×900 為基準繪製後縮放，外框的外緣就是影像邊界，因此四角為影像四角。
     """
@@ -156,13 +170,17 @@ def nutrition_label(height: int = 900, width: int = 640) -> Image:
     cv2.rectangle(img, (0, 0), (bw - 1, bh - 1), ink, 16)  # 線寬一半在畫布外，可見 8 px
     cv2.putText(img, "Nutrition Facts", (40, 80), font, 1.6, ink, 3)
     cv2.line(img, (8, 110), (bw - 8, 110), ink, 8)
-    # 標題下方的高度均分給各列：欄位名稱靠左、數值靠右對齊，列與列之間畫細分隔線
+    # 標題下方的高度均分給各列：欄位名稱靠左、兩欄數值各自靠右對齊，列與列之間畫細分隔線
     row_h = (bh - 140) // len(_LABEL_ROWS)
-    for i, (name, value) in enumerate(_LABEL_ROWS):
+    for i, (name, *values) in enumerate(_LABEL_ROWS):
         y = 130 + i * row_h
-        cv2.putText(img, name, (40, y + row_h - 25), font, 1.0, ink, 2)
-        (tw, _), _ = cv2.getTextSize(value, font, 1.0, 2)
-        cv2.putText(img, value, (bw - 40 - tw, y + row_h - 25), font, 1.0, ink, 2)
+        baseline = y + row_h - 25
+        cv2.putText(img, name, (40, baseline), font, 1.0, ink, 2)
+        # 欄標題用較小的字，與數值欄的右緣對齊
+        scale = 0.8 if not name else 1.0
+        for value, right in zip(values, _LABEL_COLUMN_RIGHT, strict=True):
+            (tw, _), _ = cv2.getTextSize(value, font, scale, 2)
+            cv2.putText(img, value, (right - tw, baseline), font, scale, ink, 2)
         if i < len(_LABEL_ROWS) - 1:
             cv2.line(img, (8, y + row_h), (bw - 8, y + row_h), ink, 2)
     if (height, width) != (bh, bw):

@@ -207,3 +207,17 @@ def test_config_from_json_override():
         LabelReadConfig(line_overlap=0)
     with pytest.raises(ValueError, match="atwater_rel_tol"):
         LabelReadConfig(atwater_rel_tol=-0.1)
+
+
+def test_synthetic_label_has_both_columns():
+    # 合成標示（synthetic.nutrition_label）畫了欄標題與每 100 公克欄：理想 OCR 下 18 格全部確定
+    from dietai.synthetic.datasets import LABEL_TRUTH
+    from dietai.synthetic.scenes import label_text_lines
+
+    r = read_label(image(), FakeOcr(label_text_lines()), RAW_READ)
+    assert r.columns == ("per_serving", "per_100g")
+    assert len(r.cells) == 18
+    assert r.cells["energy", "per_100g"] == q("507", "kcal")
+    assert r.columns == tuple(LABEL_TRUTH["columns"])
+    assert LabelReadWarning.LABEL_BASIS_UNKNOWN not in r.warnings
+    assert all(c.passed for c in r.checks), r.checks

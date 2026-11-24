@@ -24,12 +24,12 @@ from dietai.synthetic.degrade import (
     scale_brightness,
 )
 from dietai.synthetic.scenes import (
-    _LABEL_ROWS,
     ean13_codes,
     ean13_scene,
     invoice_qr_scene,
     label_perspective_scene,
     label_scene,
+    label_text_lines,
     nutrition_label,
 )
 from dietai.synthetic.variants import write_variant_dataset
@@ -136,19 +136,19 @@ def write_barcode_dataset(
     return manifest
 
 
-# 合成營養標示的真值：與 ``scenes.nutrition_label`` 畫出的各列一致（只有每份一欄）
+# 合成營養標示的真值：與 ``scenes.nutrition_label`` 畫出的各列一致（每份、每 100 公克兩欄）
 LABEL_TRUTH: dict[str, object] = {
-    "columns": ["per_serving"],
+    "columns": ["per_serving", "per_100g"],
     "header": {"serving_size": "30 g", "servings": "6"},
     "facts": {
-        "energy": ["152 kcal"],
-        "protein": ["2.1 g"],
-        "fat": ["8.4 g"],
-        "saturated_fat": ["3.2 g"],
-        "trans_fat": ["0 g"],
-        "carbohydrate": ["17.0 g"],
-        "sugar": ["1.5 g"],
-        "sodium": ["125 mg"],
+        "energy": ["152 kcal", "507 kcal"],
+        "protein": ["2.1 g", "7.0 g"],
+        "fat": ["8.4 g", "28.0 g"],
+        "saturated_fat": ["3.2 g", "10.7 g"],
+        "trans_fat": ["0 g", "0 g"],
+        "carbohydrate": ["17.0 g", "56.7 g"],
+        "sugar": ["1.5 g", "5.0 g"],
+        "sodium": ["125 mg", "417 mg"],
     },
 }
 
@@ -168,7 +168,7 @@ def write_label_dataset(
     if n < 1:
         raise ValueError(f"n 至少為 1，收到 {n}")
     out = Path(out_dir)
-    text = "\n".join(["Nutrition Facts", *(f"{k.strip()} {v}" for k, v in _LABEL_ROWS)])
+    text = "\n".join(["Nutrition Facts", *label_text_lines()])
     rows: list[dict[str, str]] = []
     for i in range(n):
         name = f"l{i:02d}"
