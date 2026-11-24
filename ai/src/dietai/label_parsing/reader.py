@@ -228,8 +228,8 @@ def assign_cells(
             if len(values) != len(columns):
                 warn(LabelReadWarning.LABEL_COLUMN_MISMATCH)
                 continue
-            # 一格單位不符就整列不填：正規化會去除空白，漏掉單位的數值會和下一欄黏在一起
-            # （「8.49 28.0 公克」→「8.4928.0g」→ 8.4928、0g），同列其他格也不可信
+            # 一格單位不符就整列不填：單位漏掉或讀錯（例如 g 讀成 9）表示這一行讀得不好，
+            # 同列其他格也不可信。數字之間的空白已保留（fields.normalize_line），不會黏成錯值
             if not units_ok(name, values):
                 continue
             for basis, q in zip(columns, values, strict=True):
