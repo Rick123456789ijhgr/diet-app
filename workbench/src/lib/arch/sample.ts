@@ -1,6 +1,7 @@
-// 預設範例：本專案自己的架構，分三層（服務 → Python 外掛的元件 → 模組一的流程）。
+// 預設範例：本專案自己的架構，分四層：L1 全貌（使用者輸入 → 模組一至五的資料流，依規劃書的架構圖）
+// → L2 三個服務 → L3 Python 外掛的元件 → L4 模組一的流程。
 // 模組一那張的排法與簡報「05 — 各模組功能實作」第 20 頁相同。座標都在 20 px 格點上。
-import type { ArchDoc, ArchEdge, ArchNode, NodeEnd, NodeStyle, Route } from './model'
+import type { ArchDoc, ArchEdge, ArchNode, NodeEnd, NodeStyle, Route, Side } from './model'
 import { DEFAULT_EDGE_STYLE, DEFAULT_NODE_STYLE } from './theme'
 
 const node = (
@@ -39,18 +40,187 @@ const edge = (from: string, to: string, route: Route = 'auto', label = ''): Arch
   style: { ...DEFAULT_EDGE_STYLE },
 })
 
+/** 指定兩端接在哪一邊（pos 省略為中點），讓多條線不重疊、不穿過元件。 */
+const edgeAt = (
+  from: string,
+  fromSide: Side,
+  to: string,
+  toSide: Side,
+  { label = '', fromPos, toPos }: { label?: string; fromPos?: number; toPos?: number } = {},
+): ArchEdge => ({
+  ...edge(from, to, 'auto', label),
+  from: { ...end(from), side: fromSide, ...(fromPos === undefined ? {} : { pos: fromPos }) },
+  to: { ...end(to), side: toSide, ...(toPos === undefined ? {} : { pos: toPos }) },
+})
+
+/** 全貌圖的模組配色（小標寫模組名稱）。 */
+const MOD = {
+  input: '#3a4657',
+  m1: '#14243b',
+  m2: '#1e3a8a',
+  m3: '#0f766e',
+  m4: '#5b21b6',
+  m5: '#15803d',
+} as const
+
+/** 全貌圖的元件較小、依模組上色。 */
+const flow = (fill: string, extra: Partial<NodeStyle> = {}) => ({
+  w: 260,
+  h: 120,
+  style: { titleSize: 22, kickerSize: 16, fill, stroke: fill, ...extra },
+})
+
+const db = (fill: string) => ({ ...flow(fill, { shape: 'cylinder', align: 'center' }), h: 140 })
+
 /** 服務層的元件較矮較寬、字小一點。 */
 const svc = { w: 260, h: 140, accentW: 140, style: { titleSize: 26, kickerSize: 18 } }
 
 export function sampleDoc(): ArchDoc {
   return {
     version: 1,
-    root: 'system',
+    root: 'overview',
     diagrams: {
+      overview: {
+        id: 'overview',
+        level: 'L1 全貌',
+        title: '飲食紀錄 APP',
+        nodes: [
+          // 使用者輸入
+          node('in_pack', 340, 0, '輸入', '條碼與營養標示', {
+            ...flow(MOD.input),
+            note: '拍包裝的條碼與營養標示。即時掃條碼在 APP 以現成套件完成；靜態照片才送伺服器前處理。',
+          }),
+          node('in_invoice', 680, 0, '輸入', '電子發票 QR code', {
+            ...flow(MOD.input),
+            note: '電子發票左右兩個 QR code，含品名、數量、金額。',
+          }),
+          node('in_food', 1020, 0, '輸入', '食物照片', {
+            ...flow(MOD.input),
+            note: '沒有包裝的餐點照片，交給 VLM 辨識。',
+          }),
+          node('in_search', 1360, 0, '輸入', '文字搜尋', {
+            ...flow(MOD.input),
+            note: '使用者直接輸入食物名稱，經 RAG 從資料庫找候選。',
+          }),
+          // 模組一：影像前處理
+          node('quality', 680, 200, '模組一', '品質檢查', {
+            ...flow(MOD.m1),
+            note: '模糊、曝光、解析度；未通過門檻時回傳警告代碼（例如 TOO_BLURRY）。Python preprocess.quality。',
+          }),
+          node('pre_code', 160, 400, '模組一', '條碼與 QR 前處理', {
+            ...flow(MOD.m1),
+            note: '二值化、旋轉、多尺度；條碼逐步升級含 rotate、locate（定位後轉正裁切＋CLAHE）。Python preprocess.barcode、preprocess.invoice_qr。',
+          }),
+          node('pre_label', 680, 400, '模組一', '營養標示前處理', {
+            ...flow(MOD.m1),
+            note: '表格定位、透視校正、去反光、CLAHE。Python preprocess.label。',
+          }),
+          node('pre_food', 1020, 400, '模組一', '食物照片前處理', {
+            ...flow(MOD.m1),
+            note: '逐菜裁切、盤緣橢圓、縮放壓縮後交給 VLM。Python preprocess.food。',
+          }),
+          // 模組二：解碼與解析
+          node('dec_barcode', 0, 600, '模組二', '條碼解碼', {
+            ...flow(MOD.m2),
+            note: 'EAN-13 檢查碼驗證，以 GTIN 查產品資料庫。Go barcode。',
+          }),
+          node('dec_invoice', 340, 600, '模組二', '發票 QR 解碼', {
+            ...flow(MOD.m2),
+            note: '解出品項明細，對應到產品資料庫的品項與別名。Go invoice。',
+          }),
+          node('ocr', 680, 600, '模組二', '營養標示 OCR', {
+            ...flow(MOD.m2),
+            note: 'OCR（預設 PaddleOCR）與 VLM 並行；欄位解析成十進位字串。gRPC LabelService.ParseLabel → Python label_parsing。',
+          }),
+          node('validate', 680, 800, '模組二', '營養邏輯驗證', {
+            ...flow(MOD.m2),
+            note: '熱量與三大營養素是否吻合、每份與每 100 g 換算等規則；讀值只預填冷啟動草稿的空欄位（Go coldstart）。',
+          }),
+          // 模組三：自建產品資料庫
+          node('product_db', 1020, 1000, '模組三', '產品資料庫', {
+            ...db(MOD.m3),
+            note: '產品、營養、影像、價格、別名。Postgres＋MinIO；Go 是唯一寫入者，Python 只讀 view。',
+          }),
+          node('fda_db', 1700, 600, '模組三', '食藥署食品資料', {
+            ...db(MOD.m3),
+            note: '食藥署一般食物營養成分資料，作為沒有包裝的食物的候選來源。',
+          }),
+          // 模組四：LLM 辨識優化與校正
+          node('vlm', 1020, 600, '模組四', 'VLM 辨識', {
+            ...flow(MOD.m4),
+            note: '外部 VLM 結構化輸出（食物名稱、份量描述）；不採用它給的數字。Python recognition、adapters/llm。',
+          }),
+          node('rag', 1360, 600, '模組四', 'RAG 候選檢索', {
+            ...flow(MOD.m4),
+            note: '從產品資料庫與食藥署資料找候選品項，約束 LLM 只能從中選。',
+          }),
+          node('replace', 1360, 800, '模組四', '確定性數值替換', {
+            ...flow(MOD.m4),
+            note: '營養數字一律換成資料庫的值，由程式計算。',
+          }),
+          node('calibrate', 1360, 1000, '模組四', '統計校正', {
+            ...flow(MOD.m4),
+            note: '以有真值的產品評測 LLM 的偏差，用規則與統計方法校正份量等估計。',
+          }),
+          // 模組五：營養應用層
+          node('confirm', 680, 1300, '模組五', '使用者確認與修正', {
+            ...flow(MOD.m5),
+            note: 'APP 顯示辨識結果讓使用者確認或修正；修正回流到資料庫。Flutter diary、Go diary。',
+          }),
+          node('calc', 680, 1500, '模組五', '營養計算引擎', {
+            ...flow(MOD.m5),
+            note: '由資料庫的營養值以確定性程式計算熱量與營養素。Go nutrition。',
+          }),
+          node('gap', 680, 1700, '模組五', '需求比對與缺口', {
+            ...flow(MOD.m5),
+            note: '與個人每日需求比對，找出不足或超標的營養素。Go profile、Python analytics。',
+          }),
+          node('suggest', 680, 1900, '模組五', '下一餐建議', {
+            ...flow(MOD.m5),
+            note: '依營養缺口建議下一餐。Flutter insights。',
+          }),
+          // 下一層：程式跑在哪裡
+          node('services', 1360, 1600, '部署', '三個服務', {
+            ...flow(MOD.input, { shape: 'hexagon', align: 'center' }),
+            child: 'system',
+            note: 'Flutter APP、Go 主伺服器、Python 外掛與開發工作台。點進去看服務之間怎麼連接。',
+          }),
+        ],
+        edges: [
+          edge('in_pack', 'quality'),
+          edge('in_invoice', 'quality'),
+          edge('in_food', 'quality'),
+          edge('quality', 'pre_code'),
+          edge('quality', 'pre_label'),
+          edge('quality', 'pre_food'),
+          edge('pre_code', 'dec_barcode'),
+          edge('pre_code', 'dec_invoice'),
+          edge('pre_label', 'ocr'),
+          edge('ocr', 'validate'),
+          edge('pre_food', 'vlm'),
+          edge('vlm', 'rag'),
+          edge('in_search', 'rag'),
+          edge('fda_db', 'rag'),
+          edgeAt('product_db', 'right', 'rag', 'left', { fromPos: 0.25, toPos: 0.75 }),
+          edge('rag', 'replace'),
+          edge('replace', 'calibrate'),
+          edgeAt('dec_barcode', 'bottom', 'product_db', 'left', { label: '查詢', toPos: 0.75 }),
+          edgeAt('dec_invoice', 'bottom', 'product_db', 'left', { label: '品項對應', toPos: 0.25 }),
+          edgeAt('validate', 'bottom', 'product_db', 'left', { fromPos: 0.75 }),
+          edgeAt('dec_barcode', 'bottom', 'confirm', 'left', { toPos: 0.75 }),
+          edgeAt('dec_invoice', 'bottom', 'confirm', 'left', { toPos: 0.25 }),
+          edgeAt('validate', 'bottom', 'confirm', 'top', { fromPos: 0.25, toPos: 0.25 }),
+          edgeAt('calibrate', 'bottom', 'confirm', 'right', { toPos: 0.75 }),
+          edgeAt('confirm', 'right', 'product_db', 'bottom', { label: '修正回流', fromPos: 0.25 }),
+          edge('confirm', 'calc'),
+          edge('calc', 'gap'),
+          edge('gap', 'suggest'),
+        ],
+      },
       system: {
         id: 'system',
         level: 'L2 容器',
-        title: '飲食紀錄 APP',
+        title: '三個服務',
         nodes: [
           node('user', 0, 0, 'PERSON', '使用者', {
             ...svc,
