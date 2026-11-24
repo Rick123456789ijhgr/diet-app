@@ -443,6 +443,16 @@ class LadderConfig:
         calibrate=True,
         group="barcode_locate",
     )
+    locate_gap: int = param(
+        20,
+        "裁切上下留白",
+        "Locate gap",
+        "每個轉正裁切的上下各補幾像素白邊再上下拼接，隔開相鄰的裁切（像素）。",
+        min=0,
+        max=200,
+        step=5,
+        group="barcode_locate",
+    )
     deskew_min_deg: float = param(
         3.0,
         "最小校正角度",
@@ -521,8 +531,8 @@ class LadderConfig:
             raise ValueError("須滿足 sharpen_sigma > 0、sharpen_amount ≥ 0")
         if self.clahe_clip <= 0 or self.clahe_tile < 1:
             raise ValueError("須滿足 clahe_clip > 0、clahe_tile ≥ 1")
-        if self.locate_pad < 1 or self.locate_max_width < 0:
-            raise ValueError("須滿足 locate_pad ≥ 1、locate_max_width ≥ 0")
+        if self.locate_pad < 1 or self.locate_max_width < 0 or self.locate_gap < 0:
+            raise ValueError("須滿足 locate_pad ≥ 1、locate_max_width ≥ 0、locate_gap ≥ 0")
         if self.deskew_min_deg < 0:
             raise ValueError("deskew_min_deg 不得為負")
         if self.min_agree < 1:
