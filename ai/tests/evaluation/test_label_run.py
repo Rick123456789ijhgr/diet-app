@@ -17,9 +17,9 @@ from dietai.evaluation import (
 from dietai.label_parsing import OcrBox
 from dietai.preprocess import LabelConfig
 from dietai.synthetic import write_label_dataset
-from dietai.synthetic.scenes import _LABEL_ROWS
+from dietai.synthetic.scenes import label_text_lines
 
-PERFECT = [f"{k.strip()} {v}" for k, v in _LABEL_ROWS]
+PERFECT = label_text_lines()
 
 
 class FakeOcr:
@@ -44,7 +44,7 @@ def test_synthetic_label_dataset(dataset):
     m = read_manifest(dataset)
     assert len(m.items) == 3 and m.tag_columns == ("source_id", "strength")
     truth = load_label_truth(dataset.parent / m.items[0].truth)
-    assert len(truth.cells) == 10 and truth.quad is not None and truth.text
+    assert len(truth.cells) == 18 and truth.quad is not None and truth.text
 
 
 def test_run_scores_every_engine_and_method(dataset, tmp_path):
@@ -72,7 +72,7 @@ def test_run_scores_every_engine_and_method(dataset, tmp_path):
     by = {(s["method"], s["engine"]): s for s in summarize_label(rows)}
     assert by["raw", "perfect"]["field_accuracy"] == 1.0
     assert by["raw", "perfect"]["all_correct"] == 1.0
-    assert by["raw", "sloppy"]["field_accuracy"] == pytest.approx(0.1)  # 10 格只對熱量
+    assert by["raw", "sloppy"]["field_accuracy"] == pytest.approx(1 / 18)  # 18 格只對每份熱量
     # 原圖不做定位；校正方法在合成場景上找到正確的四角
     assert by["raw", "perfect"]["located"] is None
     assert by["rectify", "perfect"]["located"] == 1.0

@@ -121,8 +121,9 @@ def test_group_lines_merges_boxes_on_the_same_row():
 
 def test_synthetic_label_rows_parse_completely():
     # 合成營養標示（synthetic.nutrition_label）的每一列都能解析，供合成資料演練整套流程
-    from dietai.synthetic.scenes import _LABEL_ROWS
+    from dietai.synthetic.scenes import label_text_lines
 
-    fields = parse_fields(f"{name} {value}" for name, value in _LABEL_ROWS)
+    fields = parse_fields(label_text_lines())
     assert set(fields) == set(FIELDS)
-    assert fields["energy"] == [q("152", "kcal")] and fields["servings"] == [q("6", "份")]
+    assert fields["energy"] == [q("152", "kcal"), q("507", "kcal")]
+    assert fields["servings"] == [q("6", "份")]
