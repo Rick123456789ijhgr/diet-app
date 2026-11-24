@@ -7,18 +7,24 @@ import (
 	"github.com/your-org/diet-app/api/internal/coldstart"
 )
 
-// Preprocessor 以 Python 的 PreprocessService 實作 coldstart.Preprocessor：
-// 每張照片做品質檢查；條碼照片另做條碼解碼，營養標示照片另做標示前處理（只取四角與警告）。
+// Preprocessor 以 Python 的 PreprocessService 與 LabelService 實作 coldstart.Preprocessor：
+// 每張照片做品質檢查；條碼照片另做條碼解碼，營養標示照片另做標示前處理（只取四角與警告）
+// 與營養標示讀取（LabelService.ParseLabel，結果預填到草稿）。
 //
 // 與 Service 不同，這裡直接送出影像本體（ImageInput.Encoded）而非 image_id，因此不依賴 Python
-// 的開發模式暫存區，也只需要正式的 PreprocessService。所有呼叫都用預設設定（不帶覆寫）。
+// 的開發模式暫存區，只需要正式的服務。所有呼叫都用預設設定（不帶覆寫）。
+//
+// 營養標示讀取在 Python 內會再做一次前處理；仍保留單獨的 PreprocessLabel，讓 OCR 引擎無法使用時
+// 照樣取得四角與前處理警告。
 type Preprocessor struct {
-	ai dietaiv1.PreprocessServiceClient
+	ai    dietaiv1.PreprocessServiceClient
+	label dietaiv1.LabelServiceClient
 }
 
-// NewPreprocessor 以 PreprocessService 客戶端建立 Preprocessor（正式為 aiclient.Client）。
-func NewPreprocessor(ai dietaiv1.PreprocessServiceClient) *Preprocessor {
-	return &Preprocessor{ai: ai}
+// NewPreprocessor 以兩個服務的客戶端建立 Preprocessor（正式皆為 aiclient.Client）；
+// label 為 nil 時不做營養標示讀取。
+func NewPreprocessor(ai dietaiv1.PreprocessServiceClient, label dietaiv1.LabelServiceClient) *Preprocessor {
+	return &Preprocessor{ai: ai, label: label}
 }
 
 var _ coldstart.Preprocessor = (*Preprocessor)(nil)
@@ -73,6 +79,39 @@ func (p *Preprocessor) Preprocess(ctx context.Context, kind coldstart.Kind, data
 			out.LabelQuad = append(out.LabelQuad, coldstart.Point{X: pt.GetX(), Y: pt.GetY()})
 		}
 		addWarnings(resp.GetWarnings())
+		if p.label == nil {
+			return out
+		}
+		read, err := p.label.ParseLabel(ctx, &dietaiv1.ParseLabelRequest{Image: input()})
+		if err != nil {
+			// 四角與前處理警告已取得，只記錄讀取失敗的原因（例如 OCR_UNAVAILABLE、逾時）
+			out.Error = "營養標示讀取失敗：" + toError(err).Message
+			return out
+		}
+		out.LabelReading = labelReading(read)
+	}
+	return out
+}
+
+// labelReading 把 ParseLabelResponse 轉成冷啟動保存的摘要；OCR 文字框與影像不保存（只需文字行對照原圖）。
+// 讀取階段的警告放在 LabelReading.Warnings；前處理的警告已由 PreprocessLabel 取得，不重複合併。
+func labelReading(r *dietaiv1.ParseLabelResponse) *coldstart.LabelReading {
+	out := &coldstart.LabelReading{
+		Columns:   nonNil(r.GetColumns()),
+		Cells:     []coldstart.LabelCell{},
+		Lines:     nonNil(r.GetLines()),
+		Checks:    []coldstart.RuleCheck{},
+		OCREngine: r.GetOcrEngine(),
+		Warnings:  nonNil(r.GetWarnings()),
+	}
+	for _, c := range r.GetCells() {
+		out.Cells = append(out.Cells, coldstart.LabelCell{
+			Field: c.GetField(), Basis: c.GetBasis(),
+			Value: c.GetQuantity().GetValue(), Unit: c.GetQuantity().GetUnit(),
+		})
+	}
+	for _, c := range r.GetChecks() {
+		out.Checks = append(out.Checks, coldstart.RuleCheck{Rule: c.GetRule(), Passed: c.GetPassed(), Detail: c.GetDetail()})
 	}
 	return out
 }

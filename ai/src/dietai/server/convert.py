@@ -15,12 +15,15 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from dataclasses import asdict
+from decimal import Decimal
 from typing import Any
 
 from dietai.devtools.store import StoredImage
+from dietai.label_parsing.fields import Quantity
+from dietai.label_parsing.reader import LabelReading
 from dietai.preprocess import DecodeHit, InvoiceQrResult, LadderResult, QualityReport, RungAttempt
 from dietai.preprocess.types import Box, Ellipse, StepRecord
-from dietai.v1 import preprocess_pb2, workbench_pb2
+from dietai.v1 import label_pb2, preprocess_pb2, workbench_pb2
 
 
 def dumps(value: Any) -> str:
@@ -136,3 +139,57 @@ def box(b: Box) -> preprocess_pb2.Box:
 def ellipse(e: Ellipse) -> preprocess_pb2.Ellipse:
     """``Ellipse`` → proto：原圖浮點像素；``major``／``minor`` 為軸全長，``angle`` 單位為度。"""
     return preprocess_pb2.Ellipse(cx=e.cx, cy=e.cy, major=e.major, minor=e.minor, angle=e.angle)
+
+
+def label_response(
+    r: LabelReading, image: preprocess_pb2.ImageOutput
+) -> label_pb2.ParseLabelResponse:
+    """``LabelReading`` → ``ParseLabelResponse``。
+
+    數值以十進位字串傳送（``Quantity.value`` 的 ``Decimal`` 去掉多餘的 0，``2.10`` → ``"2.1"``），
+    不經浮點數。``image`` 為前處理後的影像，由呼叫端依開發模式決定附檔或給暫存區的 id。
+    """
+
+    def quantity(q: Quantity) -> label_pb2.LabelQuantity:
+        return label_pb2.LabelQuantity(value=decimal_text(q.value), unit=q.unit)
+
+    out = label_pb2.ParseLabelResponse(
+        cells=[
+            label_pb2.LabelCell(field=f, basis=basis, quantity=quantity(q))
+            for (f, basis), q in r.cells.items()
+        ],
+        columns=list(r.columns),
+        fields=[
+            label_pb2.LabelFieldValues(field=f, values=[quantity(q) for q in values])
+            for f, values in r.fields.items()
+        ],
+        lines=list(r.lines),
+        boxes=[
+            label_pb2.OcrTextBox(
+                text=b.text,
+                x=float(b.x),
+                y=float(b.y),
+                w=float(b.w),
+                h=float(b.h),
+                score=float(b.score),
+            )
+            for b in r.boxes
+        ],
+        image=image,
+        checks=[
+            label_pb2.LabelRuleResult(rule=c.rule, passed=c.passed, detail=c.detail)
+            for c in r.checks
+        ],
+        ocr_engine=r.ocr_engine,
+        warnings=[w.value for w in r.warnings],
+        steps=steps(r.steps),
+    )
+    # 未定位或找不到表格時 quad 為 None，回應中留空
+    if r.quad is not None:
+        out.quad.extend(preprocess_pb2.Point(x=float(x), y=float(y)) for x, y in r.quad)
+    return out
+
+
+def decimal_text(value: Decimal) -> str:
+    """十進位數 → 不帶指數與多餘 0 的字串（``2.10`` → ``"2.1"``、``1E+2`` → ``"100"``）。"""
+    return format(value.normalize(), "f")

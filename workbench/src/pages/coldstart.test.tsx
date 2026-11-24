@@ -189,6 +189,43 @@ describe('上傳清單', () => {
   })
 })
 
+describe('營養標示讀取', () => {
+  beforeEach(() => resetColdstart({ loggedIn: true }))
+
+  it('營養標示照片下顯示讀取結果：預填格數、讀取警告、驗證未過與 OCR 文字行', async () => {
+    const user = userEvent.setup()
+    const image: SubmissionImage = {
+      ...labelImage,
+      preprocess: {
+        quality_passed: true,
+        warnings: [],
+        label_reading: {
+          columns: ['per_serving'],
+          cells: [{ field: 'protein', basis: 'per_serving', value: '2.1', unit: 'g' }],
+          lines: ['營養標示', '蛋白質 2.1 公克'],
+          checks: [
+            { rule: 'atwater', passed: false, detail: '標示 152，推算 120.0' },
+            { rule: 'sugar_le_carb', passed: true, detail: '' },
+          ],
+          ocr_engine: 'paddleocr 3.0 mobile',
+          warnings: ['LABEL_COLUMN_MISMATCH'],
+        },
+      },
+    }
+    const sub = addSubmission({ draft: { name: '餅乾' }, images: [image] })
+    renderAt(`/coldstart/submissions/${sub.id}`)
+    const slot = await screen.findByRole('region', { name: '營養標示照片' }, WAIT)
+    expect(slot).toHaveTextContent('讀到 1 格，已預填空欄位')
+    expect(slot).toHaveTextContent('部分營養素的欄數不符，未預填')
+    expect(slot).toHaveTextContent('驗證未過：熱量與三大營養素推算')
+    expect(slot).not.toHaveTextContent('糖 ≤ 碳水化合物')
+    // 文字行收在可展開的區塊
+    await user.click(within(slot).getByText('OCR 文字行（2）'))
+    expect(within(slot).getByText('蛋白質 2.1 公克')).toBeVisible()
+    expect(slot).toHaveTextContent('paddleocr 3.0 mobile')
+  })
+})
+
 describe('確認', () => {
   beforeEach(() => resetColdstart({ loggedIn: true }))
 

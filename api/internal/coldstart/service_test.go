@@ -337,3 +337,58 @@ func TestReviewFixes(t *testing.T) {
 		t.Errorf("超過上限：%v", err)
 	}
 }
+
+func TestUploadLabelPrefillsOnlyEmptyFields(t *testing.T) {
+	ctx := context.Background()
+	reading := &coldstart.LabelReading{
+		Columns: []string{coldstart.LabelPerServing},
+		Cells: []coldstart.LabelCell{
+			{Field: "serving_size", Value: "30", Unit: "g"},
+			{Field: "protein", Basis: coldstart.LabelPerServing, Value: "2.1", Unit: "g"},
+			{Field: "fat", Basis: coldstart.LabelPerServing, Value: "8.4", Unit: "g"},
+		},
+		Checks: []coldstart.RuleCheck{{Rule: "atwater", Passed: false, Detail: "差距過大"}},
+	}
+	pre := coldstarttest.FakePreprocessor{coldstart.KindLabel: {Warnings: []string{}, LabelReading: reading}}
+	svc := coldstart.NewService(coldstarttest.NewMemStore(), coldstarttest.NewMemObjects(), pre, nil)
+	sub, _ := svc.Create(ctx, user)
+	// 組員先填了脂肪
+	sub, _ = svc.SaveDraft(ctx, sub.ID, coldstart.Draft{
+		Nutrition: &coldstart.NutritionDraft{PerServing: &coldstart.Nutrients{FatG: f(9)}},
+	}, "")
+
+	sub, err := svc.UploadImage(ctx, sub.ID, coldstart.KindLabel, pngBytes(t, 40, 30))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps := sub.Draft.Nutrition.PerServing
+	if ps.ProteinG == nil || *ps.ProteinG != 2.1 {
+		t.Errorf("空欄位應預填：蛋白質 %v", ps.ProteinG)
+	}
+	if *ps.FatG != 9 {
+		t.Errorf("不應覆蓋組員輸入的脂肪：%v", *ps.FatG)
+	}
+	if sub.Draft.ServingSize == nil || *sub.Draft.ServingSize != 30 {
+		t.Errorf("份量應預填：%v", sub.Draft.ServingSize)
+	}
+	// 讀取結果（含驗證失敗的提示）隨照片保存，供工作台對照
+	img, _ := sub.Image(coldstart.KindLabel)
+	if img.Preprocess.LabelReading == nil || img.Preprocess.LabelReading.Checks[0].Passed {
+		t.Errorf("讀取結果 = %+v", img.Preprocess.LabelReading)
+	}
+}
+
+func TestUploadLabelSucceedsWhenReadingFails(t *testing.T) {
+	ctx := context.Background()
+	pre := coldstarttest.FakePreprocessor{coldstart.KindLabel: {Warnings: []string{}, Error: "營養標示讀取失敗：逾時"}}
+	svc := coldstart.NewService(coldstarttest.NewMemStore(), coldstarttest.NewMemObjects(), pre, nil)
+	sub, _ := svc.Create(ctx, user)
+	sub, err := svc.UploadImage(ctx, sub.ID, coldstart.KindLabel, pngBytes(t, 40, 30))
+	if err != nil {
+		t.Fatalf("讀取失敗不應讓上傳失敗：%v", err)
+	}
+	img, ok := sub.Image(coldstart.KindLabel)
+	if !ok || img.Preprocess.Error == "" || sub.Draft.Nutrition != nil {
+		t.Errorf("照片 = %+v、草稿 = %+v", img, sub.Draft)
+	}
+}

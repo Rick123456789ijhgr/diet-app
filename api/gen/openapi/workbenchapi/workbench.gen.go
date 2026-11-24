@@ -511,8 +511,11 @@ type ImagePreprocess struct {
 	Error *string `json:"error,omitempty"`
 
 	// LabelQuad 營養標示照片中表格的四角（原圖座標）
-	LabelQuad     *[]Point `json:"label_quad,omitempty"`
-	QualityPassed *bool    `json:"quality_passed,omitempty"`
+	LabelQuad *[]Point `json:"label_quad,omitempty"`
+
+	// LabelReading 營養標示讀取結果（LabelService.ParseLabel），只是候選值： 預填到草稿的空欄位，須經組員對照原圖確認後才寫入
+	LabelReading  *LabelReadingSummary `json:"label_reading,omitempty"`
+	QualityPassed *bool                `json:"quality_passed,omitempty"`
 
 	// Warnings PreprocessWarning 代碼
 	Warnings []string `json:"warnings"`
@@ -538,6 +541,37 @@ type InvoiceQrResult struct {
 	Warnings []string      `json:"warnings"`
 }
 
+// LabelReadingCell defines model for LabelReadingCell.
+type LabelReadingCell struct {
+	// Basis per_serving／per_100g／per_100ml；表頭欄位為空字串
+	Basis string `json:"basis"`
+
+	// Field serving_size、servings、energy、protein、fat、saturated_fat、trans_fat、carbohydrate、sugar、sodium
+	Field string `json:"field"`
+	Unit  string `json:"unit"`
+
+	// Value 十進位字串，照標示原文，例如 "2.1"
+	Value string `json:"value"`
+}
+
+// LabelReadingSummary 營養標示讀取結果（LabelService.ParseLabel），只是候選值： 預填到草稿的空欄位，須經組員對照原圖確認後才寫入
+type LabelReadingSummary struct {
+	Cells []LabelReadingCell `json:"cells"`
+
+	// Checks 邏輯驗證結果；只提示，不阻擋確認
+	Checks []LabelRuleCheck `json:"checks"`
+
+	// Columns 判斷出的欄基準（per_serving／per_100g／per_100ml），由左到右；判斷不出時為空
+	Columns []string `json:"columns"`
+
+	// Lines OCR 排成的文字行，由上到下，供對照原圖
+	Lines     []string `json:"lines"`
+	OcrEngine string   `json:"ocr_engine"`
+
+	// Warnings 讀取階段的警告代碼，例如 LABEL_BASIS_UNKNOWN
+	Warnings []string `json:"warnings"`
+}
+
 // LabelResult defines model for LabelResult.
 type LabelResult struct {
 	// GlareRatio 光斑步驟未啟用時為 -1
@@ -551,6 +585,13 @@ type LabelResult struct {
 	QuadMethod *string  `json:"quad_method,omitempty"`
 	Steps      []Step   `json:"steps"`
 	Warnings   []string `json:"warnings"`
+}
+
+// LabelRuleCheck defines model for LabelRuleCheck.
+type LabelRuleCheck struct {
+	Detail string `json:"detail"`
+	Passed bool   `json:"passed"`
+	Rule   string `json:"rule"`
 }
 
 // LadderRequest defines model for LadderRequest.

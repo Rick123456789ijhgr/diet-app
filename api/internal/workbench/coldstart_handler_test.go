@@ -235,3 +235,25 @@ func TestSessionLookupErrorIsNot401(t *testing.T) {
 		t.Errorf("status = %d，預期 500", resp.StatusCode)
 	}
 }
+
+func TestSubmissionIncludesLabelReading(t *testing.T) {
+	reading := &coldstart.LabelReading{
+		Columns:   []string{"per_serving"},
+		Cells:     []coldstart.LabelCell{{Field: "protein", Basis: "per_serving", Value: "2.1", Unit: "g"}},
+		Lines:     []string{"蛋白質 2.1 公克"},
+		Checks:    []coldstart.RuleCheck{{Rule: "atwater", Passed: true}},
+		OCREngine: "fake 1.0",
+		Warnings:  []string{},
+	}
+	out, err := submission(coldstart.Submission{Images: []coldstart.Image{{
+		Kind: coldstart.KindLabel, Preprocess: coldstart.ImagePreprocess{Warnings: []string{}, LabelReading: reading},
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.Images[0].Preprocess.LabelReading
+	if got == nil || got.OcrEngine != "fake 1.0" || got.Cells[0].Value != "2.1" || got.Cells[0].Basis != "per_serving" ||
+		got.Lines[0] != "蛋白質 2.1 公克" || !got.Checks[0].Passed || len(got.Columns) != 1 {
+		t.Errorf("label_reading = %+v", got)
+	}
+}
