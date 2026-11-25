@@ -35,7 +35,8 @@ class QualityFeatures:
     """一張影像的品質量測值。
 
     - ``blur``：拉普拉斯變異數（越小越模糊），同 ``quality.blur_score``
-    - ``brightness``：灰階平均（0–255）；``dark_ratio``／``bright_ratio``：過暗／過亮像素比例
+    - ``brightness``：灰階平均（0–255）；``dark_ratio``／``bright_ratio``：過暗／過亮像素比例。
+      三者在原解析度上計算，與 ``quality.check_quality`` 的曝光數值相同（同一 ``cfg`` 時）
     - ``contrast``：灰階第 95 與第 5 百分位數的差（0–255）
     - ``noise``：灰階與 3×3 中值濾波結果的平均絕對差（灰階值）
     - ``impulse_ratio``：與中值濾波結果相差超過 ``IMPULSE_DIFF`` 的像素比例（椒鹽雜訊）
@@ -74,9 +75,11 @@ def measure_features(img: Image, cfg: QualityConfig = QualityConfig()) -> Qualit
     """量測 ``img`` 的所有品質特徵；使用 ``cfg`` 的模糊與曝光設定。"""
     validate_image(img)
     start = time.perf_counter()
-    small = resize_short_side(to_gray(img), cfg.blur_short_side)
+    gray = to_gray(img)
+    small = resize_short_side(gray, cfg.blur_short_side)
     blur = blur_score(small, cfg)  # 已是 blur_short_side，不再縮放
-    exposure = exposure_stats(small, cfg)
+    # 曝光在原解析度上算（同 check_quality）：縮小會把細小的反光與深色線條平均掉，比例偏低
+    exposure = exposure_stats(gray, cfg)
 
     p5, p95 = np.percentile(small, (5, 95))
     diff = cv2.absdiff(small, cv2.medianBlur(small, 3))

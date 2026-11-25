@@ -9,6 +9,7 @@ from dietai.preprocess import (
     FEATURE_NAMES,
     AdaptivePolicy,
     Rule,
+    check_quality,
     load_policy,
     measure_features,
     save_policy,
@@ -50,6 +51,18 @@ def test_features_are_deterministic_and_accept_gray(scene):
     }
     gray = np.ascontiguousarray(scene[..., 0])
     assert measure_features(gray).short_side == scene.shape[0]
+
+
+def test_feature_exposure_matches_check_quality_at_full_resolution():
+    # 灰底上每 8 列一條 1 像素寬的白線：原解析度 1/8 過亮，縮小後被平均成灰色
+    img = np.full((1600, 1200, 3), 128, np.uint8)
+    img[::8] = 255
+    feats = measure_features(img)
+    report = check_quality(img)
+    assert feats.bright_ratio == pytest.approx(1 / 8)
+    assert feats.bright_ratio == report.exposure.bright_ratio
+    assert feats.dark_ratio == report.exposure.dark_ratio
+    assert feats.brightness == report.exposure.mean
 
 
 def _policy(**kw):
