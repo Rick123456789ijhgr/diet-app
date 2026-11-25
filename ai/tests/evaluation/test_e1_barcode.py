@@ -387,6 +387,14 @@ def test_summarize_by_tag_sorts_numbers_naturally():
     assert negatives_only["n"] == 0 and negatives_only["rate"] is None
 
 
+def test_summarize_by_tag_sorts_nan_and_inf_as_text():
+    rows = [
+        _row(str(i), "base", "correct", blur=v) for i, v in enumerate(["10", "nan", "2", "inf"])
+    ]
+    keys = [s["blur"] for s in summarize(rows, ("blur",))]
+    assert keys == ["2", "10", "inf", "nan"]
+
+
 def test_summarize_unknown_baseline():
     with pytest.raises(ValueError, match="基準"):
         summarize(ROWS, baseline="nope")
@@ -490,14 +498,6 @@ def test_report_markdown_by_source_section():
     assert "主要比較為 `a`" in text and "沒有 `source_id` 欄" not in text
     # 沒有 source_id 時註明信賴區間偏窄
     assert "沒有 `source_id` 欄" in report_markdown(meta, ROWS, (), "base")
-
-
-def test_summarize_by_tag_sorts_nan_and_inf_as_text():
-    rows = [
-        _row(str(i), "base", "correct", blur=v) for i, v in enumerate(["10", "nan", "2", "inf"])
-    ]
-    keys = [s["blur"] for s in summarize(rows, ("blur",))]
-    assert keys == ["2", "10", "inf", "nan"]
 
 
 @pytest.mark.parametrize(
