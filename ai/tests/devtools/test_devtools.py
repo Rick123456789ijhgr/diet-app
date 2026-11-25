@@ -11,7 +11,7 @@ from dietai.devtools.scenes import SceneError, synthesize
 from dietai.devtools.schema import SCHEMA_CLASSES, config_schemas
 from dietai.devtools.store import ImageNotFoundError, ImageStore
 from dietai.devtools.views import gray_histogram_counts
-from dietai.preprocess import LadderConfig, QualityConfig
+from dietai.preprocess import FoodConfig, LabelConfig, LadderConfig, QualityConfig
 
 
 @pytest.mark.parametrize("override", [None, "", "{}", {}])
@@ -41,6 +41,39 @@ def test_override_errors_name_the_field(override, field):
     with pytest.raises(ConfigError) as info:
         config_from_override(QualityConfig, override)
     assert info.value.field == field
+
+
+@pytest.mark.parametrize(
+    ("cls", "override", "field"),
+    [
+        # JSON 讀得進 NaN／Infinity；單邊比較（x <= 0）擋不住，須由 check_finite 擋下
+        (QualityConfig, '{"blur_min": NaN}', "blur_min"),
+        (LabelConfig, '{"clahe_clip": Infinity}', "clahe_clip"),
+        (LadderConfig, '{"sharpen_sigma": NaN}', "sharpen_sigma"),
+        (LadderConfig, '{"scales": [2, NaN]}', "scales"),
+        (FoodConfig, '{"bg_distance": NaN}', "bg_distance"),
+        (FoodConfig, '{"bg_distance": Infinity}', "bg_distance"),
+        (FoodConfig, '{"plate_max_residual": NaN}', "plate_max_residual"),
+        # 核大小上限：過大會讓 OpenCV 記憶體不足，應在設定階段就指出欄位
+        (FoodConfig, '{"morph_px": 1000000}', "morph_px"),
+        (FoodConfig, '{"bg_blur_ksize": 33}', "bg_blur_ksize"),
+        (FoodConfig, '{"plate_blur_ksize": 99}', "plate_blur_ksize"),
+        (FoodConfig, '{"plate_dilate_ksize": 17}', "plate_dilate_ksize"),
+        # 下限與表單一致
+        (FoodConfig, '{"plate_canny_low": 0, "plate_canny_high": 0}', "plate_canny_high"),
+        (FoodConfig, '{"detect_short_side": 64}', "detect_short_side"),
+        (FoodConfig, '{"vlm_max_side": 32}', "vlm_max_side"),
+    ],
+)
+def test_override_rejects_non_finite_and_out_of_range(cls, override, field):
+    with pytest.raises(ConfigError) as info:
+        config_from_override(cls, override)
+    assert info.value.field == field
+
+
+def test_food_config_accepts_form_bounds():
+    FoodConfig(morph_px=50, bg_blur_ksize=31, plate_blur_ksize=31, plate_dilate_ksize=15)
+    FoodConfig(detect_short_side=128, vlm_max_side=64, plate_canny_low=0, plate_canny_high=1)
 
 
 def test_field_in_matches_whole_identifiers():
