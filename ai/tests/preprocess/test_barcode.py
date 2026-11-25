@@ -618,3 +618,55 @@ def test_pipeline_locate_is_normalized():
 def test_pipeline_locate_rejects_invalid(steps):
     with pytest.raises(ValueError):
         LadderConfig(pipelines=(steps,))
+
+
+# ---------------------------------------------------------------- locate 階的邊界情況
+
+
+def _fixed_boxes(monkeypatch, *quads):
+    """讓偵測器固定回傳這些框（四角依序相鄰，原圖座標）。"""
+    boxes = [np.asarray(q, dtype=np.float32).reshape(4, 2) for q in quads]
+    monkeypatch.setattr("dietai.preprocess.barcode.locate_barcodes", lambda gray: list(boxes))
+
+
+def _rect(x0: float, y0: float, x1: float, y1: float) -> list[tuple[float, float]]:
+    """軸對齊的框，四角依序為左下、左上、右上、右下（同偵測器的繞行方向）。"""
+    return [(x0, y1), (x0, y0), (x1, y0), (x1, y1)]
+
+
+@pytest.mark.parametrize(
+    "quad",
+    [
+        [(5.0, 5.0)] * 4,  # 四點重合
+        [(0.0, 0.0), (50.0, 0.0), (100.0, 0.0), (150.0, 0.0)],  # 共線
+    ],
+)
+def test_locate_ignores_degenerate_box(monkeypatch, quad):
+    """偵測器回傳面積為 0 的框時略過該框，不丟例外；沒有可用的框就略過整階。"""
+    _fixed_boxes(monkeypatch, quad)
+    img = np.full((200, 300), 255, dtype=np.uint8)
+    (v,) = ladder_variants(img, LadderConfig(rungs=(Rung.LOCATE,)))
+    assert v.skipped and v.image is None and v.params["boxes"] == 0
+    result = decode_with_ladder(img, NO_ROTATE, LadderConfig(rungs=(Rung.LOCATE, Rung.RAW)))
+    assert not result.success
+
+
+def test_locate_gap_pads_each_crop_top_and_bottom(monkeypatch):
+    """每個裁切上下各補 ``locate_gap`` 的白邊；回推原圖的座標不受影響。"""
+    img = np.zeros((200, 300), dtype=np.uint8)
+    _fixed_boxes(monkeypatch, _rect(50, 50, 250, 150))
+    for gap in (0, 15):
+        cfg = LadderConfig(rungs=(Rung.LOCATE,), locate_pad=1.0, locate_gap=gap)
+        (v,) = ladder_variants(img, cfg)
+        assert v.image is not None and v.image.shape[0] == 100 + 2 * gap
+        if gap:
+            assert (v.image[:gap] == 255).all() and (v.image[-gap:] == 255).all()
+        (region,) = v.regions
+        x, y = region.to_original @ np.array([0.0, float(gap), 1.0])
+        assert (x, y) == pytest.approx((50.0, 50.0), abs=1.0)
+
+
+def test_locate_gap_is_configurable():
+    assert LadderConfig(locate_gap=0).locate_gap == 0
+    with pytest.raises(ValueError):
+        LadderConfig(locate_gap=-1)

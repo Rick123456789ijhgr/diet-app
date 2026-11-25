@@ -117,3 +117,30 @@
 | E14 | [primitives.tsx](../../workbench/src/components/ui/primitives.tsx) | Slider 的 `aria-label` 同時標在 Root 與 Thumb；`DraftNumberInput` 的 effect 依賴內聯 `format`，每次渲染都跑 | ☐ |
 | E15 | E1 頁條碼數、批次頁最多張數輸入框；[FoodPage.tsx:118](../../workbench/src/pages/FoodPage.tsx#L118)；[E1Page.tsx:552](../../workbench/src/pages/E1Page.tsx#L552)、580 行 | onChange 即夾範圍，清空會立刻變 1；`find(...)!` 欄位缺少時崩潰；不在 `RUNG_ORDER` 的新階被略過；熱度圖欄未排序 | ☐ |
 | E16 | [rpc.py:140](../../ai/src/dietai/server/rpc.py#L140) | `_DONE = object()` 全 repo 未使用，是死碼。**已驗證**（grep）。 | ☐ |
+
+## F 程式複查批次 1 追加（2026-11-25，`/code-review`）
+
+範圍：`preprocess/` 的 `barcode.py`、`decoders.py`、`ops.py`、`types.py`、`invoice_qr.py`。與上方重複的項目只標註對應編號。
+
+| # | 位置 | 問題 | 處理 |
+| --- | --- | --- | --- |
+| F1 | [invoice_qr.py](../../ai/src/dietai/preprocess/invoice_qr.py) | 累積到任兩個 QR 就停，背景 QR 會讓階梯在讀到右碼前停下 | 修正：#79（同時有非 `**` 與 `**` 的 QR 才停） |
+| F2 | [invoice_qr.py](../../ai/src/dietai/preprocess/invoice_qr.py) | 同 B3（左右只依位置） | 修正：#79 |
+| F3 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_rectified` | 偵測器回傳重合或共線的框時除以 0，整條階梯丟例外 | 修正：`fix/ai-preprocess-locate`（略過退化框） |
+| F4 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_rectified` | `warpAffine` 不支援 `INTER_AREA`（會靜默改用雙線性），縮小寬裁切時沒有面積平均 | 維持：見下方實測 |
+| F5 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_rectified` | 一律以長邊為條碼的寬；比寬還高的條碼轉正後條紋為水平 | 維持：見下方實測；dev 中沒有這類條碼 |
+| F6 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_located` | 拼接時只有上下留白，一維條碼需要的左右安靜區沒有補 | 維持：見下方實測 |
+| F7 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_LOCATE_GAP` | 留白寫死在模組常數，違反「參數一律放 config」 | 修正：`fix/ai-preprocess-locate`（`LadderConfig.locate_gap`，預設 20） |
+| F8 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_pipeline` | 流程中有兩個 `rotate` 或 `multiscale` 時，`params` 只記最後一個值 | ☐ |
+| F9 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `decode_with_ladder` | `hits` 沒有去除重複，同一條碼可能回傳兩次 | ☐ |
+
+**F4–F6 的實測（f_a01 dev 250 張，實驗組 `locate_on`，run 20261115-002314 的方法與順序）**：
+
+| 版本 | 讀對 | 誤讀 | 讀不到 |
+| --- | --- | --- | --- |
+| main | 225 | 0 | 25 |
+| F4＋F5＋F6 全部修正 | 225 | 2 | 23 |
+| 全部修正，同一次嘗試讀出多個不同條碼時不採用 | 226 | 1 | 23 |
+
+- 誤讀不是單一修正造成的（逐項還原後仍在）：解碼器在臨界的裁切上偶爾讀出前幾碼錯、剛好通過檢查碼的結果。main 本來就有（`raw` 4 次、`locate:1.15+clahe` 3 次），225/0 的順序是在同一批照片上選出、剛好避開；裁切像素一改，臨界照片就重新洗牌。
+- 修正在理論上正確，但讀對持平、誤讀增加，因此暫不採用。有新的照片（非 f_a01）可驗證時再評估；屆時一併考慮「多重結果不採用」與 `min_agree`（見 B1）。
