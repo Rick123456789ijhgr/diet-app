@@ -65,6 +65,19 @@ def param_info(cfg_cls: type[Any]) -> dict[str, ParamInfo]:
     return {f.name: f.metadata["info"] for f in fields(cfg_cls) if "info" in f.metadata}
 
 
+def check_finite(cfg: Any) -> None:
+    """小數欄位（含小數序列）不得為 NaN 或 ±inf。
+
+    JSON 讀得進 ``NaN``／``Infinity``，而單邊比較（如 ``x <= 0``）遇到 NaN 一律為 False，
+    會讓不合法的值通過其他檢查。各設定類別的 ``__post_init__`` 一開始就呼叫。
+    """
+    for f in fields(cfg):
+        value = getattr(cfg, f.name)
+        items = value if isinstance(value, tuple) else (value,)
+        if any(isinstance(v, float) and not math.isfinite(v) for v in items):
+            raise ValueError(f"{f.name} 必須為有限數值，收到 {value!r}")
+
+
 # 以下各設定類別皆為 frozen dataclass：建立後不可修改，可安全共用與比較相等。
 # 驗證集中在 __post_init__，無論由程式、JSON 覆寫或工作台建立都會經過同一套檢查。
 
@@ -157,6 +170,7 @@ class QualityConfig:
 
     def __post_init__(self) -> None:
         """檢查數值範圍與欄位之間的大小關係；不合法時丟 ``ValueError``。"""
+        check_finite(self)
         if self.blur_short_side <= 0 or self.min_short_side <= 0:
             raise ValueError("blur_short_side 與 min_short_side 必須為正整數")
         if not 0 <= self.dark_level <= self.bright_level <= 255:
@@ -499,6 +513,8 @@ class LadderConfig:
         # JSON 讀入時為串列與字串，統一轉成 tuple 與列舉，維持 frozen 與可比較
         object.__setattr__(self, "rungs", tuple(Rung(r) for r in self.rungs))
         object.__setattr__(self, "scales", tuple(float(s) for s in self.scales))
+        object.__setattr__(self, "angles", tuple(float(a) for a in self.angles))
+        check_finite(self)
         object.__setattr__(
             self, "accept_formats", tuple(CodeFormat(f) for f in self.accept_formats)
         )
@@ -511,7 +527,6 @@ class LadderConfig:
             raise ValueError(f"scales 每個倍率須大於 0 且不等於 1，收到 {self.scales}")
         if Rung.MULTISCALE in self.rungs and not self.scales:
             raise ValueError("啟用多尺度（multiscale）時 scales 不得為空")
-        object.__setattr__(self, "angles", tuple(float(a) for a in self.angles))
         for a in self.angles:
             check_angle(a)
         if len(set(self.angles)) != len(self.angles):
@@ -894,6 +909,7 @@ class LabelConfig:
 
     def __post_init__(self) -> None:
         """檢查數值範圍與欄位之間的大小關係；不合法時丟 ``ValueError``。"""
+        check_finite(self)
         for name in (
             "detect_short_side",
             "hough_threshold",
@@ -1212,22 +1228,27 @@ class FoodConfig:
 
     def __post_init__(self) -> None:
         """檢查數值範圍與欄位之間的大小關係；不合法時丟 ``ValueError``。"""
-        for name in ("detect_short_side", "max_dishes", "vlm_max_side"):
-            if getattr(self, name) <= 0:
-                raise ValueError(f"{name} 必須為正整數，收到 {getattr(self, name)}")
+        check_finite(self)
+        # 下限與工作台表單一致（param 的 min）：過小的偵測尺寸與 VLM 邊長沒有意義
+        for name, low in (("detect_short_side", 128), ("max_dishes", 1), ("vlm_max_side", 64)):
+            if getattr(self, name) < low:
+                raise ValueError(f"{name} 至少為 {low}，收到 {getattr(self, name)}")
         # 邊寬須小於一半，否則上下（左右）兩條邊框會重疊、蓋滿整張影像
         if not 0 < self.bg_border_ratio < 0.5:
             raise ValueError("bg_border_ratio 必須介於 0 與 0.5（不含）")
         if self.bg_distance <= 0:
             raise ValueError("bg_distance 必須大於 0")
-        if self.morph_px < 0:
-            raise ValueError("morph_px 不得為負")
+        # 核大小設上限（同表單 max）：過大的值會讓 OpenCV 配置巨大的核而記憶體不足
+        if not 0 <= self.morph_px <= 50:
+            raise ValueError(f"morph_px 必須介於 0 與 50，收到 {self.morph_px}")
         if not 0.0 <= self.min_dish_area_ratio <= self.max_dish_area_ratio <= 1.0:
             raise ValueError("須滿足 0 <= min_dish_area_ratio <= max_dish_area_ratio <= 1")
         if not 0.0 <= self.max_overlap <= 1.0:
             raise ValueError("max_overlap 必須介於 0 與 1")
         if not 0.0 <= self.box_pad_ratio <= 0.5:
             raise ValueError("box_pad_ratio 必須介於 0 與 0.5")
+        if self.plate_canny_high < 1:
+            raise ValueError(f"plate_canny_high 至少為 1，收到 {self.plate_canny_high}")
         if not 0 <= self.plate_canny_low <= self.plate_canny_high:
             raise ValueError("須滿足 0 <= plate_canny_low <= plate_canny_high")
         for name in ("plate_min_size_ratio", "plate_min_axis_ratio", "plate_min_coverage"):
@@ -1240,10 +1261,10 @@ class FoodConfig:
         # cv2.GaussianBlur 要求正奇數的核邊長（1 等同不平滑）
         for name in ("bg_blur_ksize", "plate_blur_ksize"):
             value = getattr(self, name)
-            if value < 1 or value % 2 == 0:
-                raise ValueError(f"{name} 必須為正奇數，收到 {value}")
-        if self.plate_dilate_ksize < 1:
-            raise ValueError("plate_dilate_ksize 至少為 1")
+            if not 1 <= value <= 31 or value % 2 == 0:
+                raise ValueError(f"{name} 必須為 1–31 的奇數，收到 {value}")
+        if not 1 <= self.plate_dilate_ksize <= 15:
+            raise ValueError(f"plate_dilate_ksize 必須介於 1 與 15，收到 {self.plate_dilate_ksize}")
         if self.plate_coverage_bins < 4:
             raise ValueError("plate_coverage_bins 至少為 4")
         if not 1 <= self.vlm_jpeg_quality <= 100:
