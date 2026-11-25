@@ -117,3 +117,16 @@
 | E14 | [primitives.tsx](../../workbench/src/components/ui/primitives.tsx) | Slider 的 `aria-label` 同時標在 Root 與 Thumb；`DraftNumberInput` 的 effect 依賴內聯 `format`，每次渲染都跑 | ☐ |
 | E15 | E1 頁條碼數、批次頁最多張數輸入框；[FoodPage.tsx:118](../../workbench/src/pages/FoodPage.tsx#L118)；[E1Page.tsx:552](../../workbench/src/pages/E1Page.tsx#L552)、580 行 | onChange 即夾範圍，清空會立刻變 1；`find(...)!` 欄位缺少時崩潰；不在 `RUNG_ORDER` 的新階被略過；熱度圖欄未排序 | ☐ |
 | E16 | [rpc.py:140](../../ai/src/dietai/server/rpc.py#L140) | `_DONE = object()` 全 repo 未使用，是死碼。**已驗證**（grep）。 | ☐ |
+
+## G 程式複查批次 2 追加（2026-11-25，`/code-review`）
+
+範圍：`preprocess/` 的 `label.py`、`quality.py`、`features.py`、`adaptive.py`。與上方重複的兩項：`label.py` 光斑比例用膨脹後遮罩（同 B4）、`quality.py` 小圖先放大再算模糊（同 B7），處理方式仍待討論，此處不另編號。
+
+| # | 位置 | 問題 | 處理 |
+| --- | --- | --- | --- |
+| G1 | [adaptive.py](../../ai/src/dietai/preprocess/adaptive.py) `from_dict` | `start`、`fallback`、`methods` 寫成字串時被拆成逐字元（`"raw"` → `('r','a','w')`），載入不報錯、評估時比對不到任何方法。**已驗證**。 | 修正：#82 |
+| G2 | [adaptive.py](../../ai/src/dietai/preprocess/adaptive.py) `from_dict` | 只有 `rules` 那段在 try 內；`max_attempts: null`、最外層是陣列時丟 TypeError／AttributeError，而非文件寫的 ValueError。**已驗證**。 | 修正：#82 |
+| G3 | [adaptive.py](../../ai/src/dietai/preprocess/adaptive.py) `Rule` | 門檻不擋 NaN／inf；`json` 讀得進 `NaN`，規則永遠不成立且無提示 | 修正：#82 |
+| G4 | [features.py](../../ai/src/dietai/preprocess/features.py) `measure_features` | 曝光三項在縮小影像上算，`check_quality` 在原解析度上算；細小反光被平均掉，兩邊數字不同。**已驗證**（每 8 列一條白線：舊版 0.0、應為 0.125）。 | 修正：#83（改在原解析度上算） |
+| G5 | [features.py](../../ai/src/dietai/preprocess/features.py) 模組常數、[label.py](../../ai/src/dietai/preprocess/label.py) `_edges`、`_MIN_COLLINEAR_PX` | `IMPULSE_DIFF`、`BACKGROUND_*`、`GLARE_LEVEL`、`GLARE_MIN_AREA`、5×5 高斯核、3×3 膨脹核、共線容差寫死在程式內（同 C1 的性質） | ☐ 待討論 |
+| G6 | [features.py](../../ai/src/dietai/preprocess/features.py) `QualityFeatures` | 沒有 `steps`、`warnings`，與其他前處理入口的回傳格式不一致，量測用的常數沒有紀錄 | ☐ 待討論 |
