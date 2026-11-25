@@ -171,3 +171,20 @@
 | H5 | [food.py](../../ai/src/dietai/preprocess/food.py) `_detect_scale` | 只回傳短邊倍率，長邊經四捨五入後實際倍率略有不同 | 修正：#86（各軸實際倍率） |
 | H6 | [food.py](../../ai/src/dietai/preprocess/food.py) `preprocess_food` | 盤緣步驟沒記 `detect_short_side`，只開盤緣時無從重現 | 修正：#86 |
 | H7 | [config.py](../../ai/src/dietai/preprocess/config.py) `LabelConfig` | `glare_dilate_px`、`inpaint_radius`、`hough_max_gap` 等與核大小相關的欄位也沒有上限（同 H2 的性質，#85 未改） | ☐ 待討論 |
+
+## I 程式複查批次 4 追加（2026-11-26，`/code-review`）
+
+範圍：`evaluation/` 的 `barcode.py`、`invoice.py`、`label.py`、`stats.py`、`glmm.py`、`methods.py`。與上方重複的一項：`judge` 負樣本只看已確認結果（同 B2），不另編號。`stats.py` 未發現問題。
+
+| # | 位置 | 問題 | 處理 |
+| --- | --- | --- | --- |
+| I1 | [methods.py](../../ai/src/dietai/evaluation/methods.py) `_hits`、[barcode.py](../../ai/src/dietai/evaluation/barcode.py) `is_ambiguous` | `decoded`／`formats` 以 `\|` 串接再拆開；QR、Code128 內容含 `\|` 時 `zip(strict=True)` 丟 ValueError，離線模擬與報告全部中斷，`is_ambiguous` 也會拿片段比真值 | 修正：#87（`join_values`／`split_values` 跳脫；一般條碼寫出結果不變） |
+| I2 | [methods.py](../../ai/src/dietai/evaluation/methods.py) `methods_report_markdown` | `orders` 套到每一組；用到某組沒有的方法時丟 ValueError，整份報告失敗 | 修正：#88（該組略過並註記） |
+| I3 | [methods.py](../../ai/src/dietai/evaluation/methods.py) `methods_report_markdown` | 某組變體全部 error 時 `greedy_ladder` 丟錯，整份報告失敗 | 修正：#88（該組註記） |
+| I4 | [barcode.py](../../ai/src/dietai/evaluation/barcode.py) `load_arms` | `only` 重複（`--only a,a`）時同一組跑兩次，n 與答對數加倍；docstring 寫會報錯 | 修正：#88 |
+| I5 | [invoice.py](../../ai/src/dietai/evaluation/invoice.py) `_attempt_row`／`_found` | 空內容的 QR 寫成 `decoded=""`；即時判 `false_positive`，離線判 `true_negative` | 修正：#87（個數以 `areas` 為準） |
+| I6 | [invoice.py](../../ai/src/dietai/evaluation/invoice.py) `_attempt_row` | 面積四捨五入到 0.1，相近的左碼候選同值，離線挑出的配對可能與即時不同 | 修正：#87（完整精度） |
+| I7 | [barcode.py](../../ai/src/dietai/evaluation/barcode.py) `compare_by_source`、invoice.py、glmm.py、label_run.py | 缺 `source_id` 時以 `id` 當集群，可能與其他列的 `source_id` 撞名而併群，影響 bootstrap、p 值與 GLMM | 修正：#89（`cluster_key`，退路為 `id:<id>`） |
+| I8 | [label.py](../../ai/src/dietai/evaluation/label.py) `LabelTruth.from_dict` | `columns` 含空字串時，該營養欄被當成表頭對到第 1 欄 | 修正：#89（拒絕） |
+| I9 | [label.py](../../ai/src/dietai/evaluation/label.py) `LabelTruth.from_dict` | `header`／`facts` 為 `null` 或串列時丟裸 TypeError，錯誤訊息沒有檔名 | 修正：#89（改丟 ValueError） |
+| I10 | [barcode.py](../../ai/src/dietai/evaluation/barcode.py) `_natural` | 標籤值 `nan`／`inf` 當數字排序，NaN 比較恆為 False，分組順序不定 | 修正：#88（非有限值當文字） |
