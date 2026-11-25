@@ -464,6 +464,23 @@ def test_compare_by_source_clusters_and_holm():
     assert not a["primary"]
 
 
+def test_compare_by_source_fallback_id_does_not_join_real_source():
+    # v9 沒有 source_id，其 id 剛好等於 v1、v2 的原始樣本代碼：仍須自成一群
+    rows = _sourced_rows()
+    for arm in ("base", "a", "b"):
+        rows.append(_row("s1", arm, "correct"))
+    a, _ = compare_by_source(rows, "base", n_boot=200)
+    assert (a["sources"], a["n"]) == (3, 5)
+
+
+@pytest.mark.parametrize(
+    "values", [[], ["4710088410108"], ["A|B", "c\\d", ""], ["", "x"], ["a\\|b"]]
+)
+def test_join_split_values_round_trip(values):
+    cell = join_values(values)
+    assert split_values(cell) == values or (values == [""] and cell == "")
+
+
 def test_compare_by_source_primary_is_not_corrected():
     a, b = compare_by_source(_sourced_rows(), "base", primary="a", n_boot=500)
     assert a["primary"] and a["p_holm"] == a["p_value"]
@@ -488,23 +505,6 @@ def test_report_markdown_by_source_section():
     assert "主要比較為 `a`" in text and "沒有 `source_id` 欄" not in text
     # 沒有 source_id 時註明信賴區間偏窄
     assert "沒有 `source_id` 欄" in report_markdown(meta, ROWS, (), "base")
-
-
-def test_compare_by_source_fallback_id_does_not_join_real_source():
-    # v9 沒有 source_id，其 id 剛好等於 v1、v2 的原始樣本代碼：仍須自成一群
-    rows = _sourced_rows()
-    for arm in ("base", "a", "b"):
-        rows.append(_row("s1", arm, "correct"))
-    a, _ = compare_by_source(rows, "base", n_boot=200)
-    assert (a["sources"], a["n"]) == (3, 5)
-
-
-@pytest.mark.parametrize(
-    "values", [[], ["4710088410108"], ["A|B", "c\\d", ""], ["", "x"], ["a\\|b"]]
-)
-def test_join_split_values_round_trip(values):
-    cell = join_values(values)
-    assert split_values(cell) == values or (values == [""] and cell == "")
 
 
 def test_join_values_keeps_old_format_for_plain_codes():
