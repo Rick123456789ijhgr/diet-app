@@ -219,3 +219,25 @@ def test_dataset_params_and_truth(dataset):
     items = read_manifest(dataset).items
     assert {i.tags["condition"] for i in items} == {"clean", "blur", "rotate", "downscale"}
     assert sum(1 for i in items if not i.truth) == 1 + 3 * 4  # 負樣本的 clean 與各變體
+
+
+@pytest.mark.parametrize(
+    ("truth", "hits"),
+    [
+        # 內容為空 bytes 的 QR：decoded 寫成空字串，離線仍要算到這個結果
+        ("", [_qr(b"", 50)]),
+        # 兩個左碼候選面積只差 0.04：四捨五入到 0.1 後同值，離線會挑錯
+        (format_invoice_truth(L, R), [_qr(b"LEFT-2", 10.0), _qr(L, 10.002), _qr(R, 9)]),
+    ],
+    ids=["empty-raw", "near-equal-areas"],
+)
+def test_simulated_single_method_matches_online(tmp_path, truth, hits):
+    manifest = _single(tmp_path, truth)
+    arm = Arm("x", ladder=LadderConfig(rungs=("raw",)))
+    summary = run_invoice_methods(
+        manifest, [arm], tmp_path / "r", decoder_factory=lambda a: _FakeDecoder(hits)
+    )
+    _, rows = read_invoice_methods(summary.out_dir)
+    (row,) = rows
+    (ladder,) = simulate_invoice_ladder(rows, ["raw"])
+    assert ladder["outcome"] == row["outcome"]

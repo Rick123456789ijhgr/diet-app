@@ -31,7 +31,7 @@ from dietai.evaluation import (
     write_image,
     write_manifest,
 )
-from dietai.evaluation.barcode import RESULT_COLUMNS
+from dietai.evaluation.barcode import RESULT_COLUMNS, join_values, split_values
 from dietai.evaluation.methods import METHOD_COLUMNS
 from dietai.preprocess import CodeFormat, DecodeHit, LadderConfig, Rung
 from dietai.preprocess.barcode import RungAttempt
@@ -444,3 +444,13 @@ def test_pipeline_vs_parts():
     with pytest.raises(ValueError, match="指定 arm"):
         pipeline_vs_parts([*rows, _row("v1", "A", arm="b")])
     assert pipeline_vs_parts([*rows, _row("v1", "A", arm="b")], arm="b") == []
+
+
+def test_simulate_ladder_keeps_texts_containing_separator():
+    # QR／Code128 內容可能含「|」：寫出時跳脫，離線拆回時不可錯位
+    text = "A|B"
+    row = {**_row("v", "raw", truth=""), "decoded": join_values([text]), "formats": "QR_CODE"}
+    row["outcome"] = "false_positive"
+    (r,) = simulate_ladder([row], ["raw"])
+    assert r["outcome"] == "false_positive"
+    assert split_values(r["decoded"]) == [text] and r["formats"] == "QR_CODE"
