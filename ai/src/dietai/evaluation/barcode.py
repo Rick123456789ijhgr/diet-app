@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Any
 
 # SOURCE_COLUMN：同一原始樣本的變體在統計時視為一個集群（ADR 0005 第 9 點）
-from dietai.evaluation.manifest import SOURCE_COLUMN, Manifest, read_image
+from dietai.evaluation.manifest import SOURCE_COLUMN, Manifest, cluster_key, read_image
 from dietai.evaluation.stats import (
     cluster_bootstrap_diff,
     holm,
@@ -638,7 +638,7 @@ def compare_by_source(
     def correct(arm: str) -> dict[str, tuple[bool, str]]:
         """某實驗組各正樣本 ``id`` →（是否 correct, 集群代碼），排除 error。"""
         return {
-            r["id"]: (r["outcome"] == Outcome.CORRECT, r.get(cluster) or r["id"])
+            r["id"]: (r["outcome"] == Outcome.CORRECT, cluster_key(r, cluster))
             for r in rows
             if r["arm"] == arm and r["truth"] and r["outcome"] != Outcome.ERROR
         }

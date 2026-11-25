@@ -44,7 +44,7 @@ from dietai.evaluation.label import (
     quad_error,
     score_fields,
 )
-from dietai.evaluation.manifest import SOURCE_COLUMN, Manifest, read_image
+from dietai.evaluation.manifest import Manifest, cluster_key, read_image
 from dietai.label_parsing.config import LabelReadConfig
 from dietai.label_parsing.fields import format_fields
 from dietai.label_parsing.ocr import OcrEngine
@@ -323,7 +323,7 @@ def summarize_label(
         cells = sum(int(r["total"]) for r in pos)
         by_source: dict[str, list[float]] = {}
         for r in pos:
-            by_source.setdefault(r.get(SOURCE_COLUMN) or r["id"], []).append(float(r["accuracy"]))
+            by_source.setdefault(cluster_key(r), []).append(float(r["accuracy"]))
         cers = [float(r["cer"]) for r in pos if r.get("cer")]
         locs = [r for r in pos if r.get("located") != ""]
         quad_errs = [float(r["quad_error"]) for r in locs if r.get("quad_error")]

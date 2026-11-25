@@ -40,6 +40,14 @@ SOURCE_COLUMN = "source_id"  # 原始樣本代碼的標籤欄
 NON_GROUPING_COLUMNS = (SOURCE_COLUMN, "seed")
 
 
+def cluster_key(row: Mapping[str, str], column: str = SOURCE_COLUMN) -> str:
+    """一列所屬的原始樣本（集群）：取 ``column`` 欄，空白時以 ``id:<id>`` 代替（每張影像各自一群）。
+
+    加上 ``id:`` 前綴，避免某張影像的 ``id`` 剛好等於另一列的原始樣本代碼而被併成同一群。
+    """
+    return row.get(column) or f"id:{row['id']}"
+
+
 class SplitLockedError(ValueError):
     """嘗試在非正式實驗中讀取鎖定的測試集（根目錄 CLAUDE.md 規則 7）。"""
 

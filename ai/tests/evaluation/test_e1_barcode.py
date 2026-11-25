@@ -482,3 +482,12 @@ def test_report_markdown_by_source_section():
     assert "主要比較為 `a`" in text and "沒有 `source_id` 欄" not in text
     # 沒有 source_id 時註明信賴區間偏窄
     assert "沒有 `source_id` 欄" in report_markdown(meta, ROWS, (), "base")
+
+
+def test_compare_by_source_fallback_id_does_not_join_real_source():
+    # v9 沒有 source_id，其 id 剛好等於 v1、v2 的原始樣本代碼：仍須自成一群
+    rows = _sourced_rows()
+    for arm in ("base", "a", "b"):
+        rows.append(_row("s1", arm, "correct"))
+    a, _ = compare_by_source(rows, "base", n_boot=200)
+    assert (a["sources"], a["n"]) == (3, 5)

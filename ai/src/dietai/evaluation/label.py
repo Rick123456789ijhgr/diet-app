@@ -71,6 +71,12 @@ class LabelTruth:
         columns = tuple(str(c) for c in data.get("columns", ()))
         if len(set(columns)) != len(columns):
             raise ValueError(f"columns 不得重複：{list(columns)}")
+        # 空字串保留給表頭欄位（cells 的欄），當成營養欄名會被對到第 1 欄
+        if "" in columns:
+            raise ValueError(f"columns 不得有空字串：{list(columns)}")
+        for key in ("header", "facts"):
+            if not isinstance(data.get(key, {}), Mapping):
+                raise ValueError(f"{key} 須為物件（欄位 → 數值），收到 {type(data[key]).__name__}")
         cells: dict[tuple[str, str], Quantity] = {}
         for name, raw in dict(data.get("header", {})).items():
             if name not in HEADER_FIELDS:

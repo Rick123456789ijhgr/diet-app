@@ -72,6 +72,9 @@ def test_score_counts_wrong_and_missing_cells():
         ({"facts": {"energy": ["約 150", "未標示"]}}, "不是數值"),
         ({"columns": [], "header": {}}, "至少要有一個欄位"),
         ({"columns": ["a", "a"]}, "不得重複"),
+        ({"columns": ["per_serving", ""]}, "不得有空字串"),
+        ({"header": None}, "header 須為物件"),
+        ({"facts": ["152 大卡"]}, "facts 須為物件"),
         ({"quad": [[0, 0], [1, 1]]}, "quad"),
     ],
 )
