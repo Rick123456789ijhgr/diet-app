@@ -105,3 +105,37 @@ def test_policy_json_roundtrip(tmp_path):
     assert loaded.rules == tuned.rules and loaded.name == "p"  # 沒有名稱時用檔名
     with pytest.raises(ValueError, match="規則格式"):
         AdaptivePolicy.from_dict({"rules": [{"feature": "blur"}]})
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"rules": [], "start": "raw"},  # 字串會被拆成 ('r','a','w')
+        {"rules": [], "fallback": "clahe"},
+        {"rules": [{"feature": "blur", "op": "<", "threshold": 1, "methods": "clahe"}]},
+        {"rules": [{"feature": "blur", "op": "<", "threshold": 1, "methods": ["clahe", 3]}]},
+        {"rules": [], "start": ["raw", ""]},
+        {"rules": [], "start": 5},
+        {"rules": [], "max_attempts": None},
+        {"rules": None},
+        [],  # 最外層不是物件
+    ],
+)
+def test_from_dict_rejects_malformed_policy_with_value_error(data):
+    with pytest.raises(ValueError):
+        AdaptivePolicy.from_dict(data)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_rule_rejects_non_finite_threshold(bad):
+    with pytest.raises(ValueError, match="threshold"):
+        Rule("blur", "<", bad, ("x",))
+    # json 讀得進 NaN，從檔案載入也要擋下
+    with pytest.raises(ValueError, match="threshold"):
+        AdaptivePolicy.from_dict(
+            json.loads(
+                '{"rules": [{"feature": "blur", "op": "<", "threshold": NaN, "methods": ["x"]}]}'
+            )
+        )
+    with pytest.raises(ValueError, match="threshold"):
+        _policy().with_threshold(0, bad)

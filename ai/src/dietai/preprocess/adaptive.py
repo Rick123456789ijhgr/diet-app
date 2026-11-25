@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -20,6 +21,22 @@ from typing import Any
 from dietai.preprocess.features import FEATURE_NAMES
 
 OPS = ("<", ">")
+
+
+def _method_ids(value: Any, what: str) -> tuple[str, ...]:
+    """方法代碼序列轉成 tuple；單一字串（會被拆成逐字元）與非字串、空字串一律拒絕。"""
+    if isinstance(value, str):
+        raise ValueError(
+            f"{what} 須為方法代碼的列表，收到字串 {value!r}（單一方法請寫成 [{value!r}]）"
+        )
+    try:
+        ids = tuple(value)
+    except TypeError as e:
+        raise ValueError(f"{what} 須為方法代碼的列表，收到 {value!r}") from e
+    for m in ids:
+        if not isinstance(m, str) or not m:
+            raise ValueError(f"{what} 中的方法代碼須為非空字串，收到 {m!r}")
+    return ids
 
 
 @dataclass(frozen=True)
@@ -33,8 +50,10 @@ class Rule:
     note: str = ""
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "methods", tuple(self.methods))
+        object.__setattr__(self, "methods", _method_ids(self.methods, "methods"))
         object.__setattr__(self, "threshold", float(self.threshold))
+        if not math.isfinite(self.threshold):
+            raise ValueError(f"threshold 須為有限數值，收到 {self.threshold!r}")
         if self.feature not in FEATURE_NAMES:
             raise ValueError(f"未知的量測值 {self.feature!r}；可用：{list(FEATURE_NAMES)}")
         if self.op not in OPS:
@@ -64,8 +83,9 @@ class AdaptivePolicy:
     description: str = ""
 
     def __post_init__(self) -> None:
-        for attr in ("rules", "start", "fallback"):
-            object.__setattr__(self, attr, tuple(getattr(self, attr)))
+        object.__setattr__(self, "rules", tuple(self.rules))
+        for attr in ("start", "fallback"):
+            object.__setattr__(self, attr, _method_ids(getattr(self, attr), attr))
         if not self.start:
             raise ValueError("start 至少要有一個方法")
         if self.max_attempts < len(self.start):
@@ -116,22 +136,25 @@ class AdaptivePolicy:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> AdaptivePolicy:
-        """由 JSON 內容建立；其他鍵（例如 ``save_policy`` 寫入的調整紀錄）忽略。"""
+        """由 JSON 內容建立；其他鍵（例如 ``save_policy`` 寫入的調整紀錄）忽略。
+
+        格式錯誤（缺鍵、型別不符、最外層不是物件）一律丟 ``ValueError``。
+        """
         try:
             rules = tuple(
-                Rule(r["feature"], r["op"], r["threshold"], tuple(r["methods"]), r.get("note", ""))
+                Rule(r["feature"], r["op"], r["threshold"], r["methods"], r.get("note", ""))
                 for r in data["rules"]
             )
-        except (KeyError, TypeError) as e:
-            raise ValueError(f"規則格式錯誤：{e}") from e
-        return cls(
-            rules=rules,
-            start=tuple(data.get("start", ("raw",))),
-            fallback=tuple(data.get("fallback", ())),
-            max_attempts=int(data.get("max_attempts", 4)),
-            name=str(data.get("name", "")),
-            description=str(data.get("description", "")),
-        )
+            return cls(
+                rules=rules,
+                start=data.get("start", ("raw",)),
+                fallback=data.get("fallback", ()),
+                max_attempts=int(data.get("max_attempts", 4)),
+                name=str(data.get("name", "")),
+                description=str(data.get("description", "")),
+            )
+        except (KeyError, TypeError, AttributeError) as e:
+            raise ValueError(f"規則格式錯誤：{e!r}") from e
 
 
 def load_policy(path: str | Path) -> AdaptivePolicy:
