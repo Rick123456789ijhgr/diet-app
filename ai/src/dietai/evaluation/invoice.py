@@ -248,9 +248,10 @@ def _attempt_row(attempt: RungAttempt, truth: frozenset[bytes] | None) -> dict[s
         "rung": attempt.rung.value,
         "params": json.dumps(_jsonable(dict(attempt.params))),
         "outcome": judge_invoice(select_pair(found), truth).value,
-        # decoded 與 areas 一一對應，供離線逐步升級時依面積取最大兩個
+        # decoded 與 areas 一一對應，供離線逐步升級時依面積取最大兩個；
+        # 面積寫完整精度，四捨五入後相近的 QR 會同值，離線可能挑出與即時不同的配對
         "decoded": "|".join(raw.hex() for raw in found),
-        "areas": "|".join(f"{a:.1f}" for a in found.values()),
+        "areas": "|".join(repr(float(a)) for a in found.values()),
         "skipped": int(attempt.skipped),
         "elapsed_ms": f"{attempt.elapsed_ms:.3f}",
         "preprocess_ms": f"{attempt.elapsed_ms - attempt.decode_ms:.3f}",
@@ -284,7 +285,8 @@ class _InvoiceLadder:
 
 def _found(row: Mapping[str, str]) -> list[tuple[bytes, float]]:
     """一列找到的（QR 內容, 面積）。"""
-    if not row["decoded"]:
+    # 個數以 areas 為準：內容為空 bytes 的 QR 寫成空字串，只看 decoded 會被當成沒有結果
+    if not row["areas"]:
         return []
     raws = [bytes.fromhex(h) for h in row["decoded"].split("|")]
     areas = [float(a) for a in row["areas"].split("|")]

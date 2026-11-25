@@ -39,11 +39,13 @@ from dietai.evaluation.barcode import (
     Outcome,
     RunSummary,
     _jsonable,
+    join_values,
     judge_texts,
     meta_lines,
     prepare_run_dir,
     run_meta,
     source_section,
+    split_values,
     summarize,
     summary_table,
 )
@@ -216,8 +218,8 @@ def _attempt_row(attempt: RungAttempt, truth: str) -> dict[str, Any]:
         "params": json.dumps(_jsonable(dict(attempt.params))),
         "outcome": judge_attempt(attempt, truth).value,
         # decoded 與 formats 一一對應（同一位置為同一個結果），供離線計算 min_agree 的票數
-        "decoded": "|".join(h.text for h in attempt.hits),
-        "formats": "|".join(h.format.value for h in attempt.hits),
+        "decoded": join_values(h.text for h in attempt.hits),
+        "formats": join_values(h.format.value for h in attempt.hits),
         "rejected": len(attempt.rejected),
         "skipped": int(attempt.skipped),
         "elapsed_ms": f"{attempt.elapsed_ms:.3f}",
@@ -282,9 +284,12 @@ class _LadderOutcome:
 
 def _hits(row: Mapping[str, str]) -> list[tuple[str, str]]:
     """一列的採用結果（格式, 內容），依原順序去除重複。"""
-    if not row["decoded"]:
+    # 個數以 formats 為準：格式名稱不會是空字串，decoded 卻可能只有一個空內容
+    formats = split_values(row["formats"])
+    if not formats:
         return []
-    pairs = zip(row["formats"].split("|"), row["decoded"].split("|"), strict=True)
+    texts = split_values(row["decoded"]) or [""]
+    pairs = zip(formats, texts, strict=True)
     return list(dict.fromkeys(pairs))
 
 
@@ -394,8 +399,8 @@ def _result_row(
         "first_rung": res.first,
         "attempts": res.tried,
         "elapsed_ms": f"{res.elapsed_ms + extra_ms:.3f}",
-        "decoded": "|".join(text for _, text in res.hits),
-        "formats": "|".join(fmt for fmt, _ in res.hits),
+        "decoded": join_values(text for _, text in res.hits),
+        "formats": join_values(fmt for fmt, _ in res.hits),
         "rejected": res.rejected,
         "error": res.error,
         **tags,

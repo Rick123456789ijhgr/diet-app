@@ -198,11 +198,44 @@ def judge_texts(texts: Iterable[str], truth: str) -> Outcome:
     return Outcome.CORRECT if codes == {_gtin13(truth)} else Outcome.MISREAD
 
 
+def join_values(values: Iterable[str]) -> str:
+    """把多個結果串成一格，以 ``|`` 分隔；內容中的反斜線與 ``|`` 前面加反斜線跳脫。
+
+    一般條碼內容不含這兩個字元，寫出結果與舊格式相同；QR、Code128 可能含 ``|``，
+    不跳脫會讓 ``split_values`` 拆錯位置。
+    """
+    return "|".join(v.replace("\\", "\\\\").replace("|", "\\|") for v in values)
+
+
+def split_values(cell: str) -> list[str]:
+    """``join_values`` 的反向操作；空字串表示沒有任何值。
+
+    只有一個空字串值時與「沒有值」無法分辨，呼叫端需以平行欄位（如 ``formats``）判斷個數。
+    """
+    if not cell:
+        return []
+    out, cur, i = [], [], 0
+    while i < len(cell):
+        c = cell[i]
+        if c == "\\" and i + 1 < len(cell):
+            cur.append(cell[i + 1])
+            i += 2
+            continue
+        if c == "|":
+            out.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        i += 1
+    out.append("".join(cur))
+    return out
+
+
 def is_ambiguous(row: Mapping[str, str]) -> bool:
-    """結果列是否為「多重結果」：判為誤讀，但真值也在解出的號碼中（``decoded`` 以 ``|`` 分隔）。"""
+    """結果列是否為「多重結果」：判為誤讀，但真值也在解出的號碼中（格式見 ``join_values``）。"""
     if row.get("outcome") != Outcome.MISREAD or not row.get("truth") or not row.get("decoded"):
         return False
-    return _gtin13(row["truth"]) in {_gtin13(t) for t in row["decoded"].split("|")}
+    return _gtin13(row["truth"]) in {_gtin13(t) for t in split_values(row["decoded"])}
 
 
 def _gtin13(code: str) -> str:
@@ -315,9 +348,9 @@ def run_experiment(
                                     "params": json.dumps(_jsonable(dict(a.params))),
                                     "elapsed_ms": f"{a.elapsed_ms:.3f}",
                                     "hits": len(a.hits),
-                                    "texts": "|".join(h.text for h in a.hits),
+                                    "texts": join_values(h.text for h in a.hits),
                                     "rejected": len(a.rejected),
-                                    "rejected_texts": "|".join(
+                                    "rejected_texts": join_values(
                                         f"{h.format.value}:{h.text}" for h in a.rejected
                                     ),
                                     "skipped": int(a.skipped),
@@ -467,8 +500,8 @@ def _result_fields(outcome: Outcome, res: LadderResult) -> dict[str, Any]:
         "first_rung": first.value if (first := first_rung(res)) else "",
         "attempts": len(res.attempts),
         "elapsed_ms": f"{sum(a.elapsed_ms for a in res.attempts):.3f}",
-        "decoded": "|".join(h.text for h in res.hits),
-        "formats": "|".join(h.format.value for h in res.hits),
+        "decoded": join_values(h.text for h in res.hits),
+        "formats": join_values(h.format.value for h in res.hits),
         "rejected": sum(len(a.rejected) for a in res.attempts),
         "error": "",
     }
