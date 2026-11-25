@@ -242,6 +242,33 @@ def test_plate_ellipses_match_truth(tilt, seed):
             assert min(diff, 180 - diff) < 5
 
 
+@pytest.mark.parametrize("seed", range(2))
+def test_plate_centres_unbiased_on_large_image(seed):
+    # 4000×3000 縮到短邊 512（倍率約 0.17）：未做半像素修正時盤心往左上偏約 2.4 像素
+    img, plates = food_scene(3, seed, height=3000, width=4000)
+    found = detect_plate_ellipse(img)
+    for p in plates:
+        e = min(found, key=lambda f: np.hypot(f.cx - p.cx, f.cy - p.cy))
+        assert np.hypot(e.cx - p.cx, e.cy - p.cy) < 1.5
+
+
+def test_detect_scale_per_axis_and_ellipse_mapping():
+    from dietai.preprocess.food import _detect_scale, _ellipse_to_original, _to_original
+
+    # 長邊 3001 × 512/1000 = 1536.5 進位成 1537，x 倍率與短邊倍率不同
+    small, (sx, sy) = _detect_scale(np.zeros((1000, 3001), np.uint8), 512)
+    assert small.shape == (512, 1537)
+    assert sy == 512 / 1000 and sx == 1537 / 3001 != sy
+    assert _detect_scale(np.zeros((400, 600), np.uint8), 512)[1] == (1.0, 1.0)
+    # 像素中心座標：小圖 (0, 0) 對應原圖 (1.5, 1.5)（倍率 0.25）；軸長直接除以倍率
+    e = _ellipse_to_original(Ellipse(0.0, 0.0, 10.0, 5.0, 30.0), (0.25, 0.25))
+    assert (e.cx, e.cy, e.major, e.minor, e.angle) == (1.5, 1.5, 40.0, 20.0, 30.0)
+    same = Ellipse(3.0, 4.0, 10.0, 5.0, 0.0)
+    assert _ellipse_to_original(same, (1.0, 1.0)) is same
+    # 框的邊是像素外緣：各軸分別除以倍率，不做半像素修正
+    assert _to_original(Box(10, 10, 20, 20), (0.5, 0.25), 0.0, 1000, 1000) == Box(20, 40, 40, 80)
+
+
 def test_plate_none_on_blank_or_rectangles():
     blank = np.full((400, 600, 3), (70, 105, 150), dtype=np.uint8)
     assert detect_plate_ellipse(blank) == ()
@@ -296,6 +323,10 @@ def test_preprocess_food_steps_off():
     assert result.dishes is None and result.plates is None and result.crops == ()
     assert [s.name for s in result.steps] == ["resize_for_vlm"]
     assert result.warnings == ()
+    # 只開盤緣時，偵測短邊也要記在盤緣步驟裡（切菜步驟沒跑，否則無從重現）
+    plate_only = preprocess_food(img, FoodConfig(enable_crop=False, enable_plate=True))
+    assert plate_only.steps[0].name == "detect_plate_ellipse"
+    assert plate_only.steps[0].params["detect_short_side"] == FoodConfig().detect_short_side
 
 
 @pytest.mark.parametrize(
