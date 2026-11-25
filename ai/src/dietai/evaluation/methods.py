@@ -737,12 +737,21 @@ def methods_report_markdown(
         ladders["configured"] = methods
         if any(is_test_row(r) for r in sub):
             lines += ["", f"## {arm}：貪婪選擇", "", _TEST_NOTE]
+        elif all(v.has_error for v in _variants(sub, arm)):
+            # 一組全部出錯（例如解碼套件未安裝）時只註記，不讓整份報告中斷
+            lines += ["", f"## {arm}：貪婪選擇", "", "> 所有變體都有 error，無法計算。"]
         elif "start" in ladders:
             greedy = greedy_ladder(sub, criteria, min_agree=min_agree)
             title = f"## {arm}：貪婪選擇（min_agree={min_agree}）"
             lines += ["", title, "", greedy_table(greedy)]
             ladders["greedy"] = greedy.order
-        ladders.update(orders or {})
+        # 呼叫端指定的順序套用到每一組；用到本組沒有的方法時略過並註記
+        unavailable = []
+        for name, order in (orders or {}).items():
+            if all(m in methods for m in order):
+                ladders[name] = order
+            else:
+                unavailable.append(name)
         simulated = [
             r
             for name, order in ladders.items()
@@ -750,6 +759,8 @@ def methods_report_markdown(
         ]
         lines += ["", f"### {arm}：逐步升級比較（離線計算）", ""]
         lines += [f"- {name}：{' > '.join(order)}" for name, order in ladders.items()]
+        if unavailable:
+            lines += [f"- 略過（本組沒有其中的方法）：{'、'.join(unavailable)}"]
         first = next(iter(ladders))
         lines += ["", summary_table(summarize(simulated, (), first), ())]
         lines += ["", f"#### {arm}：逐步升級比較 · 以原始樣本為單位", ""]

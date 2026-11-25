@@ -444,3 +444,14 @@ def test_pipeline_vs_parts():
     with pytest.raises(ValueError, match="指定 arm"):
         pipeline_vs_parts([*rows, _row("v1", "A", arm="b")])
     assert pipeline_vs_parts([*rows, _row("v1", "A", arm="b")], arm="b") == []
+
+
+def test_report_skips_orders_and_greedy_not_available_in_arm():
+    # 組 a 有 B、C；組 b 只有 raw 且全部出錯：指定順序與貪婪選擇只在能算的組計算
+    rows = [{**r, "arm": "a"} for r in _greedy_table()]
+    rows += [_row(v, "raw", arm="b", error=True) for v in ("v1", "v2")]
+    meta = {"arms": [{"name": "a"}, {"name": "b"}]}
+    report = methods_report_markdown(meta, rows, orders={"frozen": ["raw", "B", "C"]})
+    assert "## a：貪婪選擇" in report and "| frozen |" in report
+    assert "> 所有變體都有 error，無法計算。" in report
+    assert "- 略過（本組沒有其中的方法）：frozen" in report
