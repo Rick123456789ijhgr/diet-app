@@ -45,11 +45,12 @@ def test_left_and_right_raw_bytes_match(zxing, invoice):
     assert result.left.center[0] < result.right.center[0]
 
 
-def test_left_right_by_position_not_content(zxing):
-    """內容對調後，左右仍依位置區分。"""
+def test_left_right_by_content_not_position(zxing):
+    """左右依內容區分（右碼以 ** 開頭）：內容對調擺放時，左碼仍是非 ** 的那個。"""
     result = locate_invoice_qrs(invoice_qr_scene(RIGHT, LEFT), zxing)
     assert result.left is not None and result.right is not None
-    assert (result.left.raw, result.right.raw) == (RIGHT, LEFT)
+    assert (result.left.raw, result.right.raw) == (LEFT, RIGHT)
+    assert result.left.center[0] > result.right.center[0]
 
 
 def test_degraded_invoice(zxing, invoice):
@@ -58,11 +59,11 @@ def test_degraded_invoice(zxing, invoice):
     assert (result.left.raw, result.right.raw) == (LEFT, RIGHT)
 
 
-def test_upside_down_uses_image_position(zxing, invoice):
-    """左右以影像中的位置為準：倒置的發票，原本的右碼出現在左邊。"""
+def test_upside_down_keeps_left_and_right(zxing, invoice):
+    """倒拍的發票：右碼出現在影像左側，左右仍依內容指定，不會對調。"""
     result = locate_invoice_qrs(rotate(invoice, 180), zxing)
     assert result.left is not None and result.right is not None
-    assert (result.left.raw, result.right.raw) == (RIGHT, LEFT)
+    assert (result.left.raw, result.right.raw) == (LEFT, RIGHT)
 
 
 def test_partial_result_when_one_qr_hidden(zxing, invoice):
@@ -82,18 +83,52 @@ def test_not_found_does_not_raise(zxing):
 
 
 def test_accumulates_across_rungs_and_dedupes(fake_decoder):
-    decoder = fake_decoder([[_qr(b"R", 100)], [_qr(b"R", 100)], [_qr(b"L", 0)]])
+    decoder = fake_decoder([[_qr(b"**R", 100)], [_qr(b"**R", 100)], [_qr(b"L", 0)]])
     cfg = InvoiceQrConfig(LadderConfig(rungs=(Rung.RAW, Rung.GRAY, Rung.BINARIZE)))
     result = locate_invoice_qrs(_blank(), decoder, cfg)
     assert result.left is not None and result.right is not None
-    assert (result.left.raw, result.right.raw) == (b"L", b"R")
+    assert (result.left.raw, result.right.raw) == (b"L", b"**R")
     assert len(result.attempts) == 3
 
 
-def test_stops_once_two_found(fake_decoder):
-    decoder = fake_decoder([[_qr(b"L", 0), _qr(b"R", 100)]])
+def test_stops_once_left_and_right_found(fake_decoder):
+    decoder = fake_decoder([[_qr(b"L", 0), _qr(b"**R", 100)]])
     cfg = InvoiceQrConfig(LadderConfig(rungs=(Rung.RAW, Rung.GRAY)))
     assert len(locate_invoice_qrs(_blank(), decoder, cfg).attempts) == 1
+
+
+def test_background_qr_does_not_stop_before_right(fake_decoder):
+    """第一階讀到左碼與背景 QR（共兩個）時不停，繼續到讀到 ** 右碼；背景 QR 不入選。"""
+    decoder = fake_decoder([[_qr(b"L", 0, 50), _qr(b"promo", 300, 20)], [_qr(b"**R", 100, 50)]])
+    cfg = InvoiceQrConfig(LadderConfig(rungs=(Rung.RAW, Rung.GRAY, Rung.BINARIZE)))
+    result = locate_invoice_qrs(_blank(), decoder, cfg)
+    assert result.left is not None and result.right is not None
+    assert (result.left.raw, result.right.raw) == (b"L", b"**R")
+    assert result.complete and result.warnings == ()
+    assert len(result.attempts) == 2
+
+
+def test_right_qr_kept_even_if_smaller_than_background(fake_decoder):
+    """兩類都有時，右碼取 ** 中最大的，不會因背景 QR 較大而被擠掉。"""
+    decoder = fake_decoder([[_qr(b"big", 0, 80), _qr(b"L", 100, 40), _qr(b"**R", 200, 30)]])
+    result = locate_invoice_qrs(_blank(), decoder, RAW_ONLY)
+    assert result.right is not None and result.right.raw == b"**R"
+
+
+def test_without_right_qr_runs_whole_ladder_and_falls_back_to_position(fake_decoder):
+    """一直沒讀到 ** 右碼：跑完整條階梯，退回面積最大兩個＋依位置排左右。"""
+    decoder = fake_decoder([[_qr(b"B", 100), _qr(b"A", 0)]] * 2)
+    cfg = InvoiceQrConfig(LadderConfig(rungs=(Rung.RAW, Rung.GRAY)))
+    result = locate_invoice_qrs(_blank(), decoder, cfg)
+    assert len(result.attempts) == 2
+    assert result.left is not None and result.right is not None
+    assert (result.left.raw, result.right.raw) == (b"A", b"B")
+
+
+def test_only_right_qr_is_partial(fake_decoder):
+    result = locate_invoice_qrs(_blank(), fake_decoder([[_qr(b"**R", 0)]]), RAW_ONLY)
+    assert result.left is not None and result.left.raw == b"**R" and result.right is None
+    assert result.warnings == (PreprocessWarning.INVOICE_QR_PARTIAL,)
 
 
 def test_extra_codes_keep_two_largest(fake_decoder):
