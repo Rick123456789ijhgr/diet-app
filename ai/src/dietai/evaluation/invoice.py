@@ -4,7 +4,8 @@
 
 - 真值為左、右兩個 QR 的**原始位元組**（右側常含 Big5 中文，不能當成文字比對），manifest 的
   ``truth`` 欄寫成兩段小寫 hex 以 ``|`` 分隔（``format_invoice_truth``）；空字串為負樣本。
-- 判定（``judge_invoice``）：比照 ``locate_invoice_qrs`` 只取面積最大的兩個 QR，再與真值比對。
+- 判定（``judge_invoice``）：比照 ``locate_invoice_qrs`` 以 ``select_invoice_pair`` 選出兩個 QR
+  （右碼以 ``**`` 開頭；兩類沒有湊齊時取面積最大的兩個），再與真值比對。
   兩個都一致 → ``correct``；只有一個且一致 → ``partial``；任一不一致 → ``misread``；
   都沒有 → ``missed``。負樣本有 QR → ``false_positive``，否則 ``true_negative``。
   左右不另判：兩個 QR 的內容不同，位元組一致即代表找對了。
@@ -12,7 +13,8 @@
   （同 E1 的 ``run_methods``），每個「影像 × 方法」寫一列到 ``invoice_methods.csv``，
   記錄找到的所有 QR（hex 與面積）。
 - ``simulate_invoice_ladder``：由結果表離線計算逐步升級，規則同 ``locate_invoice_qrs``——
-  依序累積各階找到的 QR（同內容只留第一次），湊滿兩個即停止。
+  依序累積各階找到的 QR（同內容只留第一次），同時有左碼候選與 ``**`` 右碼才停止
+  （``has_invoice_pair``）。
 """
 
 from __future__ import annotations
@@ -46,6 +48,7 @@ from dietai.preprocess import ops
 from dietai.preprocess.barcode import RungAttempt, iter_attempts
 from dietai.preprocess.config import LadderConfig
 from dietai.preprocess.decoders import Decoder
+from dietai.preprocess.invoice_qr import has_invoice_pair, select_invoice_pair
 from dietai.preprocess.types import CodeFormat, Image, Rung
 
 EXPERIMENT = "e3_invoice_qr"
@@ -122,8 +125,11 @@ def parse_invoice_truth(truth: str) -> frozenset[bytes] | None:
 
 
 def select_pair(found: Mapping[bytes, float]) -> list[bytes]:
-    """（內容 → 面積）中面積最大的兩個，規則同 ``locate_invoice_qrs``（排除背景中較小的 QR）。"""
-    return sorted(found, key=lambda raw: found[raw], reverse=True)[:2]
+    """（內容 → 面積）中選出的發票兩碼，規則同 ``locate_invoice_qrs``。
+
+    即 ``select_invoice_pair``。
+    """
+    return select_invoice_pair(found)
 
 
 def judge_invoice(selected: Sequence[bytes], truth: frozenset[bytes] | None) -> InvoiceOutcome:
@@ -286,7 +292,10 @@ def _found(row: Mapping[str, str]) -> list[tuple[bytes, float]]:
 
 
 def _invoice_ladder(v: _Variant, order: Sequence[str]) -> _InvoiceLadder:
-    """依 ``order`` 逐一累積找到的 QR，湊滿兩個即停止（規則同 ``locate_invoice_qrs``）。"""
+    """依 ``order`` 逐一累積找到的 QR，同時有左碼候選與右碼才停止。
+
+    規則同 ``locate_invoice_qrs``。
+    """
     found: dict[bytes, float] = {}
     elapsed = 0.0
     stop = ""
@@ -301,7 +310,7 @@ def _invoice_ladder(v: _Variant, order: Sequence[str]) -> _InvoiceLadder:
         for raw, area in _found(row):
             # 同內容只保留最早的階（面積也取那一次），同 locate_invoice_qrs
             found.setdefault(raw, area)
-        if len(found) >= 2:
+        if has_invoice_pair(found):
             stop = method
             break
     pair = select_pair(found)

@@ -221,7 +221,8 @@ def locate_invoice_qrs(img, decoder, cfg) -> InvoiceQrResult
 | zxing-cpp 內建的 90° 旋轉、縮小、反色嘗試 | 由 `ZxingConfig` 控制，預設與 zxing-cpp 相同（全開）；E1 可關閉以量測階梯本身的貢獻。 |
 | 旋轉校正的做法 | 以梯度結構張量估計主方向（`ops.estimate_skew`），角度小於 `deskew_min_deg` 時略過。 |
 | 四角座標的座標系 | 一律回推到原圖座標（旋轉、縮放階以仿射矩陣反推）。 |
-| 發票只找到一個 QR 時放哪邊 | 放在 `left` 並附 `INVOICE_QR_PARTIAL`（單一碼無法判斷左右）。找到超過兩個時取面積最大的兩個。 |
+| 發票只找到一個 QR 時放哪邊 | 放在 `left` 並附 `INVOICE_QR_PARTIAL`（單一碼不判斷左右）。 |
+| 發票左右與何時停止 | 唯一看內容的地方是右碼開頭的 `**`：同時找到一個非 `**` 與一個 `**` 的 QR 才停止（背景 QR 不會讓階梯提早停下），左右依內容指定（倒拍不對調）；兩類沒有湊齊時退回面積最大兩個＋依中心 x 排左右（`invoice_qr.select_invoice_pair`）。 |
 | `InvoiceQrResult` 的 `image` 欄位 | 不提供：兩碼可能來自不同的階，沒有單一處理後影像（與 `QualityReport` 相同）。 |
 | pyzbar | 提供 `PyzbarDecoder` 作為 E1 對照；ZBar 會轉碼 QR 內容，不可用於電子發票正式流程。CI 安裝 `libzbar0`。 |
 | `LadderConfig` 的序列欄位（`rungs`、`scales`） | 不以 `param()` 宣告；工作台參數面板只處理純量欄位，序列由頁面元件提供，以 `extra_keys` 登記，匯入 JSON 與「還原」時寫回元件。 |

@@ -73,6 +73,33 @@ def test_select_pair_keeps_two_largest():
     assert select_pair({b"a": 1.0}) == [b"a"]
 
 
+def test_select_pair_prefers_left_and_right_by_content():
+    """有 ** 右碼時取「最大的非 **＋最大的 **」，右碼不會因面積小而被擠掉。"""
+    assert select_pair({b"a": 10.0, R: 5.0, b"b": 300.0}) == [b"b", R]
+
+
+class _ByRungDecoder:
+    """原圖（彩色）讀到左碼與背景 QR，灰階才讀到右碼：模擬背景 QR 湊數的情境。"""
+
+    def __call__(self, img):
+        if img.ndim == 3:
+            return [_qr(L, 100), _qr(b"PROMO", 90)]
+        return [_qr(R, 100)]
+
+
+def test_simulated_ladder_does_not_stop_on_background_qr(tmp_path):
+    manifest = _single(tmp_path, format_invoice_truth(L, R))
+    arm = Arm("x", ladder=LadderConfig(rungs=("raw", "gray")))
+    summary = run_invoice_methods(
+        manifest, [arm], tmp_path / "r", decoder_factory=lambda a: _ByRungDecoder()
+    )
+    _, rows = read_invoice_methods(summary.out_dir)
+    (ladder,) = simulate_invoice_ladder(rows, ["raw", "gray"])
+    assert ladder["stop_method"] == "gray" and ladder["attempts"] == 2
+    assert ladder["outcome"] == "correct"
+    assert ladder["decoded"] == f"{L.hex()}|{R.hex()}"
+
+
 @pytest.fixture(scope="module")
 def dataset(tmp_path_factory):
     out = tmp_path_factory.mktemp("inv")

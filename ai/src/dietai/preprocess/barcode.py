@@ -176,10 +176,6 @@ def ladder_variants(img: Image, cfg: LadderConfig = LadderConfig()) -> Iterator[
             yield _located(get_gray(), cfg)
 
 
-# ``locate`` 階拼接時，每個裁切上下各留的白邊（像素）；解碼器需要條碼外的安靜區
-_LOCATE_GAP = 20
-
-
 def locate_barcodes(gray: Image) -> list[npt.NDArray[np.float32]]:
     """以 OpenCV 的條碼偵測器（``cv2.barcode.BarcodeDetector``，不需訓練）找出一維條碼的位置。
 
@@ -194,10 +190,11 @@ def locate_barcodes(gray: Image) -> list[npt.NDArray[np.float32]]:
 
 def _rectified(
     gray: Image, quad: npt.NDArray[np.float32], pad: float, max_width: int
-) -> tuple[Image, Affine]:
+) -> tuple[Image, Affine] | None:
     """把斜的條碼框以中心放大 ``pad`` 倍後轉正裁下，長邊為水平；回傳（裁切, 回推原圖的矩陣）。
 
     寬度大於 ``max_width``（非 0）時一併縮小。框外超出畫面的部分填白。
+    退化的框（面積或任一邊不到 1 像素）回傳 ``None``。
     """
     center = quad.mean(axis=0)
     q = (quad - center) * pad + center
@@ -206,7 +203,10 @@ def _rectified(
         q = np.roll(q, -1, axis=0)
     # 點的繞行方向須與目標相同（影像座標中為順時針），否則裁出的是鏡像，條碼讀不出來
     a, b = q[1] - q[0], q[2] - q[1]
-    if a[0] * b[1] - a[1] * b[0] < 0:
+    cross = a[0] * b[1] - a[1] * b[0]
+    if abs(cross) < 1 or min(np.linalg.norm(a), np.linalg.norm(b)) < 1:
+        return None  # 偵測器偶爾回傳重合或共線的點，無法轉正（否則下方除以 0）
+    if cross < 0:
         q = q[[1, 0, 3, 2]]
     width = float(np.linalg.norm(q[1] - q[2]))
     height = float(np.linalg.norm(q[0] - q[1]))
@@ -223,25 +223,29 @@ def _rectified(
 def _located(gray: Image, cfg: LadderConfig, pad: float | None = None) -> Variant:
     """``locate`` 階：找出條碼、各自轉正裁下，上下拼成一張影像（只解碼一次）。
 
-    ``pad`` 為框的放大倍數（省略時用 ``cfg.locate_pad``）。找不到條碼時回傳略過的版本
-    （不送解碼）。參數 ``boxes`` 為找到的條碼框數。
+    ``pad`` 為框的放大倍數（省略時用 ``cfg.locate_pad``）。找不到可用的條碼框時回傳略過的版本
+    （不送解碼）。參數 ``boxes`` 為採用的條碼框數（不含退化的框）。
     """
     pad = cfg.locate_pad if pad is None else pad
+    gap = cfg.locate_gap
     params: dict[str, Any] = {"pad": pad, "max_width": cfg.locate_max_width}
-    quads = locate_barcodes(gray)
-    if not quads:
+    crops = [
+        c
+        for q in locate_barcodes(gray)
+        if (c := _rectified(gray, q, pad, cfg.locate_max_width)) is not None
+    ]
+    if not crops:
         return Variant(Rung.LOCATE, None, _IDENTITY, {**params, "boxes": 0}, skipped=True)
-    crops = [_rectified(gray, q, pad, cfg.locate_max_width) for q in quads]
     width = max(c.shape[1] for c, _ in crops)
     parts: list[Image] = []
     regions: list[Region] = []
     top = 0
     for crop, inverse in crops:
         h, w = crop.shape[:2]
-        block = np.full((h + 2 * _LOCATE_GAP, width), 255, dtype=np.uint8)
-        block[_LOCATE_GAP : _LOCATE_GAP + h, :w] = crop
-        # 拼接座標 → 裁切座標（往上移 top + GAP）→ 原圖
-        shift = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, -(top + _LOCATE_GAP)]])
+        block = np.full((h + 2 * gap, width), 255, dtype=np.uint8)
+        block[gap : gap + h, :w] = crop
+        # 拼接座標 → 裁切座標（往上移 top + gap）→ 原圖
+        shift = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, -(top + gap)]])
         regions.append(Region(top, top + block.shape[0], _compose(inverse, shift)))
         parts.append(block)
         top += block.shape[0]
@@ -249,7 +253,7 @@ def _located(gray: Image, cfg: LadderConfig, pad: float | None = None) -> Varian
         Rung.LOCATE,
         np.vstack(parts),
         regions[0].to_original,
-        {**params, "boxes": len(quads)},
+        {**params, "boxes": len(crops)},
         regions=tuple(regions),
     )
 
