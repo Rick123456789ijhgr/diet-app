@@ -412,6 +412,8 @@ def test_pipeline_deskew_below_threshold_keeps_going(ean13_img):
         {"pipelines": (("rotate:0", "binarize"),)},
         {"pipelines": (("rotate:abc", "binarize"),)},
         {"pipelines": (("rotate:90", "rotate:90.0"),)},  # 正規化後重複
+        {"pipelines": (("multiscale:0.5", "multiscale:2"),)},  # 縮放最多一步（可合成一步）
+        {"pipelines": (("rotate:90", "binarize", "rotate:-45"),)},  # 旋轉最多一步
         {"pipelines": (("denoise", "binarize"), (Rung.DENOISE, Rung.BINARIZE))},  # 流程重複
         {"rungs": (Rung.PIPELINE,), "pipelines": ()},
         {"clahe_clip": 0.0},
@@ -618,6 +620,22 @@ def test_pipeline_locate_is_normalized():
 def test_pipeline_locate_rejects_invalid(steps):
     with pytest.raises(ValueError):
         LadderConfig(pipelines=(steps,))
+
+
+def test_confirmed_hits_are_unique(fake_decoder):
+    """同一次嘗試解出兩個相同的（格式, 內容）時只回傳一個（保留第一個）；不同內容都保留。"""
+    first = DecodeHit(
+        CodeFormat.EAN13, "4710088410108", b"4710088410108", ((0, 0), (10, 0), (10, 5), (0, 5))
+    )
+    again = DecodeHit(
+        CodeFormat.EAN13, "4710088410108", b"4710088410108", ((50, 0), (60, 0), (60, 5), (50, 5))
+    )
+    other = _hit("4006381333931")
+    result = decode_with_ladder(_blank(), fake_decoder([[first, again, other]]), RAW_ONLY)
+    assert result.success and [h.text for h in result.hits] == ["4710088410108", "4006381333931"]
+    assert result.hits[0].corners == first.corners
+    # 嘗試紀錄保留解碼器的原始結果，不去重
+    assert len(result.attempts[0].hits) == 3
 
 
 # ---------------------------------------------------------------- locate 階的邊界情況

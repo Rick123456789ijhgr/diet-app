@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import time
 from collections import Counter
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -443,7 +443,9 @@ def decode_with_ladder(
 
     「確認」：同一個（格式, 內容）累計在 ``cfg.min_agree`` 次不同的嘗試中解出
     （多尺度的每個倍率各算一次嘗試）。``min_agree`` 為 1 時即第一次解出就採用；
-    成功時 ``hits`` 只含當次嘗試中已確認的結果，``success_rung`` 為達到確認的那一階。
+    成功時 ``hits`` 只含當次嘗試中已確認的結果，同一個（格式, 內容）只留第一個
+    （例如拼接影像中重疊的兩個框、或包裝上印了兩次的同一條碼）；
+    ``success_rung`` 為達到確認的那一階。
 
     輸入為 BGR 或灰階 ``uint8`` 影像，不會被修改。``decoder`` 可為任何符合
     ``Decoder`` 介面的實作（預設實作為 ``ZxingDecoder``）。
@@ -457,7 +459,7 @@ def decode_with_ladder(
         attempts.append(attempt)
         votes.update({(h.format, h.text) for h in attempt.hits})  # 同一次嘗試只算一票
         # 本次嘗試中，累計票數已達門檻的結果；票數可能有一部分來自先前的嘗試
-        confirmed = tuple(h for h in attempt.hits if votes[h.format, h.text] >= cfg.min_agree)
+        confirmed = _unique(h for h in attempt.hits if votes[h.format, h.text] >= cfg.min_agree)
         if confirmed:
             return LadderResult(
                 success=True,
@@ -483,6 +485,17 @@ def decode_with_ladder(
             PreprocessWarning.BARCODE_UNCONFIRMED if votes else PreprocessWarning.BARCODE_NOT_FOUND,
         ),
     )
+
+
+def _unique(hits: Iterable[DecodeHit]) -> tuple[DecodeHit, ...]:
+    """依（格式, 內容）去除重複，保留第一次出現的結果（含其座標）。"""
+    seen: set[tuple[CodeFormat, str]] = set()
+    out: list[DecodeHit] = []
+    for h in hits:
+        if (h.format, h.text) not in seen:
+            seen.add((h.format, h.text))
+            out.append(h)
+    return tuple(out)
 
 
 def attempts_to_steps(attempts: list[RungAttempt]) -> tuple[StepRecord, ...]:

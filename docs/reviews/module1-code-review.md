@@ -131,8 +131,8 @@
 | F5 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_rectified` | 一律以長邊為條碼的寬；比寬還高的條碼轉正後條紋為水平 | 維持：見下方實測；dev 中沒有這類條碼 |
 | F6 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_located` | 拼接時只有上下留白，一維條碼需要的左右安靜區沒有補 | 維持：見下方實測 |
 | F7 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_LOCATE_GAP` | 留白寫死在模組常數，違反「參數一律放 config」 | 修正：`fix/ai-preprocess-locate`（`LadderConfig.locate_gap`，預設 20） |
-| F8 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_pipeline` | 流程中有兩個 `rotate` 或 `multiscale` 時，`params` 只記最後一個值 | ☐ |
-| F9 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `decode_with_ladder` | `hits` 沒有去除重複，同一條碼可能回傳兩次 | ☐ |
+| F8 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `_pipeline` | 流程中有兩個 `rotate` 或 `multiscale` 時，`params` 只記最後一個值 | 修正：#81（multiscale、rotate 各限一步） |
+| F9 | [barcode.py](../../ai/src/dietai/preprocess/barcode.py) `decode_with_ladder` | `hits` 沒有去除重複，同一條碼可能回傳兩次 | 修正：#81（依格式＋內容去重） |
 
 **F4–F6 的實測（f_a01 dev 250 張，實驗組 `locate_on`，run 20261115-002314 的方法與順序）**：
 

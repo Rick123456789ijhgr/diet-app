@@ -288,8 +288,16 @@ def check_pad(value: float) -> None:
 
 
 def check_pipeline(steps: tuple[str, ...]) -> None:
-    """一條疊加流程中，定位條碼只能是第一步，之後只能接只改像素的處理。"""
+    """一條疊加流程中，縮放與旋轉各最多一步；定位條碼只能是第一步，之後只能接只改像素的處理。
+
+    兩次縮放可合成一次（倍率相乘）、兩次旋轉可合成一次（角度相加），重複沒有意義，
+    而且結果紀錄的參數鍵（``multiscale.factor``、``rotate.angle``）每種只有一個。
+    """
     parsed = [parse_pipeline_step(s)[0] for s in steps]
+    for kind in (Rung.MULTISCALE, Rung.ROTATE):
+        if parsed.count(kind) > 1:
+            names = [str(s) for s in steps]
+            raise ValueError(f"一條疊加流程中 {kind.value} 最多一步（可合成一步），收到 {names}")
     if Rung.LOCATE not in parsed:
         return
     if parsed[0] is not Rung.LOCATE or parsed.count(Rung.LOCATE) > 1:
@@ -331,8 +339,8 @@ class LadderConfig:
     EAN-13 可能被部分掃描成另一個合法的 UPC-E，``verify_ean13`` 擋不住。
     ``pipelines`` 為 ``pipeline`` 階依序嘗試的疊加流程，每條流程是 ``PIPELINE_STEPS`` 中至少兩個
     不重複步驟的序列（例如 ``("denoise", "binarize")``），各步驟沿用下方對應的參數；縮放與旋轉
-    步驟自帶參數（``("multiscale:0.5", "rotate:90")``，見 ``parse_pipeline_step``），正規化後
-    一般步驟為 ``Rung``、帶參數的步驟為字串。
+    步驟自帶參數（``("multiscale:0.5", "rotate:90")``，見 ``parse_pipeline_step``；各最多一步），
+    正規化後一般步驟為 ``Rung``、帶參數的步驟為字串。
     ``angles`` 為 ``rotate`` 階依序嘗試的旋轉角度（逆時針、度；例如 90 把直放的條碼轉成橫的）。
     這五個欄位是序列，不以 ``param()`` 宣告，工作台的條碼頁另有專用元件。
     由 JSON 讀入時接受字串與數字的串列。
