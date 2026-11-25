@@ -41,7 +41,7 @@
 | B2 | [evaluation/barcode.py:167](../../ai/src/dietai/evaluation/barcode.py#L167) `judge` | 模組 docstring 寫負樣本「有任何結果 → false_positive」，實際只看已達 `min_agree` 的 `hits`；`min_agree > 1` 時零星解碼判為 true_negative。行為或文件擇一修正。 | ☐ |
 | B3 | [invoice_qr.py:68](../../ai/src/dietai/preprocess/invoice_qr.py#L68) | 左右兩碼只依中心 x 座標區分，照片轉 90°／180° 時會判錯或對調。建議 Go 端解析時以內容再確認（右碼以 `**` 開頭）。 | 修正：Python 端即依 `**` 指定左右，並以此決定階梯何時停止（`fix/ai-preprocess-invoice-qr`） |
 | B4 | [label.py:133](../../ai/src/dietai/preprocess/label.py#L133)、[label.py:149](../../ai/src/dietai/preprocess/label.py#L149) | 光斑比例與 `GLARE_RETAKE` 都用膨脹後遮罩，`glare_max_ratio` 實際比的是「光斑＋外圈」，細碎光斑較早觸發重拍。 | ☐ |
-| B5 | [food.py:199](../../ai/src/dietai/preprocess/food.py#L199) | 中心落在較大橢圓內的候選一律捨棄，大盤上的小碟（盤中盤）會漏掉。 | ☐ |
+| B5 | [food.py:199](../../ai/src/dietai/preprocess/food.py#L199) | 中心落在較大橢圓內的候選一律捨棄，大盤上的小碟（盤中盤）會漏掉。去重半徑 1 寫死在程式內（同 C1 的性質）；要調整時應改成 `FoodConfig` 參數（批次 3 複查）。 | ☐ |
 | B6 | [server/workbench.py:116](../../ai/src/dietai/server/workbench.py#L116) | 只要有旋轉或縮放就丟掉整份真值，連與位置無關的 EAN-13 內容也丟。 | ☐ |
 | B7 | [quality.py:58](../../ai/src/dietai/preprocess/quality.py#L58) | 短邊小於 `blur_short_side` 的影像先放大再算拉普拉斯，分數偏低，`LOW_RESOLUTION` 常連帶 `TOO_BLURRY`。校準 `blur_min` 時要注意。 | ☐ |
 | B8 | [barcode.py:202](../../ai/src/dietai/preprocess/barcode.py#L202) | 只驗 EAN-13 檢查碼，UPC-A／EAN-8 依賴 zxing-cpp 預設不回傳錯誤結果；換解碼器時沒有這層保護。 | ☐ |
@@ -157,3 +157,17 @@
 | G4 | [features.py](../../ai/src/dietai/preprocess/features.py) `measure_features` | 曝光三項在縮小影像上算，`check_quality` 在原解析度上算；細小反光被平均掉，兩邊數字不同。**已驗證**（每 8 列一條白線：舊版 0.0、應為 0.125）。 | 修正：#83（改在原解析度上算） |
 | G5 | [features.py](../../ai/src/dietai/preprocess/features.py) 模組常數、[label.py](../../ai/src/dietai/preprocess/label.py) `_edges`、`_MIN_COLLINEAR_PX` | `IMPULSE_DIFF`、`BACKGROUND_*`、`GLARE_LEVEL`、`GLARE_MIN_AREA`、5×5 高斯核、3×3 膨脹核、共線容差寫死在程式內（同 C1 的性質） | ☐ 待討論 |
 | G6 | [features.py](../../ai/src/dietai/preprocess/features.py) `QualityFeatures` | 沒有 `steps`、`warnings`，與其他前處理入口的回傳格式不一致，量測用的常數沒有紀錄 | ☐ 待討論 |
+
+## H 程式複查批次 3 追加（2026-11-25，`/code-review`）
+
+範圍：`preprocess/` 的 `food.py`、`config.py`。food.py 盤緣去重半徑寫死（同 B5、C1）已補註在 B5，不另編號。
+
+| # | 位置 | 問題 | 處理 |
+| --- | --- | --- | --- |
+| H1 | [config.py](../../ai/src/dietai/preprocess/config.py) 各設定類別 `__post_init__` | 單邊檢查（`x <= 0`）擋不住 NaN／inf，`json.loads` 讀得進 `NaN`、`Infinity`；例如 `bg_distance=NaN` 時遮罩全空，只看到 `DISH_NOT_FOUND`。**已驗證**：照收的欄位 QualityConfig 1、LabelConfig 2、LadderConfig 6、FoodConfig 2。 | 修正：#85（`check_finite`） |
+| H2 | [config.py](../../ai/src/dietai/preprocess/config.py) `FoodConfig` | `morph_px`、`bg_blur_ksize`、`plate_blur_ksize`、`plate_dilate_ksize` 沒有上限，`morph_px=1000000` 到 OpenCV 才記憶體不足。**已驗證**。 | 修正：#85（上限同表單 max） |
+| H3 | [config.py](../../ai/src/dietai/preprocess/config.py) `FoodConfig` | 驗證與表單下限不一致：`plate_canny_high` 可為 0、`detect_short_side`／`vlm_max_side` 只要 > 0（同 E1 的性質） | 修正：#85 |
+| H4 | [food.py](../../ai/src/dietai/preprocess/food.py) `detect_plate_ellipse` | 橢圓中心換回原圖沒做半像素修正（同 D1 的性質）。**已驗證**：4000×3000 合成場景盤心平均偏 (−1.46, −2.50) 像素。 | 修正：#86（修正後 (−0.09, −0.07)） |
+| H5 | [food.py](../../ai/src/dietai/preprocess/food.py) `_detect_scale` | 只回傳短邊倍率，長邊經四捨五入後實際倍率略有不同 | 修正：#86（各軸實際倍率） |
+| H6 | [food.py](../../ai/src/dietai/preprocess/food.py) `preprocess_food` | 盤緣步驟沒記 `detect_short_side`，只開盤緣時無從重現 | 修正：#86 |
+| H7 | [config.py](../../ai/src/dietai/preprocess/config.py) `LabelConfig` | `glare_dilate_px`、`inpaint_radius`、`hough_max_gap` 等與核大小相關的欄位也沒有上限（同 H2 的性質，#85 未改） | ☐ 待討論 |
