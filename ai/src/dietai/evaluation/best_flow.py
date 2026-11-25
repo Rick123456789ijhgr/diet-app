@@ -26,7 +26,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from dietai.evaluation.barcode import Outcome, _gtin13
+from dietai.evaluation.barcode import Outcome, _gtin13, split_values
 from dietai.preprocess.barcode import ean13_checksum_ok
 
 TRUTH_FILE = "truth.csv"
@@ -72,7 +72,7 @@ class TruthGuess:
 
 def _texts(row: Mapping[str, str]) -> list[str]:
     """一列解出的內容（依原順序去重複）。"""
-    return list(dict.fromkeys(t for t in row.get("decoded", "").split("|") if t))
+    return list(dict.fromkeys(t for t in split_values(row.get("decoded", "")) if t))
 
 
 def infer_truth(

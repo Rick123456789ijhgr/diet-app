@@ -25,7 +25,13 @@ from dietai.evaluation import (
     write_image,
     write_manifest,
 )
-from dietai.evaluation.barcode import ATTEMPT_COLUMNS, RESULT_COLUMNS, is_ambiguous
+from dietai.evaluation.barcode import (
+    ATTEMPT_COLUMNS,
+    RESULT_COLUMNS,
+    is_ambiguous,
+    join_values,
+    split_values,
+)
 from dietai.preprocess import (
     DEFAULT_RUNGS,
     CodeFormat,
@@ -482,3 +488,25 @@ def test_report_markdown_by_source_section():
     assert "主要比較為 `a`" in text and "沒有 `source_id` 欄" not in text
     # 沒有 source_id 時註明信賴區間偏窄
     assert "沒有 `source_id` 欄" in report_markdown(meta, ROWS, (), "base")
+
+
+@pytest.mark.parametrize(
+    "values", [[], ["4710088410108"], ["A|B", "c\\d", ""], ["", "x"], ["a\\|b"]]
+)
+def test_join_split_values_round_trip(values):
+    cell = join_values(values)
+    assert split_values(cell) == values or (values == [""] and cell == "")
+
+
+def test_join_values_keeps_old_format_for_plain_codes():
+    assert join_values(["4712612300015", "4718652300015"]) == "4712612300015|4718652300015"
+
+
+def test_is_ambiguous_with_separator_in_text():
+    row = {
+        "outcome": "misread",
+        "truth": "4718652300015",
+        "decoded": join_values(["x|4718652300015"]),
+    }
+    # 「x|4718652300015」是一個結果，不可拆成兩段而誤認真值在其中
+    assert not is_ambiguous(row)
