@@ -114,8 +114,8 @@ def crop_dishes(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[Box, ...]:
 
     相鄰或互相接觸的盤子會被併成同一個框（已知限制，見任務書第 9 節）。
     """
-    # 以下都在縮小後的偵測尺寸上計算；factor 為縮放倍率，最後由 _to_original 換回原圖座標
-    mask, factor = _foreground(img, cfg)
+    # 以下都在縮小後的偵測尺寸上計算；scale 為各軸縮放倍率，最後由 _to_original 換回原圖座標
+    mask, scale = _foreground(img, cfg)
     sh, sw = mask.shape
     total = sh * sw
     # RETR_EXTERNAL 只取最外層輪廓（每塊前景一個）；CHAIN_APPROX_SIMPLE 壓縮直線段的點，
@@ -142,7 +142,7 @@ def crop_dishes(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[Box, ...]:
         if len(kept) == cfg.max_dishes:
             break
     height, width = img.shape[:2]
-    return tuple(_to_original(b, factor, cfg.box_pad_ratio, width, height) for b in kept)
+    return tuple(_to_original(b, scale, cfg.box_pad_ratio, width, height) for b in kept)
 
 
 def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[Ellipse, ...]:
@@ -157,7 +157,7 @@ def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[El
     """
     ops.validate_image(img)
     # 在縮小後的影像上偵測，像素門檻（盤徑、輪廓點數）才與原圖解析度無關
-    small, factor = _detect_scale(img, cfg.detect_short_side)
+    small, scale = _detect_scale(img, cfg.detect_short_side)
     gray = ops.to_gray(small)
     # 高斯平滑（預設 5×5）先壓掉食物紋理等細小邊緣，Canny 才主要留下盤緣這類明顯的長邊緣；
     # sigma 傳 0 表示由核大小自動推算
@@ -200,11 +200,7 @@ def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[El
         if any(k.normalized_radius(e.cx, e.cy) < 1 for k in kept):
             continue
         kept.append(e)
-    # 換回原圖座標：中心與軸長除以縮放倍率；等比縮放不改變角度
-    return tuple(
-        Ellipse(e.cx / factor, e.cy / factor, e.major / factor, e.minor / factor, e.angle)
-        for e in kept
-    )
+    return tuple(_ellipse_to_original(e, scale) for e in kept)
 
 
 def preprocess_food(img: Image, cfg: FoodConfig = FoodConfig()) -> FoodResult:
@@ -259,6 +255,8 @@ def preprocess_food(img: Image, cfg: FoodConfig = FoodConfig()) -> FoodResult:
                 _ms_since(start),
                 {
                     "count": len(plates),
+                    # 盤緣在此短邊上偵測，像素門檻與輪廓點數都依它而定；只開盤緣時也要記到
+                    "detect_short_side": cfg.detect_short_side,
                     "plate_blur_ksize": cfg.plate_blur_ksize,
                     "plate_canny_low": cfg.plate_canny_low,
                     "plate_canny_high": cfg.plate_canny_high,
@@ -306,22 +304,28 @@ def preprocess_food(img: Image, cfg: FoodConfig = FoodConfig()) -> FoodResult:
 # ---------------------------------------------------------------- 內部實作
 
 
-def _detect_scale(img: Image, short_side: int) -> tuple[Image, float]:
-    """縮小到偵測用短邊（不放大），回傳（小圖, 縮放倍率）；保留色彩。"""
-    short = min(img.shape[:2])
-    if short <= short_side:
+def _detect_scale(img: Image, short_side: int) -> tuple[Image, tuple[float, float]]:
+    """縮小到偵測用短邊（不放大），回傳（小圖,（x 倍率, y 倍率））；保留色彩。
+
+    倍率依各軸實際尺寸計算：縮小後的長邊經過四捨五入，與短邊的倍率略有差異
+    （同 ``label._quad_to_original``）。
+    """
+    h, w = img.shape[:2]
+    if min(h, w) <= short_side:
         # 不複製：呼叫端只讀取（GaussianBlur、cvtColor 等都產生新陣列），不會改到輸入
-        return img, 1.0
-    return ops.resize_short_side(img, short_side), short_side / short
+        return img, (1.0, 1.0)
+    small = ops.resize_short_side(img, short_side)
+    sh, sw = small.shape[:2]
+    return small, (sw / w, sh / h)
 
 
-def _foreground(img: Image, cfg: FoodConfig) -> tuple[npt.NDArray[np.bool_], float]:
+def _foreground(img: Image, cfg: FoodConfig) -> tuple[npt.NDArray[np.bool_], tuple[float, float]]:
     """``dish_foreground`` 與 ``crop_dishes`` 共用的實作，回傳（縮小後的遮罩, 縮放倍率）。
 
     演算法見 ``dish_foreground`` 的說明；倍率供 ``crop_dishes`` 把框換回原圖座標。
     """
     ops.validate_image(img)
-    small, factor = _detect_scale(img, cfg.detect_short_side)
+    small, scale = _detect_scale(img, cfg.detect_short_side)
     # 灰階輸入轉成三通道，讓後面的 LAB 流程一致（此時只有 L 有差異，a／b 皆為 0）
     bgr = small if small.ndim == 3 else cv2.cvtColor(small, cv2.COLOR_GRAY2BGR)
     # 先以高斯平滑（預設 5×5）壓掉像素雜訊與細紋理，再轉 LAB（色差在 LAB 中較接近人眼感受）
@@ -358,21 +362,45 @@ def _foreground(img: Image, cfg: FoodConfig) -> tuple[npt.NDArray[np.bool_], flo
     # 做法：只取最外層輪廓，以 1 實心填滿（-1 表示畫出全部輪廓），內部的洞自然被補上
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(mask, contours, -1, 1, thickness=cv2.FILLED)
-    return mask.astype(bool), factor
+    return mask.astype(bool), scale
 
 
-def _to_original(box: Box, factor: float, pad_ratio: float, width: int, height: int) -> Box:
-    """縮小後的框換回原圖座標、向外擴張並截在影像內。"""
-    # 外擴量依各自的寬、高計算（在縮小後的座標中），再一起除以 factor 換回原圖
+def _to_original(
+    box: Box, scale: tuple[float, float], pad_ratio: float, width: int, height: int
+) -> Box:
+    """縮小後的框換回原圖座標、向外擴張並截在影像內。
+
+    框的 x／x1 是像素的外緣（不是中心），兩張圖的外緣對齊，直接除以各軸倍率即可，
+    不需要半像素修正（與 ``_ellipse_to_original`` 不同）。
+    """
+    sx, sy = scale
+    # 外擴量依各自的寬、高計算（在縮小後的座標中），再除以各軸倍率換回原圖
     px, py = pad_ratio * box.w, pad_ratio * box.h
     # 左上角向下取整、右下角向上取整，確保換回原圖後的框不會比偵測到的範圍小；
     # x1／y1 為不含的右下邊界，所以截在 width／height（而非 width - 1）
-    x0 = max(0, int(np.floor((box.x - px) / factor)))
-    y0 = max(0, int(np.floor((box.y - py) / factor)))
-    x1 = min(width, int(np.ceil((box.x1 + px) / factor)))
-    y1 = min(height, int(np.ceil((box.y1 + py) / factor)))
+    x0 = max(0, int(np.floor((box.x - px) / sx)))
+    y0 = max(0, int(np.floor((box.y - py) / sy)))
+    x1 = min(width, int(np.ceil((box.x1 + px) / sx)))
+    y1 = min(height, int(np.ceil((box.y1 + py) / sy)))
     # 寬高至少 1，保證 Box 合法、裁切不會得到空影像
     return Box(x0, y0, max(1, x1 - x0), max(1, y1 - y0))
+
+
+def _ellipse_to_original(e: Ellipse, scale: tuple[float, float]) -> Ellipse:
+    """縮小圖上的橢圓換回原圖座標。
+
+    中心是像素中心座標，要做半像素修正：``原圖 = (小圖 + 0.5) / 倍率 - 0.5``（同
+    ``label._quad_to_original``）；直接除以倍率會往左上偏約 0.5 ×（1／倍率 − 1）個原圖像素。
+    軸長是長度，直接除以倍率；兩軸倍率只因四捨五入差不到 0.1%，取平均，角度不變。
+    未縮小時原樣回傳。
+    """
+    sx, sy = scale
+    if sx == 1.0 and sy == 1.0:
+        return e
+    s = (sx + sy) / 2
+    return Ellipse(
+        (e.cx + 0.5) / sx - 0.5, (e.cy + 0.5) / sy - 0.5, e.major / s, e.minor / s, e.angle
+    )
 
 
 def _fit_ellipse(contour: cv2.typing.MatLike) -> Ellipse | None:
