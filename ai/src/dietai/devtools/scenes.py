@@ -16,6 +16,9 @@ from dietai.preprocess.types import Box, Ellipse, Image, Quad
 
 # 可用的場景名稱（只用於錯誤訊息；分派在 synthesize 中）
 SCENES = ("label", "ean13", "invoice", "nutrition", "food")
+# 真值中與像素位置有關的鍵：旋轉或縮放後不再成立（新增場景時一併維護）；
+# 條碼內容、發票文字與位置無關，照樣保留
+POSITIONAL_TRUTH_KEYS = frozenset({"quad", "plates", "plate_boxes"})
 
 
 class SceneError(ValueError):

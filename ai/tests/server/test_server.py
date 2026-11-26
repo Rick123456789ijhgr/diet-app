@@ -163,6 +163,15 @@ def test_degrade_keeps_truth_only_without_geometry_change(wb):
     assert _degrade(wb, food.image_id, {"scale": 0.5}).truth_json == ""
 
 
+def test_degrade_with_geometry_keeps_position_free_truth(wb):
+    # 旋轉或縮放後條碼內容仍成立，只拿掉與位置有關的鍵（review B6）
+    code = wb.Synthesize(workbench_pb2.SynthesizeRequest(scene="ean13")).image
+    rotated = _degrade(wb, code.image_id, {"rotate_deg": 10})
+    assert rotated.truth_json and json.loads(rotated.truth_json) == json.loads(code.truth_json)
+    label = wb.Synthesize(workbench_pb2.SynthesizeRequest(scene="nutrition")).image
+    assert _degrade(wb, label.image_id, {"rotate_deg": 10}).truth_json == ""
+
+
 def test_render_views_and_artifact(wb, uploaded):
     hist = _view(wb, uploaded.image_id, "histogram")
     assert sum(json.loads(hist.data_json)["counts"]) == 320 * 240
