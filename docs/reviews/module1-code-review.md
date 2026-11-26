@@ -188,3 +188,18 @@
 | I8 | [label.py](../../ai/src/dietai/evaluation/label.py) `LabelTruth.from_dict` | `columns` 含空字串時，該營養欄被當成表頭對到第 1 欄 | 修正：#89（拒絕） |
 | I9 | [label.py](../../ai/src/dietai/evaluation/label.py) `LabelTruth.from_dict` | `header`／`facts` 為 `null` 或串列時丟裸 TypeError，錯誤訊息沒有檔名 | 修正：#89（改丟 ValueError） |
 | I10 | [barcode.py](../../ai/src/dietai/evaluation/barcode.py) `_natural` | 標籤值 `nan`／`inf` 當數字排序，NaN 比較恆為 False，分組順序不定 | 修正：#88（非有限值當文字） |
+
+## J 程式複查批次 5 追加（2026-11-26，`/code-review`）
+
+範圍：`evaluation/` 的 `splits.py`、`manifest.py`、`image_names.py`、`best_flow.py`、`adaptive.py`、`label_run.py`、`__init__.py`，與 `synthetic/` 全部。上方已列的 A2（`write_manifest`）、E3（`__all__` 排序）不另編號。模組一程式複查五批至此完成。
+
+| # | 位置 | 問題 | 處理 |
+| --- | --- | --- | --- |
+| J1 | [variants.py](../../ai/src/dietai/synthetic/variants.py) `write_variant_dataset` | 資料夾名稱只換掉 `/`、`\`；原圖代碼為 `D:/photos/a.jpg`（沒有 id 欄時）會清理成 `D:_photos_a.jpg`，在 Windows 被當成 D 槽相對路徑，影像寫到 `out_dir` 外，路徑也失去 `splits/test`。**已驗證**。 | 修正：#91（只留文字、數字與 `_ . -`，並確認落在 `splits/<split>/` 下） |
+| J2 | [variants.py](../../ai/src/dietai/synthetic/variants.py) `write_variant_dataset` | `f/001` 與 `f_001` 清理後同名，後寫的蓋掉先寫的影像，兩組真值指向同一批 PNG | 修正：#91（撞名時報錯） |
+| J3 | [splits.py](../../ai/src/dietai/evaluation/splits.py) `select_sources` | 以 `csv.DictReader` 重讀來源檔，只擋 `split=test`、不擋路徑在 `splits/test` 的影像；欄名有空白時 KeyError（違反「讀 manifest 一律經 read_manifest」） | 修正：#92（由 `read_manifest` 結果寫出） |
+| J4 | [adaptive.py](../../ai/src/dietai/evaluation/adaptive.py) `simulate_adaptive`、`adaptive_report_markdown` | 有一張讀檔失敗的影像就丟「沒有品質量測值」，整份自適應報告產不出來 | 修正：#93（記為 error） |
+| J5 | [splits.py](../../ai/src/dietai/evaluation/splits.py) `apply_split` | `split_moves.csv` 存相對路徑，在別的目錄執行 `undo_split` 全部還原失敗 | 修正：#92（寫絕對路徑） |
+| J6 | [best_flow.py](../../ai/src/dietai/evaluation/best_flow.py) `infer_truth` | 只接受 EAN-13 檢查碼，EAN-8 永遠進不了 `auto`；命名規則的 `valid_code` 接受 EAN-8 | 修正：#93（改用 `valid_code`，Rick 決定 EAN-8 也要） |
+| J7 | [adaptive.py](../../ai/src/dietai/evaluation/adaptive.py) `measure_manifest` | 讀檔失敗的影像不回報進度，最後一張失敗時停在 n−1/n | 修正：#93 |
+| J8 | [variants.py](../../ai/src/dietai/synthetic/variants.py) `write_variant_dataset` | `conditions` 名稱重複時寫出 id 重複的 manifest，讀不回來且資料夾已非空 | 修正：#91 |
