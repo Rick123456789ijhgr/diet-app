@@ -168,6 +168,60 @@ class QualityConfig:
         group="resolution",
     )
 
+    # 自適應策略的品質量測值（features.measure_features）；check_quality 不使用。
+    # 量測值的定義改了，依它校準的規則門檻（adaptive）要重新調整
+    feature_impulse_diff: int = param(
+        64,
+        "脈衝雜訊差值",
+        "Impulse diff",
+        "與 3×3 中值濾波結果相差超過此灰階值的像素視為脈衝（椒鹽）雜訊，計入 impulse_ratio。",
+        min=1,
+        max=255,
+        step=1,
+        group="features",
+    )
+    feature_background_short_side: int = param(
+        64,
+        "背景光線短邊",
+        "Background short side",
+        "估計背景光線時先縮小到此短邊（像素），再做大範圍高斯模糊，計算 illumination。",
+        min=8,
+        max=512,
+        step=8,
+        group="features",
+    )
+    feature_background_sigma: float = param(
+        0.08,
+        "背景模糊比例",
+        "Background sigma",
+        "背景光線的高斯模糊 sigma，為上方短邊的比例；須遠大於條碼線條與文字。",
+        min=0.01,
+        max=0.5,
+        step=0.01,
+        group="features",
+    )
+    feature_glare_level: int = param(
+        250,
+        "反光灰階",
+        "Glare level",
+        "灰階達此值（接近飽和）的連通區域才可能算反光，計入 glare_ratio。"
+        "不用過亮灰階：白紙與白色包裝本身就高於它。",
+        min=1,
+        max=255,
+        step=1,
+        group="features",
+    )
+    feature_glare_min_area: float = param(
+        0.002,
+        "反光最小面積",
+        "Glare min area",
+        "近飽和連通區域的面積至少為量測影像面積的此比例才算反光（濾掉細小亮點）。",
+        min=0.0,
+        max=0.1,
+        step=0.001,
+        group="features",
+    )
+
     def __post_init__(self) -> None:
         """檢查數值範圍與欄位之間的大小關係；不合法時丟 ``ValueError``。"""
         check_finite(self)
@@ -178,6 +232,16 @@ class QualityConfig:
         for name in ("dark_ratio_max", "bright_ratio_max"):
             if not 0.0 <= getattr(self, name) <= 1.0:
                 raise ValueError(f"{name} 必須介於 0 與 1")
+        # 量測值參數（範圍同表單）
+        for name, lo, hi in (
+            ("feature_impulse_diff", 1, 255),
+            ("feature_background_short_side", 8, 512),
+            ("feature_background_sigma", 0.01, 0.5),
+            ("feature_glare_level", 1, 255),
+            ("feature_glare_min_area", 0.0, 0.1),
+        ):
+            if not lo <= getattr(self, name) <= hi:
+                raise ValueError(f"{name} 必須介於 {lo} 與 {hi}，收到 {getattr(self, name)}")
 
 
 # ---------------------------------------------------------------- 條碼與發票 QR
@@ -648,6 +712,26 @@ class LabelConfig:
         step=16,
         group="locate",
     )
+    edge_blur_ksize: int = param(
+        5,
+        "邊緣平滑核",
+        "Edge blur ksize",
+        "Canny 前的高斯平滑核邊長（奇數，1 為不平滑）；壓掉紙張紋理與 JPEG 雜訊，減少零碎邊緣。",
+        min=1,
+        max=31,
+        step=2,
+        group="locate",
+    )
+    edge_dilate_ksize: int = param(
+        3,
+        "邊緣膨脹核",
+        "Edge dilate ksize",
+        "Canny 後的膨脹核邊長（1 為不膨脹）；接上外框的細小斷口，讓輪廓能封閉。",
+        min=1,
+        max=15,
+        step=1,
+        group="locate",
+    )
     canny_low: int = param(
         50,
         "Canny 低門檻",
@@ -742,11 +826,22 @@ class LabelConfig:
         "共線容許距離",
         "Collinear tolerance",
         "直線法取外框時，線段兩端到最外側直線的距離在（縮小後）短邊的此比例內才視為同一條邊"
-        "（至少 2 像素）；太大會把粗外框內側的另一條邊混進來。",
+        "（至少為共線最小距離）；太大會把粗外框內側的另一條邊混進來。",
         min=0.0,
         max=0.1,
         step=0.001,
         calibrate=True,
+        group="locate",
+    )
+    # 預設 2：HoughLinesP 的距離解析度 1 像素，加上邊緣圖 3×3 膨脹的寬度
+    hough_min_collinear_px: float = param(
+        2.0,
+        "共線最小距離",
+        "Min collinear px",
+        "共線容許距離的下限（像素，以定位用尺寸為準）；小圖時比例換算的距離太小，仍保留此容差。",
+        min=0.0,
+        max=50.0,
+        step=0.5,
         group="locate",
     )
     hough_min_side_gap_ratio: float = param(
@@ -947,6 +1042,30 @@ class LabelConfig:
             value = getattr(self, name)
             if value < 3 or value % 2 == 0:
                 raise ValueError(f"{name} 必須為 ≥ 3 的奇數，收到 {value}")
+        # 與核、影像大小有關的欄位設上限（同表單 max）：過大的值到 OpenCV 才記憶體不足（review H7）
+        for name, upper in _LABEL_UPPER_BOUNDS.items():
+            if getattr(self, name) > upper:
+                raise ValueError(f"{name} 不得超過 {upper}，收到 {getattr(self, name)}")
+        # cv2.GaussianBlur 要求正奇數的核邊長（1 等同不平滑）
+        if not 1 <= self.edge_blur_ksize <= 31 or self.edge_blur_ksize % 2 == 0:
+            raise ValueError(f"edge_blur_ksize 必須為 1–31 的奇數，收到 {self.edge_blur_ksize}")
+        if not 1 <= self.edge_dilate_ksize <= 15:
+            raise ValueError(f"edge_dilate_ksize 必須介於 1 與 15，收到 {self.edge_dilate_ksize}")
+        if not 0.0 <= self.hough_min_collinear_px <= 50.0:
+            raise ValueError("hough_min_collinear_px 必須介於 0 與 50")
+
+
+# LabelConfig 的上限（同表單 max）
+_LABEL_UPPER_BOUNDS = {
+    "detect_short_side": 2160,
+    "rectify_max_side": 8000,
+    "hough_max_gap": 200,
+    "glare_dilate_px": 50,
+    "inpaint_radius": 50,
+    "denoise_ksize": 15,
+    "clahe_tile": 64,
+    "binarize_block_size": 255,
+}
 
 
 # ---------------------------------------------------------------- 食物照片

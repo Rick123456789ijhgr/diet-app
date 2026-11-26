@@ -213,6 +213,8 @@ def preprocess_label(img: Image, cfg: LabelConfig = LabelConfig()) -> LabelResul
                 {
                     "method": method or "none",
                     "detect_short_side": cfg.detect_short_side,
+                    "edge_blur_ksize": cfg.edge_blur_ksize,
+                    "edge_dilate_ksize": cfg.edge_dilate_ksize,
                     "canny_low": cfg.canny_low,
                     "canny_high": cfg.canny_high,
                     "approx_eps_ratio": cfg.approx_eps_ratio,
@@ -222,6 +224,7 @@ def preprocess_label(img: Image, cfg: LabelConfig = LabelConfig()) -> LabelResul
                     "hough_min_line_ratio": cfg.hough_min_line_ratio,
                     "hough_max_gap": cfg.hough_max_gap,
                     "hough_collinear_ratio": cfg.hough_collinear_ratio,
+                    "hough_min_collinear_px": cfg.hough_min_collinear_px,
                     "hough_min_side_gap_ratio": cfg.hough_min_side_gap_ratio,
                     "hough_corner_margin_ratio": cfg.hough_corner_margin_ratio,
                 },
@@ -332,12 +335,14 @@ def _detect_scale(img: Image, cfg: LabelConfig) -> tuple[Image, float]:
 
 
 def _edges(gray: Image, cfg: LabelConfig) -> Image:
-    """高斯平滑 → Canny → 3×3 膨脹，產生定位用的 0／255 邊緣圖。"""
-    # 5×5 高斯（sigma 由核心大小自動推算）先壓掉紙張紋理與 JPEG 雜訊，減少零碎邊緣
-    smooth = cv2.GaussianBlur(gray, (5, 5), 0)
+    """高斯平滑 → Canny → 膨脹，產生定位用的 0／255 邊緣圖。"""
+    # 高斯（sigma 由核心大小自動推算）先壓掉紙張紋理與 JPEG 雜訊，減少零碎邊緣
+    k = cfg.edge_blur_ksize
+    smooth = cv2.GaussianBlur(gray, (k, k), 0)
     edges = cv2.Canny(smooth, cfg.canny_low, cfg.canny_high)
-    # 膨脹一圈接上外框的細小斷口，讓 findContours 能得到封閉輪廓
-    return np.asarray(cv2.dilate(edges, np.ones((3, 3), np.uint8)), dtype=np.uint8)
+    # 膨脹接上外框的細小斷口，讓 findContours 能得到封閉輪廓
+    d = cfg.edge_dilate_ksize
+    return np.asarray(cv2.dilate(edges, np.ones((d, d), np.uint8)), dtype=np.uint8)
 
 
 def _locate(img: Image, cfg: LabelConfig) -> tuple[Quad | None, QuadMethod | None]:
@@ -398,9 +403,6 @@ def _quad_from_contours(edges: Image, cfg: LabelConfig, area: tuple[float, float
     return None
 
 
-# 共線容許距離的下限：HoughLinesP 的距離解析度 1 像素，加上邊緣圖 3×3 膨脹的寬度
-_MIN_COLLINEAR_PX = 2.0
-
 # 直線：(點, 單位方向向量)
 _Line = tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]
 
@@ -432,7 +434,7 @@ def _quad_from_lines(edges: Image, cfg: LabelConfig, area: tuple[float, float]) 
     # 傾角 ≤ 45° 歸為近水平（恰為 45° 也算水平），其餘為近垂直
     horizontal = np.abs(dx) >= np.abs(dy)
     center = np.array([w / 2, h / 2])
-    tol = max(_MIN_COLLINEAR_PX, cfg.hough_collinear_ratio * min(h, w))
+    tol = max(cfg.hough_min_collinear_px, cfg.hough_collinear_ratio * min(h, w))
     # 依序收集 top、bottom（水平組）、left、right（垂直組），與下方解包的順序對應
     sides: list[_Line] = []
     # axis=1：水平線比較中心處的 y；axis=0：垂直線比較中心處的 x

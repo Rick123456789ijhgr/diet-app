@@ -19,31 +19,25 @@ from dietai.preprocess.ops import estimate_skew, resize_short_side, to_gray, val
 from dietai.preprocess.quality import blur_score, exposure_stats
 from dietai.preprocess.types import Image
 
-# 與 3×3 中值濾波結果相差超過此灰階值的像素視為脈衝（椒鹽）雜訊
-IMPULSE_DIFF = 64
-# 估計背景光線：先縮到此短邊，再以短邊的 BACKGROUND_SIGMA 倍做高斯模糊（遠大於條碼線條與文字）
-BACKGROUND_SHORT_SIDE = 64
-BACKGROUND_SIGMA = 0.08
-# 反光：灰階達此值（接近飽和）的連通區域，面積至少為量測影像面積的 GLARE_MIN_AREA 才算。
-# 不用 QualityConfig.bright_level：白紙與白色包裝本身就高於它，會把整張背景當成反光
-GLARE_LEVEL = 250
-GLARE_MIN_AREA = 0.002
-
 
 @dataclass(frozen=True)
 class QualityFeatures:
     """一張影像的品質量測值。
+
+    與其他前處理入口不同，沒有 ``steps``、``warnings``：這是給自適應規則引用的數值向量
+    （``as_dict`` 寫進 ``features.csv``），警告由 ``quality.check_quality`` 負責；
+    量測用的參數都在 ``QualityConfig`` 的 ``feature_*`` 欄位（review G6）。
 
     - ``blur``：拉普拉斯變異數（越小越模糊），同 ``quality.blur_score``
     - ``brightness``：灰階平均（0–255）；``dark_ratio``／``bright_ratio``：過暗／過亮像素比例。
       三者在原解析度上計算，與 ``quality.check_quality`` 的曝光數值相同（同一 ``cfg`` 時）
     - ``contrast``：灰階第 95 與第 5 百分位數的差（0–255）
     - ``noise``：灰階與 3×3 中值濾波結果的平均絕對差（灰階值）
-    - ``impulse_ratio``：與中值濾波結果相差超過 ``IMPULSE_DIFF`` 的像素比例（椒鹽雜訊）
+    - ``impulse_ratio``：與中值濾波結果相差超過 ``cfg.feature_impulse_diff`` 的像素比例（椒鹽雜訊）
     - ``illumination``：大範圍模糊後的背景亮度之變異係數（標準差／平均，光線不均越大）
     - ``skew``：``ops.estimate_skew`` 的絕對值（度）
     - ``short_side``：原圖短邊（像素）
-    - ``glare_ratio``：面積夠大的近飽和（≥ ``GLARE_LEVEL``）連通區域合計比例
+    - ``glare_ratio``：面積夠大的近飽和（≥ ``cfg.feature_glare_level``）連通區域合計比例
     - ``measure_ms``：量測耗時（毫秒）
     """
 
@@ -72,7 +66,7 @@ FEATURE_NAMES: tuple[str, ...] = tuple(
 
 
 def measure_features(img: Image, cfg: QualityConfig = QualityConfig()) -> QualityFeatures:
-    """量測 ``img`` 的所有品質特徵；使用 ``cfg`` 的模糊與曝光設定。"""
+    """量測 ``img`` 的所有品質特徵；使用 ``cfg`` 的模糊、曝光與 ``feature_*`` 設定。"""
     validate_image(img)
     start = time.perf_counter()
     gray = to_gray(img)
@@ -83,14 +77,17 @@ def measure_features(img: Image, cfg: QualityConfig = QualityConfig()) -> Qualit
 
     p5, p95 = np.percentile(small, (5, 95))
     diff = cv2.absdiff(small, cv2.medianBlur(small, 3))
-    tiny = resize_short_side(small, BACKGROUND_SHORT_SIDE).astype(np.float32)
-    background = cv2.GaussianBlur(tiny, (0, 0), BACKGROUND_SIGMA * BACKGROUND_SHORT_SIDE)
+    # 估計背景光線：先縮小，再以短邊的固定比例做高斯模糊（遠大於條碼線條與文字）
+    side = cfg.feature_background_short_side
+    tiny = resize_short_side(small, side).astype(np.float32)
+    background = cv2.GaussianBlur(tiny, (0, 0), cfg.feature_background_sigma * side)
     mean_bg = float(background.mean())
     illumination = float(background.std()) / mean_bg if mean_bg > 0 else 0.0
 
-    bright = (small >= GLARE_LEVEL).astype(np.uint8)
+    # 反光：近飽和的連通區域，面積夠大才算。不用 cfg.bright_level：白紙與白色包裝本身就高於它
+    bright = (small >= cfg.feature_glare_level).astype(np.uint8)
     n, _, stats, _ = cv2.connectedComponentsWithStats(bright, connectivity=8)
-    min_area = GLARE_MIN_AREA * small.size
+    min_area = cfg.feature_glare_min_area * small.size
     areas = stats[1:n, cv2.CC_STAT_AREA]  # 第 0 個是背景
     glare = float(areas[areas >= min_area].sum()) / small.size
 
@@ -101,7 +98,7 @@ def measure_features(img: Image, cfg: QualityConfig = QualityConfig()) -> Qualit
         bright_ratio=exposure.bright_ratio,
         contrast=float(p95 - p5),
         noise=float(diff.mean()),
-        impulse_ratio=float((diff > IMPULSE_DIFF).mean()),
+        impulse_ratio=float((diff > cfg.feature_impulse_diff).mean()),
         illumination=illumination,
         skew=abs(estimate_skew(small)),
         short_side=int(min(img.shape[:2])),
