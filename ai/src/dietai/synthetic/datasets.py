@@ -49,6 +49,17 @@ BARCODE_CONDITIONS: dict[str, tuple[Callable[[Image, float], Image], tuple[float
 # manifest 的標籤欄；E1 報告可用 ``--by condition`` 等依此分組。``source_id`` 為條碼代碼
 # （``c00``…；負樣本各自一個），同一條碼的各種退化屬於同一個原始樣本，統計時視為一個集群。
 TAG_COLUMNS = (SOURCE_COLUMN, "condition", "level")
+# 寫進 manifest.json 的種子規則：舊版為 seed + i，兩份資料集（seed=0 與 seed=1）的種子序列會錯位重疊
+SEED_SCHEME = "SeedSequence([seed, i])"
+
+
+def item_seed(seed: int, i: int) -> int:
+    """資料集中第 ``i`` 項的種子：由 ``(seed, i)`` 二維導出。
+
+    ``seed + i`` 會讓 seed=0 的第 1 項與 seed=1 的第 0 項同種子、雜訊相同；
+    以 ``SeedSequence`` 混合後各組合互不相關，整體仍可重現。
+    """
+    return int(np.random.SeedSequence([seed, i]).generate_state(1)[0])
 
 
 def write_barcode_dataset(
@@ -95,9 +106,9 @@ def write_barcode_dataset(
         for condition, (fn, levels) in BARCODE_CONDITIONS.items():
             for level in levels:
                 if fn is gaussian_noise:
-                    # 唯一有隨機性的退化：種子取 seed + i，不同條碼的雜訊不同、整體仍可重現
+                    # 唯一有隨機性的退化：種子由 (seed, i) 導出，不同條碼的雜訊不同、整體仍可重現
                     # （同一條碼的各等級共用同一個種子，只差在標準差）
-                    img = gaussian_noise(base, level, seed=seed + i)
+                    img = gaussian_noise(base, level, seed=item_seed(seed, i))
                 else:
                     img = fn(base, level)
                 add(f"c{i:02d}_{condition}_{level:g}", img, code, condition, level, f"c{i:02d}")
@@ -126,6 +137,7 @@ def write_barcode_dataset(
         "generator": "dietai.synthetic.write_barcode_dataset",
         "n_codes": n_codes,
         "seed": seed,
+        "seed_scheme": SEED_SCHEME,
         "module_px": module_px,
         "negatives": negatives,
         "conditions": {k: list(v[1]) for k, v in BARCODE_CONDITIONS.items()},
@@ -161,7 +173,7 @@ def write_label_dataset(
 ) -> Path:
     """在 ``out_dir`` 寫出合成營養標示（透視變形貼在桌面上）、各自的真值 JSON 與 ``manifest.csv``。
 
-    每張影像的透視由 ``seed + i`` 決定；真值含欄位（``LABEL_TRUTH``）、真實四角與全文。
+    每張影像的透視由 ``item_seed(seed, i)`` 決定；真值含欄位（``LABEL_TRUTH``）、真實四角與全文。
     標籤欄為 ``source_id``（每張各自一個）與 ``strength``，``split`` 一律為 ``dev``。
     內容為英文（OpenCV 無法繪製中文），只供演練流程，不代表真實營養標示。
     """
@@ -172,7 +184,7 @@ def write_label_dataset(
     rows: list[dict[str, str]] = []
     for i in range(n):
         name = f"l{i:02d}"
-        img, quad = label_perspective_scene(strength=strength, seed=seed + i)
+        img, quad = label_perspective_scene(strength=strength, seed=item_seed(seed, i))
         write_image(out / "images" / f"{name}.png", img)
         truth = {**LABEL_TRUTH, "quad": np.asarray(quad).round(2).tolist(), "text": text}
         truth_rel = f"truth/{name}.json"
@@ -193,6 +205,7 @@ def write_label_dataset(
         "generator": "dietai.synthetic.write_label_dataset",
         "n": n,
         "seed": seed,
+        "seed_scheme": SEED_SCHEME,
         "strength": strength,
     }
     manifest.with_suffix(".json").write_text(

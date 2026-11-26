@@ -26,7 +26,7 @@ from dietai.devtools import batch, best_flow, degradations, e1, folders, image_n
 from dietai.devtools.configs import config_from_override
 from dietai.devtools.degradations import Degradation
 from dietai.devtools.images import decode_image, load_image
-from dietai.devtools.scenes import SceneError, synthesize
+from dietai.devtools.scenes import POSITIONAL_TRUTH_KEYS, SceneError, synthesize
 from dietai.devtools.schema import config_schemas
 from dietai.devtools.store import ImageStore, StoredImage
 from dietai.devtools.views import (
@@ -118,14 +118,17 @@ class WorkbenchServicer(workbench_pb2_grpc.WorkbenchServiceServicer):
         key = "degrade:" + convert.config_key(d)
         item = self._store.derived(source.image_id, key)
         if item is None:
-            # 只改亮度、模糊、雜訊時像素位置不變，合成影像的真值仍成立
-            moved = d.rotate_deg != 0 or d.scale != 1
+            # 只改亮度、模糊、雜訊時像素位置不變，合成影像的真值仍成立；
+            # 旋轉或縮放時只拿掉與位置有關的鍵（POSITIONAL_TRUTH_KEYS），條碼、發票內容照樣保留
+            truth = source.truth
+            if truth is not None and (d.rotate_deg != 0 or d.scale != 1):
+                truth = {k: v for k, v in truth.items() if k not in POSITIONAL_TRUTH_KEYS} or None
             item = self._store.put_derived(
                 source.image_id,
                 key,
                 degradations.apply(source.image, d),
                 f"{source.description}＋退化 {d.active_count()} 項",
-                None if moved else source.truth,
+                truth,
             )
         return workbench_pb2.DegradeResponse(image=convert.image_ref(item))
 

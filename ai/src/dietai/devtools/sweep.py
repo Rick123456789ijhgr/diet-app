@@ -28,6 +28,7 @@ from dietai.preprocess.ops import resize_short_side
 from dietai.preprocess.quality import QUALITY_WARNINGS
 from dietai.preprocess.types import Image
 from dietai.synthetic import ean13_codes, ean13_scene, label_perspective_scene
+from dietai.synthetic.datasets import item_seed
 
 THUMB_SHORT_SIDE = 200  # 縮圖短邊（像素）
 # 點數與樣本數上限：條碼掃描的解碼次數約為「點數 × 樣本數 × 2（原圖＋完整階梯）」，
@@ -185,13 +186,18 @@ def label_sweep(
     label: LabelConfig,
     quality: QualityConfig,
 ) -> SweepResult:
-    """合成營養標示（各自的隨機透視，種子 ``seed + i``），每個等級跑營養標示前處理並對真實四角判定。
+    """合成營養標示（各自的隨機透視，種子 ``item_seed(seed, i)``）。
+
+    每個等級跑營養標示前處理並對真實四角判定。
 
     幾何類退化（旋轉、縮小、透視）會同時換算真值四角；同一批退化影像也跑品質檢查，
     回傳品質門檻與定位結果的對照（見 ``quality_alarm``）。
     """
     h, w = LABEL_SCENE_SIZE
-    scenes = [label_perspective_scene(LABEL_SCENE_STRENGTH, seed + i, h, w) for i in range(samples)]
+    scenes = [
+        label_perspective_scene(LABEL_SCENE_STRENGTH, item_seed(seed, i), h, w)
+        for i in range(samples)
+    ]
     pairs = [(img, np.asarray(quad, dtype=np.float64)) for img, quad in scenes]
     rows = label_eval.label_sweep(pairs, ax.axis.fn, ax.axis.warp, ax.levels, label, quality, tol)
     outcomes = label_eval.LocateOutcome
