@@ -273,7 +273,9 @@ def apply_split(
             dst = destination(root, a)
             dst.parent.mkdir(parents=True, exist_ok=True)
             a.path.rename(dst)
-            writer.writerow([datetime.now().isoformat(timespec="seconds"), a.path, dst])
+            # 寫絕對路徑：還原時可能在別的目錄執行，相對路徑會對不到
+            now = datetime.now().isoformat(timespec="seconds")
+            writer.writerow([now, a.path.resolve(), dst.resolve()])
             f.flush()  # 中途出錯時，已搬的都在紀錄裡
     return write_manifest(manifest, source_rows(root, plan), SOURCE_TAGS)
 
@@ -356,11 +358,17 @@ def select_sources(
     src = read_manifest(sources)
     if not keep:
         raise ValueError(f"結果表中沒有 {arm}／{method} 判為正確的原圖")
-    with Path(sources).open(encoding="utf-8-sig", newline="") as f:
-        reader = csv.DictReader(f)
-        rows = [r for r in reader if r.get("split", "").lower() != TEST_SPLIT and r["id"] in keep]
-    tags = tuple(c for c in (reader.fieldnames or ()) if c not in ("id", "image", "truth", "split"))
-    # image 是相對來源 manifest 的路徑；寫到別的資料夾時改成相對新位置
-    for r in rows:
-        r["image"] = Path(os.path.relpath(src.path.parent / r["image"], out.parent)).as_posix()
-    return write_manifest(out, rows, tags), len(rows), len(src.items)
+    # 由 read_manifest 的結果寫出：測試集（split 欄或路徑含 splits/test）已排除，欄名與值已去空白
+    rows = [
+        {
+            "id": item.id,
+            # image 改成相對新 manifest 的位置
+            "image": Path(os.path.relpath(item.image, out.parent)).as_posix(),
+            "truth": item.truth,
+            "split": item.split,
+            **item.tags,
+        }
+        for item in src.items
+        if item.id in keep
+    ]
+    return write_manifest(out, rows, src.tag_columns), len(rows), len(src.items)

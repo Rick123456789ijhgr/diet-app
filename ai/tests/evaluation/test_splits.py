@@ -204,3 +204,33 @@ def test_select_sources_keeps_correct_dev_only(tmp_path: Path) -> None:
     assert sel.tag_columns == ("category", "batch", "code_type")
     with pytest.raises(FileExistsError):
         select_sources(manifest, rows, out, arm="r0")
+
+
+def test_select_sources_locks_test_path_and_strips_headers(tmp_path: Path) -> None:
+    # split 欄被改成 dev、路徑仍在 splits/test 下的影像也要擋；手寫 CSV 的欄名前後有空白
+    (tmp_path / "splits" / "test").mkdir(parents=True)
+    (tmp_path / "splits" / "test" / "t.png").write_bytes(b"x")
+    (tmp_path / "d.png").write_bytes(b"x")
+    manifest = tmp_path / "sources.csv"
+    manifest.write_text(
+        " id, image, truth, split, batch\nt, splits/test/t.png, 1, dev, b\nd, d.png, 2, dev, b\n",
+        encoding="utf-8",
+    )
+    rows = [{"arm": "r0", "method": "raw", "source_id": sid, "outcome": "correct"} for sid in "td"]
+    path, kept, total = select_sources(manifest, rows, tmp_path / "o" / "v.csv", arm="r0")
+    assert (kept, total) == (1, 1)
+    sel = read_manifest(path)
+    assert [(i.id, i.tags) for i in sel.items] == [("d", {"batch": "b"})]
+    assert sel.items[0].image.is_file()
+
+
+def test_undo_split_from_another_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # 以相對路徑切分，再到別的目錄還原：搬移紀錄須為絕對路徑
+    paths = _books(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    plan = plan_split(list_images([Path("incoming") / "o_a01"]), {"o_a01": 0.5})
+    apply_split(Path("e1"), plan)
+    monkeypatch.chdir(tmp_path / "e1")
+    restored, problems = undo_split(Path("."))
+    assert (restored, problems) == (7, [])
+    assert all(p.is_file() for p in paths)
