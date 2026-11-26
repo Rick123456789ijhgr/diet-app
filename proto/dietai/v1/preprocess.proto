@@ -46,11 +46,13 @@ message Box {
   int32 h = 4;
 }
 
+// 橢圓（原圖浮點像素座標）：中心 (cx, cy)、長軸與短軸的全長
 message Ellipse {
   double cx = 1;
   double cy = 2;
   double major = 3;
   double minor = 4;
+  // 長軸相對於 x 軸的角度：單位為度、範圍 [0, 180)；影像 y 軸向下，正角度為順時針（與 OpenCV 一致）
   double angle = 5;
 }
 
