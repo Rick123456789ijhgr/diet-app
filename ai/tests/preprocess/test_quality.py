@@ -145,3 +145,12 @@ def test_check_quality_1080p_under_50ms(scene_1080p):
         check_quality(scene_1080p)
         runs.append((time.perf_counter() - start) * 1000)
     assert float(np.median(runs)) < 50, runs
+
+
+def test_low_resolution_does_not_also_warn_blurry(scene):
+    # 小圖先放大才算模糊，分數必然偏低；只回報解析度不足，模糊分數照常回傳（review B7）
+    img = scene(120, 160)
+    strict = QualityConfig(blur_min=1e9)
+    report = check_quality(img, strict)
+    assert W.LOW_RESOLUTION in report.warnings and W.TOO_BLURRY not in report.warnings
+    assert report.blur_score == blur_score(img, strict)

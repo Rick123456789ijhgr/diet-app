@@ -387,3 +387,16 @@ def test_preprocess_food_speed_1080p():
     start = time.perf_counter()
     preprocess_food(img, PLATES)
     assert (time.perf_counter() - start) * 1000 < 200
+
+
+def test_plate_dedup_radius_controls_nested_dish():
+    # 大盤上偏離中心的小碟：預設（半徑 1）視為同一盤而捨棄；半徑 0 時保留（review B5）
+    img = np.full((720, 960, 3), 60, np.uint8)
+    cv2.circle(img, (480, 360), 300, (235, 235, 235), -1)
+    cv2.circle(img, (560, 380), 110, (120, 160, 200), -1)
+    assert FoodConfig().plate_dedup_radius == 1.0
+    assert len(detect_plate_ellipse(img)) == 1
+    kept = detect_plate_ellipse(img, FoodConfig(plate_dedup_radius=0.0))
+    assert any(abs(e.cx - 560) < 5 and abs(e.cy - 380) < 5 for e in kept)
+    with pytest.raises(ValueError, match="plate_dedup_radius"):
+        FoodConfig(plate_dedup_radius=-0.1)

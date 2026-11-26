@@ -37,7 +37,8 @@ def test_parse_axis_rejects_bad_params(params, field):
 def test_quality_sweep_triggers_blur_warning():
     img = label_scene(240, 320)
     ax = sweep.parse_axis({"axis": "blur_sigma", "lo": 0, "hi": 8, "n": 5})
-    result = sweep.quality_sweep(img, ax, QualityConfig())
+    # 240×320 低於預設解析度門檻，低解析度時不判模糊；放寬門檻以測模糊警告本身
+    result = sweep.quality_sweep(img, ax, QualityConfig(min_short_side=1))
     rows = result.data["rows"]
     assert [r["level"] for r in rows] == [0, 2, 4, 6, 8]
     assert rows[0]["blur_score"] > rows[-1]["blur_score"]  # 越模糊分數越低

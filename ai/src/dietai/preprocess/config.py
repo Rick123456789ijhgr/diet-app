@@ -1190,6 +1190,17 @@ class FoodConfig:
         step=1,
         group="plate",
     )
+    plate_dedup_radius: float = param(
+        1.0,
+        "盤緣去重半徑",
+        "Dedup radius",
+        "中心落在較大橢圓內、正規化半徑小於此值的候選視為同一個盤子而捨棄（1 為橢圓邊上）。"
+        "調小可保留偏離中心的盤中盤，但同一盤的內圈也較容易被重複偵測。",
+        min=0.0,
+        max=2.0,
+        step=0.05,
+        group="plate",
+    )
     plate_min_contour_points: int = param(
         20,
         "盤緣最少輪廓點",
@@ -1267,5 +1278,7 @@ class FoodConfig:
             raise ValueError(f"plate_dilate_ksize 必須介於 1 與 15，收到 {self.plate_dilate_ksize}")
         if self.plate_coverage_bins < 4:
             raise ValueError("plate_coverage_bins 至少為 4")
+        if not 0.0 <= self.plate_dedup_radius <= 2.0:
+            raise ValueError(f"plate_dedup_radius 必須介於 0 與 2，收到 {self.plate_dedup_radius}")
         if not 1 <= self.vlm_jpeg_quality <= 100:
             raise ValueError("vlm_jpeg_quality 必須介於 1 與 100")
