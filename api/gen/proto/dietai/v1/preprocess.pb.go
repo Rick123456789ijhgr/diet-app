@@ -330,13 +330,15 @@ func (x *Box) GetH() int32 {
 	return 0
 }
 
+// 橢圓（原圖浮點像素座標）：中心 (cx, cy)、長軸與短軸的全長
 type Ellipse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cx            float64                `protobuf:"fixed64,1,opt,name=cx,proto3" json:"cx,omitempty"`
-	Cy            float64                `protobuf:"fixed64,2,opt,name=cy,proto3" json:"cy,omitempty"`
-	Major         float64                `protobuf:"fixed64,3,opt,name=major,proto3" json:"major,omitempty"`
-	Minor         float64                `protobuf:"fixed64,4,opt,name=minor,proto3" json:"minor,omitempty"`
-	Angle         float64                `protobuf:"fixed64,5,opt,name=angle,proto3" json:"angle,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Cx    float64                `protobuf:"fixed64,1,opt,name=cx,proto3" json:"cx,omitempty"`
+	Cy    float64                `protobuf:"fixed64,2,opt,name=cy,proto3" json:"cy,omitempty"`
+	Major float64                `protobuf:"fixed64,3,opt,name=major,proto3" json:"major,omitempty"`
+	Minor float64                `protobuf:"fixed64,4,opt,name=minor,proto3" json:"minor,omitempty"`
+	// 長軸相對於 x 軸的角度：單位為度、範圍 [0, 180)；影像 y 軸向下，正角度為順時針（與 OpenCV 一致）
+	Angle         float64 `protobuf:"fixed64,5,opt,name=angle,proto3" json:"angle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
