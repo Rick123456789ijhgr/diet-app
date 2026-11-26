@@ -156,3 +156,12 @@ def test_truth_file_round_trip(tmp_path):
     write_truth(tmp_path, truths)
     assert read_truth(tmp_path) == truths
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_ean8_with_valid_checksum_can_be_auto():
+    ean8 = "96385074"
+    rows = [_row("a", "raw", ean8), _row("a", "gray", ean8)]
+    assert _status(rows) == {"a": (TruthStatus.AUTO, ean8)}
+    bad = "96385075"  # 檢查碼錯誤
+    rows = [_row("b", "raw", bad), _row("b", "gray", bad)]
+    assert _status(rows)["b"][0] is TruthStatus.REVIEW

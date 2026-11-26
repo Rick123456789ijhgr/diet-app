@@ -25,8 +25,9 @@ import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+# valid_code 定義在 best_flow（推定真值也要用，避免循環 import），由此照舊匯出
 from dietai.evaluation.best_flow import normalize_truth
-from dietai.preprocess.barcode import ean13_checksum_ok
+from dietai.evaluation.best_flow import valid_code as valid_code
 
 NO_CODE = "nocode"
 # 序號的位數範圍；與 8 位以上的條碼不重疊，檔名不會有歧義
@@ -39,15 +40,6 @@ _NAME_RE = re.compile(
     rf"^(?P<category>{_TOKEN})_(?P<batch>{_TOKEN})_(?P<seq>\d{{{MIN_SEQ_WIDTH},{MAX_SEQ_WIDTH}}})"
     rf"(?:_(?P<code>\d{{8}}|\d{{12,13}}|[a-z]+))?$"
 )
-
-
-def valid_code(code: str) -> bool:
-    """EAN-13（含補成 13 位的 UPC-A）或 EAN-8，檢查碼須正確。"""
-    if len(code) == 8 and code.isdigit():
-        # EAN-8：由左數第 1、3、5、7 位權重 3，第 2、4、6 位權重 1
-        total = sum(int(c) * (1 if i % 2 else 3) for i, c in enumerate(code[:7]))
-        return (10 - total % 10) % 10 == int(code[7])
-    return ean13_checksum_ok(code)
 
 
 def check_token(value: str, field: str) -> str:

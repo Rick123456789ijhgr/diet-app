@@ -194,3 +194,34 @@ def test_measure_and_features_csv_roundtrip(tmp_path):
     (tmp_path / "bad.csv").write_text("id,blur\na,1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="缺少欄位"):
         read_features(tmp_path / "bad.csv")
+
+
+def test_unreadable_image_does_not_break_simulation_or_report():
+    # v5 讀檔失敗：結果表每個方法都是 error，features 沒有這張
+    rows, features = _table()
+    for m in METHODS:
+        rows.append({**_row("v5", m), "outcome": "error", "elapsed_ms": "", "error": "OSError"})
+    got = {r["id"]: r for r in simulate_adaptive(rows, features, _policy())}
+    assert (got["v5"]["outcome"], got["v5"]["rules"]) == ("error", "")
+    assert got["v1"]["outcome"] == "correct"
+    md = adaptive_report_markdown({"label": "t"}, rows, features, _policy(), {"raw": ["raw"]})
+    assert "## 規則" in md
+    # 沒有 error 卻缺量測值仍是資料不一致，照樣報錯
+    with pytest.raises(ValueError, match="沒有品質量測值"):
+        simulate_adaptive(rows, {k: v for k, v in features.items() if k != "v1"}, _policy())
+
+
+def test_measure_reports_progress_for_unreadable_last_image(tmp_path):
+    from dietai.evaluation import read_manifest, write_image
+
+    write_image(tmp_path / "a.png", ean13_scene())
+    rows = [
+        {"id": "a", "image": "a.png", "truth": CODE},
+        {"id": "b", "image": "nope.png", "truth": ""},
+    ]
+    seen = []
+    measure_manifest(
+        read_manifest(write_manifest(tmp_path / "m.csv", rows)),
+        progress=lambda i, n: seen.append((i, n)),
+    )
+    assert seen == [(1, 2), (2, 2)]

@@ -3,7 +3,7 @@
 工作台「找最佳流程」先在不知道真值的情況下對每張影像執行所有方法（``run_methods``，
 ``truth`` 欄全為空），再由各方法實際解出的內容推定每張影像的條碼：
 
-- ``auto``：至少 ``min_methods`` 個不同方法解出同一個檢查碼正確的 GTIN-13，且沒有任何方法
+- ``auto``：至少 ``min_methods`` 個不同方法解出同一個檢查碼正確的 GTIN-13 或 EAN-8，且沒有任何方法
   解出其他內容。
 - ``review``：有方法解出內容，但不符合 ``auto``（內容互相衝突、只有一個方法讀到、檢查碼錯誤）。
 - ``unknown``：沒有任何方法解出內容。
@@ -75,6 +75,15 @@ def _texts(row: Mapping[str, str]) -> list[str]:
     return list(dict.fromkeys(t for t in split_values(row.get("decoded", "")) if t))
 
 
+def valid_code(code: str) -> bool:
+    """EAN-13（含補成 13 位的 UPC-A）或 EAN-8，檢查碼須正確。"""
+    if len(code) == 8 and code.isdigit():
+        # EAN-8：由左數第 1、3、5、7 位權重 3，第 2、4、6 位權重 1
+        total = sum(int(c) * (1 if i % 2 else 3) for i, c in enumerate(code[:7]))
+        return (10 - total % 10) % 10 == int(code[7])
+    return ean13_checksum_ok(code)
+
+
 def infer_truth(
     rows: Sequence[Mapping[str, str]], *, min_methods: int = DEFAULT_MIN_METHODS
 ) -> list[TruthGuess]:
@@ -100,7 +109,7 @@ def infer_truth(
     for image_id, per_image in votes.items():
         # sorted 為穩定排序：同票時保留第一次出現的順序
         candidates = tuple(
-            Candidate(code, tuple(ms), ean13_checksum_ok(code))
+            Candidate(code, tuple(ms), valid_code(code))
             for code, ms in sorted(per_image.items(), key=lambda kv: -len(kv[1]))
         )
         if not candidates:
