@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import zlib
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -159,6 +160,9 @@ def write_variant_dataset(
     unknown = [c for c in names if c not in available]
     if unknown:
         raise ValueError(f"沒有這些劣化條件：{unknown}；可用：{available}")
+    dup = sorted({c for c in names if names.count(c) > 1})
+    if dup:
+        raise ValueError(f"劣化條件重複（變體 id 會重複）：{dup}")
     if not sources.items:
         raise ValueError("來源 manifest 沒有任何原圖")
     missing = [i.id for i in sources.items if not i.split]
@@ -169,6 +173,7 @@ def write_variant_dataset(
         raise ValueError(f"來源 manifest 的標籤欄與變體欄位同名：{sorted(clash)}")
     if max_side is not None and max_side < 1:
         raise ValueError(f"max_side 至少為 1，收到 {max_side}")
+    folders = _source_folders(sources)
     out = Path(out_dir)
     if out.exists() and any(out.iterdir()):
         raise FileExistsError(f"輸出資料夾已存在且非空，資料集不覆寫：{out}")
@@ -177,8 +182,7 @@ def write_variant_dataset(
     for item in sources.items:
         base = limit_side(read_image(item.image), max_side)
         s = source_seed(item.id, seed)
-        # 以原圖代碼當資料夾名稱；把路徑分隔字元換掉，避免寫到別處
-        folder = Path("splits") / item.split / item.id.replace("/", "_").replace("\\", "_")
+        folder = folders[item.id]
 
         for condition, level, img in _degraded(base, names, s):
             rel = (folder / f"{condition}_{level}.png").as_posix()
@@ -215,6 +219,34 @@ def write_variant_dataset(
         json.dumps(params, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     return manifest
+
+
+def _folder_name(source_id: str) -> str:
+    """原圖代碼轉成資料夾名稱：文字、數字、``_ . -`` 以外的字元（含路徑分隔、磁碟代號的
+    冒號）換成 ``_``，開頭的 ``.`` 去掉，避免寫到 ``splits/<split>/`` 以外的地方。"""
+    return re.sub(r"[^\w.-]", "_", source_id).lstrip(".") or "_"
+
+
+def _source_folders(sources: Manifest) -> dict[str, Path]:
+    """各原圖的變體資料夾（相對 ``out_dir``）。
+
+    清理後撞名時丟 ``ValueError``：不擋的話後寫的會蓋掉先寫的影像。
+    """
+    folders: dict[str, Path] = {}
+    owner: dict[Path, str] = {}
+    for item in sources.items:
+        folder = Path("splits") / item.split / _folder_name(item.id)
+        # 防呆：資料夾必須落在 splits/<split>/ 之下（測試集鎖定依路徑判斷）
+        if folder.parent != Path("splits") / item.split or folder.is_absolute() or folder.drive:
+            raise ValueError(f"原圖代碼無法當資料夾名稱：{item.id!r}")
+        key = Path(str(folder).lower())  # Windows 不分大小寫
+        if key in owner:
+            raise ValueError(
+                f"原圖代碼 {owner[key]!r} 與 {item.id!r} 的變體資料夾同名（{folder.as_posix()}）"
+            )
+        owner[key] = item.id
+        folders[item.id] = folder
+    return folders
 
 
 def _condition_params(name: str) -> dict[str, object]:
