@@ -110,6 +110,7 @@ export const GROUP_TEXT: Record<string, string> = {
   blur: '模糊',
   exposure: '曝光',
   resolution: '解析度',
+  features: '量測值',
   binarize: '二值化',
   sharpen: '銳化',
   denoise: '去雜訊',

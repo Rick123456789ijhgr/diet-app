@@ -156,8 +156,8 @@
 | G2 | [adaptive.py](../../ai/src/dietai/preprocess/adaptive.py) `from_dict` | 只有 `rules` 那段在 try 內；`max_attempts: null`、最外層是陣列時丟 TypeError／AttributeError，而非文件寫的 ValueError。**已驗證**。 | 修正：#82 |
 | G3 | [adaptive.py](../../ai/src/dietai/preprocess/adaptive.py) `Rule` | 門檻不擋 NaN／inf；`json` 讀得進 `NaN`，規則永遠不成立且無提示 | 修正：#82 |
 | G4 | [features.py](../../ai/src/dietai/preprocess/features.py) `measure_features` | 曝光三項在縮小影像上算，`check_quality` 在原解析度上算；細小反光被平均掉，兩邊數字不同。**已驗證**（每 8 列一條白線：舊版 0.0、應為 0.125）。 | 修正：#83（改在原解析度上算） |
-| G5 | [features.py](../../ai/src/dietai/preprocess/features.py) 模組常數、[label.py](../../ai/src/dietai/preprocess/label.py) `_edges`、`_MIN_COLLINEAR_PX` | `IMPULSE_DIFF`、`BACKGROUND_*`、`GLARE_LEVEL`、`GLARE_MIN_AREA`、5×5 高斯核、3×3 膨脹核、共線容差寫死在程式內（同 C1 的性質） | ☐ 待討論 |
-| G6 | [features.py](../../ai/src/dietai/preprocess/features.py) `QualityFeatures` | 沒有 `steps`、`warnings`，與其他前處理入口的回傳格式不一致，量測用的常數沒有紀錄 | ☐ 待討論 |
+| G5 | [features.py](../../ai/src/dietai/preprocess/features.py) 模組常數、[label.py](../../ai/src/dietai/preprocess/label.py) `_edges`、`_MIN_COLLINEAR_PX` | `IMPULSE_DIFF`、`BACKGROUND_*`、`GLARE_LEVEL`、`GLARE_MIN_AREA`、5×5 高斯核、3×3 膨脹核、共線容差寫死在程式內（同 C1 的性質） | 修正：features 的 5 個常數改為 `QualityConfig.feature_*`；label 的邊緣平滑核、膨脹核與共線下限改為 `LabelConfig.edge_blur_ksize`、`edge_dilate_ksize`、`hough_min_collinear_px`。預設值不變，24 組合成影像輸出逐項相同（Rick 決定） |
+| G6 | [features.py](../../ai/src/dietai/preprocess/features.py) `QualityFeatures` | 沒有 `steps`、`warnings`，與其他前處理入口的回傳格式不一致，量測用的常數沒有紀錄 | 維持並註明：給自適應規則引用的數值向量，警告由 `check_quality` 負責；量測參數已在 `QualityConfig.feature_*`（Rick 決定） |
 
 ## H 程式複查批次 3 追加（2026-11-25，`/code-review`）
 
@@ -171,7 +171,7 @@
 | H4 | [food.py](../../ai/src/dietai/preprocess/food.py) `detect_plate_ellipse` | 橢圓中心換回原圖沒做半像素修正（同 D1 的性質）。**已驗證**：4000×3000 合成場景盤心平均偏 (−1.46, −2.50) 像素。 | 修正：#86（修正後 (−0.09, −0.07)） |
 | H5 | [food.py](../../ai/src/dietai/preprocess/food.py) `_detect_scale` | 只回傳短邊倍率，長邊經四捨五入後實際倍率略有不同 | 修正：#86（各軸實際倍率） |
 | H6 | [food.py](../../ai/src/dietai/preprocess/food.py) `preprocess_food` | 盤緣步驟沒記 `detect_short_side`，只開盤緣時無從重現 | 修正：#86 |
-| H7 | [config.py](../../ai/src/dietai/preprocess/config.py) `LabelConfig` | `glare_dilate_px`、`inpaint_radius`、`hough_max_gap` 等與核大小相關的欄位也沒有上限（同 H2 的性質，#85 未改） | ☐ 待討論 |
+| H7 | [config.py](../../ai/src/dietai/preprocess/config.py) `LabelConfig` | `glare_dilate_px`、`inpaint_radius`、`hough_max_gap` 等與核大小相關的欄位也沒有上限（同 H2 的性質，#85 未改） | 修正：`LabelConfig` 與核、影像大小有關的 8 個欄位加上限，同表單 max（Rick 決定） |
 
 ## I 程式複查批次 4 追加（2026-11-26，`/code-review`）
 

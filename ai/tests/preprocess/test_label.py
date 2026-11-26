@@ -448,3 +448,34 @@ def test_preprocess_label_1080p_speed():
         preprocess_label(img)
     elapsed_ms = (time.perf_counter() - start) * 1000 / 5
     assert elapsed_ms < 150
+
+
+def test_edge_params_defaults_and_effect():
+    # 原本寫死在 label.py 的 5×5 高斯、3×3 膨脹、共線下限 2 像素（review G5）：預設不變
+    cfg = LabelConfig()
+    assert (cfg.edge_blur_ksize, cfg.edge_dilate_ksize, cfg.hough_min_collinear_px) == (5, 3, 2.0)
+    img, _ = label_perspective_scene(0.1, seed=0)
+    thin = label_edges(img, LabelConfig(edge_dilate_ksize=1))
+    assert np.count_nonzero(thin) < np.count_nonzero(label_edges(img))
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"edge_blur_ksize": 4},
+        {"edge_dilate_ksize": 0},
+        {"hough_min_collinear_px": -1.0},
+        # 與核、影像大小有關的欄位上限同表單 max（review H7）
+        {"detect_short_side": 4000},
+        {"rectify_max_side": 10000},
+        {"hough_max_gap": 1000},
+        {"glare_dilate_px": 1000000},
+        {"inpaint_radius": 51},
+        {"denoise_ksize": 17},
+        {"clahe_tile": 65},
+        {"binarize_block_size": 257},
+    ],
+)
+def test_label_config_rejects_out_of_range(kwargs):
+    with pytest.raises(ValueError, match=next(iter(kwargs))):
+        LabelConfig(**kwargs)

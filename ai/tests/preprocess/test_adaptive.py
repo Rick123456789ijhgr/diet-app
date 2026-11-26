@@ -8,6 +8,7 @@ import pytest
 from dietai.preprocess import (
     FEATURE_NAMES,
     AdaptivePolicy,
+    QualityConfig,
     Rule,
     check_quality,
     load_policy,
@@ -152,3 +153,37 @@ def test_rule_rejects_non_finite_threshold(bad):
         )
     with pytest.raises(ValueError, match="threshold"):
         _policy().with_threshold(0, bad)
+
+
+def test_feature_params_defaults_and_effect(scene):
+    # 原本寫死在 features.py 的常數（review G5）：預設不變、改了確實生效
+    cfg = QualityConfig()
+    assert (
+        cfg.feature_impulse_diff,
+        cfg.feature_background_short_side,
+        cfg.feature_background_sigma,
+        cfg.feature_glare_level,
+        cfg.feature_glare_min_area,
+    ) == (64, 64, 0.08, 250, 0.002)
+    glary = add_glare(scene, 0.25)
+    assert measure_features(glary).glare_ratio > 0.05
+    # 門檻降到 1：整張影像都是「近飽和」的單一連通區域
+    assert measure_features(glary, QualityConfig(feature_glare_level=1)).glare_ratio > 0.99
+    noisy = salt_pepper(scene, 0.05)
+    loose = measure_features(noisy, QualityConfig(feature_impulse_diff=1)).impulse_ratio
+    assert loose > measure_features(noisy).impulse_ratio
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"feature_impulse_diff": 0},
+        {"feature_background_short_side": 4},
+        {"feature_background_sigma": 0.0},
+        {"feature_glare_level": 256},
+        {"feature_glare_min_area": 0.5},
+    ],
+)
+def test_feature_params_validation(kwargs):
+    with pytest.raises(ValueError, match=next(iter(kwargs))):
+        QualityConfig(**kwargs)
