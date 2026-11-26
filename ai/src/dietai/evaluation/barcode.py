@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import platform
 import re
 import statistics
@@ -161,6 +162,9 @@ def load_arms(source: str | Path | Iterable[str | Path], only: Sequence[str] = (
     if dup:
         raise ValueError(f"實驗組名稱重複：{dup}")
     if only:
+        dup_only = sorted({n for n in only if list(only).count(n) > 1})
+        if dup_only:
+            raise ValueError(f"指定的實驗組重複：{dup_only}")
         by_name = {a.name: a for a in arms}
         missing = [n for n in only if n not in by_name]
         if missing:
@@ -864,11 +868,15 @@ def _rung_index(rung: str, order: Sequence[str]) -> int:
 
 
 def _natural(value: str) -> tuple[int, float, str]:
-    """排序鍵：數字依數值、在文字之前（``"2" < "10" < "clean"``）。"""
+    """排序鍵：有限的數字依數值、在文字之前（``"2" < "10" < "clean"``）。
+
+    ``nan``／``inf`` 當文字排序：NaN 與任何值比較都是 False，會讓 ``sorted`` 的結果不定。
+    """
     try:
-        return (0, float(value), "")
+        number = float(value)
     except ValueError:
         return (1, 0.0, value)
+    return (0, number, "") if math.isfinite(number) else (1, 0.0, value)
 
 
 def _jsonable(value: Any) -> Any:

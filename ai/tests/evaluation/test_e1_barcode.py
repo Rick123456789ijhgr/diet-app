@@ -169,6 +169,8 @@ def test_load_arms_from_folder(tmp_path):
     assert [a.name for a in load_arms(tmp_path, ["b", "a"])] == ["b", "a"]
     with pytest.raises(ValueError, match="找不到"):
         load_arms(tmp_path, ["c"])
+    with pytest.raises(ValueError, match="重複"):
+        load_arms(tmp_path, ["a", "a"])  # 同一組跑兩次會讓 n 與答對數加倍
     (tmp_path / "c.json").write_text(json.dumps({"name": "a"}))
     with pytest.raises(ValueError, match="重複"):
         load_arms(tmp_path)
@@ -383,6 +385,14 @@ def test_summarize_by_tag_sorts_numbers_naturally():
     assert groups[:3] == [("base", "2"), ("base", "10"), ("base", "dark")]
     negatives_only = summarize(ROWS, ("light",))[0]
     assert negatives_only["n"] == 0 and negatives_only["rate"] is None
+
+
+def test_summarize_by_tag_sorts_nan_and_inf_as_text():
+    rows = [
+        _row(str(i), "base", "correct", blur=v) for i, v in enumerate(["10", "nan", "2", "inf"])
+    ]
+    keys = [s["blur"] for s in summarize(rows, ("blur",))]
+    assert keys == ["2", "10", "inf", "nan"]
 
 
 def test_summarize_unknown_baseline():
