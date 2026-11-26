@@ -161,3 +161,27 @@ def test_default_includes_singles_then_composites(tmp_path):
     out = write_variant_dataset(sources, tmp_path / "out")
     conditions = list(dict.fromkeys(i.tags["condition"] for i in read_manifest(out).items))
     assert conditions == ["clean", *VARIANT_CONDITIONS, *COMPOSITE_CONDITIONS]
+
+
+def test_folder_stays_under_split_for_unsafe_ids(tmp_path):
+    # 沒有 id 欄時代碼就是 image 原文；含磁碟代號時不可寫到 out_dir 或 splits/<split> 以外
+    rows = [{"id": "D:/photos/a.png", "image": "a.png", "truth": "1", "split": "test"}]
+    sources = read_manifest(_sources(tmp_path, rows), include_test=True)
+    out = tmp_path / "out"
+    manifest = write_variant_dataset(sources, out, conditions=[])
+    (row,) = read_manifest(manifest, include_test=True).items
+    assert row.image.resolve().is_relative_to((out / "splits" / "test").resolve())
+
+
+def test_rejects_folder_name_collision_and_duplicate_conditions(tmp_path):
+    rows = [
+        {"id": "f/001", "image": "a.png", "truth": "1", "split": "dev"},
+        {"id": "f_001", "image": "b.png", "truth": "2", "split": "dev"},
+    ]
+    sources = read_manifest(_sources(tmp_path, rows))
+    with pytest.raises(ValueError, match="同名"):
+        write_variant_dataset(sources, tmp_path / "o1", conditions=[])
+    assert not (tmp_path / "o1").exists()  # 先檢查完才寫，不留下半套資料集
+    ok = read_manifest(_sources(tmp_path / "ok"))
+    with pytest.raises(ValueError, match="重複"):
+        write_variant_dataset(ok, tmp_path / "o2", conditions=["blur", "blur"])
