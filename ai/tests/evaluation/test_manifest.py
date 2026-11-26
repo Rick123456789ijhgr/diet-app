@@ -116,3 +116,11 @@ def test_read_image_errors(tmp_path):
 )
 def test_is_test_split(path, expected):
     assert is_test_split(path) is expected
+
+
+def test_cluster_key_prefixes_fallback_id():
+    from dietai.evaluation.manifest import cluster_key
+
+    assert cluster_key({"id": "v1", "source_id": "s1"}) == "s1"
+    assert cluster_key({"id": "s1", "source_id": ""}) == "id:s1"
+    assert cluster_key({"id": "s1"}) != cluster_key({"id": "v1", "source_id": "s1"})

@@ -30,7 +30,7 @@ from dataclasses import dataclass
 import numpy as np
 import numpy.typing as npt
 
-from dietai.evaluation.manifest import SOURCE_COLUMN
+from dietai.evaluation.manifest import SOURCE_COLUMN, cluster_key
 
 INTERCEPT = "(截距)"
 _LOG_SIGMA_RANGE = (-8.0, 4.0)  # σ 約 0.0003～55；超出時視為邊界解
@@ -235,7 +235,7 @@ def mixed_logit_from_rows(
         raise ValueError("沒有可用的正樣本")
     x, names = design_matrix(used, factors, interactions=interactions, reference=reference)
     y = [1.0 if r["outcome"] == success else 0.0 for r in used]
-    groups = [r.get(cluster) or r["id"] for r in used]
+    groups = [cluster_key(r, cluster) for r in used]
     return fit_mixed_logit(x, y, groups, names, n_quad=n_quad)
 
 

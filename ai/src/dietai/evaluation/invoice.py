@@ -41,7 +41,7 @@ from dietai.evaluation.barcode import (
     prepare_run_dir,
     run_meta,
 )
-from dietai.evaluation.manifest import SOURCE_COLUMN, Manifest, read_image
+from dietai.evaluation.manifest import Manifest, cluster_key, read_image
 from dietai.evaluation.methods import _check_methods, _Variant, _variants, arm_methods, method_id
 from dietai.evaluation.stats import wilson_interval
 from dietai.preprocess import ops
@@ -388,7 +388,7 @@ def summarize_invoice(
         by_source: dict[str, list[int]] = {}
         for r in pos:
             ok = int(r["outcome"] == InvoiceOutcome.CORRECT)
-            by_source.setdefault(r.get(SOURCE_COLUMN) or r["id"], []).append(ok)
+            by_source.setdefault(cluster_key(r), []).append(ok)
         ms = [float(r["elapsed_ms"]) for r in valid if r["elapsed_ms"]]
         out.append(
             {
