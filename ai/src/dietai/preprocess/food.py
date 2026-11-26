@@ -193,11 +193,11 @@ def detect_plate_ellipse(img: Image, cfg: FoodConfig = FoodConfig()) -> tuple[El
         residual, coverage = _fit_quality(e, pts, cfg.plate_coverage_bins)
         if residual <= cfg.plate_max_residual and coverage >= cfg.plate_min_coverage:
             candidates.append(e)
-    # 去重複：由大到小保留，中心落在已保留橢圓內部（正規化半徑 < 1）的候選視為
-    # 同一個盤子的內圈、盤中食物或膨脹邊緣的另一側。代價是盤中盤（小碟放在大盤上）也會被捨棄
+    # 去重複：由大到小保留，中心落在已保留橢圓內部（正規化半徑 < plate_dedup_radius）的候選
+    # 視為同一個盤子的內圈、盤中食物或膨脹邊緣的另一側。代價是盤中盤（小碟放在大盤上）也會被捨棄
     kept: list[Ellipse] = []
     for e in sorted(candidates, key=lambda c: c.major * c.minor, reverse=True):
-        if any(k.normalized_radius(e.cx, e.cy) < 1 for k in kept):
+        if any(k.normalized_radius(e.cx, e.cy) < cfg.plate_dedup_radius for k in kept):
             continue
         kept.append(e)
     return tuple(_ellipse_to_original(e, scale) for e in kept)
@@ -266,6 +266,7 @@ def preprocess_food(img: Image, cfg: FoodConfig = FoodConfig()) -> FoodResult:
                     "plate_max_residual": cfg.plate_max_residual,
                     "plate_min_coverage": cfg.plate_min_coverage,
                     "plate_coverage_bins": cfg.plate_coverage_bins,
+                    "plate_dedup_radius": cfg.plate_dedup_radius,
                     "plate_min_contour_points": cfg.plate_min_contour_points,
                 },
             )

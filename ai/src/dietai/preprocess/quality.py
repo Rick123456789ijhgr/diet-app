@@ -104,7 +104,8 @@ def check_quality(img: Image, cfg: QualityConfig = QualityConfig()) -> QualityRe
     """綜合模糊、曝光、解析度檢查。
 
     使用 ``QualityConfig`` 的全部欄位；每項檢查的參數與耗時記錄在 ``steps``。
-    警告依序可能為 ``LOW_RESOLUTION``、``TOO_BLURRY``、``TOO_DARK``、``TOO_BRIGHT``。
+    警告依序可能為 ``LOW_RESOLUTION``、``TOO_BLURRY``、``TOO_DARK``、``TOO_BRIGHT``；
+    ``LOW_RESOLUTION`` 時不判 ``TOO_BLURRY``（模糊分數照常回傳）。
     """
     validate_image(img)
     params = asdict(cfg)
@@ -134,7 +135,9 @@ def check_quality(img: Image, cfg: QualityConfig = QualityConfig()) -> QualityRe
             {k: params[k] for k in ("blur_short_side", "blur_min")},
         )
     )
-    if blur < cfg.blur_min:
+    # 解析度不足時不再判模糊：小圖先放大到 blur_short_side 才算拉普拉斯，分數必然偏低，
+    # 一律連帶 TOO_BLURRY 只是重複同一個問題（重拍的理由是解析度）。分數照常量測與回傳
+    if resolution_ok and blur < cfg.blur_min:
         warnings.append(PreprocessWarning.TOO_BLURRY)
 
     start = time.perf_counter()

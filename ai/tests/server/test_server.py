@@ -89,8 +89,9 @@ def test_put_image_rejects_garbage(wb):
 
 
 def test_check_quality_matches_library(pre, uploaded):
-    resp = _quality(pre, uploaded.image_id, {"blur_min": 5000})
-    expected = check_quality(SMALL, QualityConfig(blur_min=5000.0))
+    # SMALL 低於預設解析度門檻，低解析度時不判模糊；放寬門檻以測模糊警告
+    resp = _quality(pre, uploaded.image_id, {"blur_min": 5000, "min_short_side": 1})
+    expected = check_quality(SMALL, QualityConfig(blur_min=5000.0, min_short_side=1))
     assert resp.blur_score == pytest.approx(expected.blur_score)
     assert resp.dark_ratio == pytest.approx(expected.exposure.dark_ratio)
     assert list(resp.warnings) == [w.value for w in expected.warnings]

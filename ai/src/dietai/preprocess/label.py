@@ -27,7 +27,9 @@ QuadMethod = Literal["contour", "hough"]
 class GlareResult:
     """``detect_glare`` 的結果：``mask`` 形狀為輸入的 ``(H, W)``，``ratio`` 為其面積比例。
 
-    ``mask`` 與 ``ratio`` 皆為擴張（``glare_dilate_px``）之後的結果。
+    ``mask`` 與 ``ratio`` 皆為擴張（``glare_dilate_px``）之後的結果。因此 ``remove_glare``
+    以 ``glare_max_ratio`` 判斷重拍時比的是「光斑＋外圈」，細碎光斑擴張後面積放大較多、
+    較早觸發 ``GLARE_RETAKE``；校準 ``glare_max_ratio`` 時要以同樣的擴張半徑量測。
     """
 
     mask: npt.NDArray[np.bool_]
