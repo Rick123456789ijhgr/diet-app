@@ -72,8 +72,10 @@ def measure_manifest(
         try:
             img = read_image(item.image)
         except (OSError, ValueError):
-            continue
-        out[item.id] = measure_features(img, cfg).as_dict()
+            pass  # 讀不到的影像沒有量測值；結果表中對應的列為 error
+        else:
+            out[item.id] = measure_features(img, cfg).as_dict()
+        # 讀檔失敗也回報進度，最後一張失敗時進度才會到達總數
         if progress is not None:
             progress(i, len(items))
     return out
@@ -110,10 +112,21 @@ def _features_of(v: _Variant, features: Features) -> Mapping[str, float]:
         raise ValueError(f"{v.row['id']} 沒有品質量測值") from None
 
 
+def _error_without_features(v: _Variant, features: Features) -> bool:
+    """有 error 的變體沒有量測值：多半是讀檔失敗，``measure_manifest`` 略過了這張影像。"""
+    return v.has_error and v.row["id"] not in features
+
+
 def _adaptive_outcome(
     v: _Variant, features: Features, policy: AdaptivePolicy, min_agree: int
 ) -> tuple[tuple[str, ...], _LadderOutcome, float]:
-    """一個變體的（順序, 結果, 量測耗時）；開頭步驟就成功時不量測，耗時為 0。"""
+    """一個變體的（順序, 結果, 量測耗時）；開頭步驟就成功時不量測，耗時為 0。
+
+    有 error 而沒有量測值的變體依策略的全部方法依序嘗試，遇到 error 即記為 error。
+    """
+    if _error_without_features(v, features):
+        order = policy.methods()
+        return order, _ladder(v, order, min_agree), 0.0
     feats = _features_of(v, features)
     order = policy.plan(feats)
     res = _ladder(v, order, min_agree)
@@ -144,9 +157,13 @@ def simulate_adaptive(
     for v in variants:
         order, res, measure_ms = _adaptive_outcome(v, features, policy, min_agree)
         row = _result_row(v, res, order, label, measure_ms)
-        feats = _features_of(v, features)
         row["plan"] = ">".join(order)
-        row["rules"] = "|".join(str(i) for i, r in enumerate(policy.rules) if r.applies(feats))
+        if _error_without_features(v, features):
+            row["rules"] = ""
+        else:
+            feats = _features_of(v, features)
+            applies = (str(i) for i, r in enumerate(policy.rules) if r.applies(feats))
+            row["rules"] = "|".join(applies)
         out.append(row)
     return out
 
@@ -425,7 +442,11 @@ def adaptive_report_markdown(
     for name, order in orders.items():
         lines.append(f"- `{name}`：`{'>'.join(order)}`")
     lines += ["", "## 規則", "", "| # | 規則 | 成立 | 比例 |", "|---|---|---|---|"]
-    feats = [_features_of(v, features) for v in _variants(rows, arm)]
+    feats = [
+        _features_of(v, features)
+        for v in _variants(rows, arm)
+        if not _error_without_features(v, features)
+    ]
     for c in rule_coverage(policy, feats):
         rate = "—" if c["rate"] is None else f"{c['rate']:.1%}"
         lines.append(f"| {c['rule']} | `{c['describe']}` | {c['hits']} | {rate} |")
